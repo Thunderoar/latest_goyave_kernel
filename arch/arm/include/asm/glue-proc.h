@@ -230,12 +230,20 @@
 # endif
 #endif
 
+<<<<<<< HEAD
 #ifdef CONFIG_CPU_PJ4B
+=======
+#ifdef CONFIG_CPU_V7M
+>>>>>>> 55bdd69... ARM: Add base support for ARMv7-M
 # ifdef CPU_NAME
 #  undef  MULTI_CPU
 #  define MULTI_CPU
 # else
+<<<<<<< HEAD
 #  define CPU_NAME cpu_pj4b
+=======
+#  define CPU_NAME cpu_v7m
+>>>>>>> 55bdd69... ARM: Add base support for ARMv7-M
 # endif
 #endif
 
