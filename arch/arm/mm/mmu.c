@@ -1028,37 +1028,12 @@ void __init sanity_check_meminfo(void)
 		struct membank *bank = &meminfo.bank[j];
 		*bank = meminfo.bank[i];
 
-#ifdef CONFIG_SPARSEMEM
-		if (pfn_to_section_nr(bank_pfn_start(bank)) !=
-		    pfn_to_section_nr(bank_pfn_end(bank) - 1)) {
-			phys_addr_t sz;
-			unsigned long start_pfn = bank_pfn_start(bank);
-			unsigned long end_pfn = SECTION_ALIGN_UP(start_pfn + 1);
-			sz = ((phys_addr_t)(end_pfn - start_pfn) << PAGE_SHIFT);
-
-			if (meminfo.nr_banks >= NR_BANKS) {
-				pr_crit("NR_BANKS too low, ignoring %lld bytes of memory\n",
-					(unsigned long long)(bank->size - sz));
-			} else {
-				memmove(bank + 1, bank,
-					(meminfo.nr_banks - i) * sizeof(*bank));
-				meminfo.nr_banks++;
-				bank[1].size -= sz;
-				bank[1].start = __pfn_to_phys(end_pfn);
-			}
-			bank->size = sz;
-		}
-#endif
-
-		if (bank->start > ULONG_MAX)
-			highmem = 1;
-
-#ifdef CONFIG_HIGHMEM
 		if (bank->start >= vmalloc_limit)
 			highmem = 1;
 
 		bank->highmem = highmem;
 
+#ifdef CONFIG_HIGHMEM
 		/*
 		 * Split those memory banks which are partially overlapping
 		 * the vmalloc area greatly simplifying things later.
@@ -1081,26 +1056,12 @@ void __init sanity_check_meminfo(void)
 			bank->size = vmalloc_limit - bank->start;
 		}
 #else
-		bank->highmem = highmem;
-
 		/*
 		 * Highmem banks not allowed with !CONFIG_HIGHMEM.
 		 */
 		if (highmem) {
 			printk(KERN_NOTICE "Ignoring RAM at %.8llx-%.8llx "
 			       "(!CONFIG_HIGHMEM).\n",
-			       (unsigned long long)bank->start,
-			       (unsigned long long)bank->start + bank->size - 1);
-			continue;
-		}
-
-		/*
-		 * Check whether this memory bank would entirely overlap
-		 * the vmalloc area.
-		 */
-		if (bank->start >= vmalloc_limit) {
-			printk(KERN_NOTICE "Ignoring RAM at %.8llx-%.8llx "
-			       "(vmalloc region overlap).\n",
 			       (unsigned long long)bank->start,
 			       (unsigned long long)bank->start + bank->size - 1);
 			continue;
