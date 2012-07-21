@@ -18,6 +18,8 @@
 #include <linux/types.h>
 #include <linux/sizes.h>
 
+#include <asm/cache.h>
+
 #ifdef CONFIG_NEED_MACH_MEMORY_H
 #include <mach/memory.h>
 #endif
@@ -138,14 +140,18 @@
 #define phys_to_page(phys)	(pfn_to_page(__phys_to_pfn(phys)))
 
 /*
- * PLAT_PHYS_OFFSET is the offset (from zero) of the start of physical
- * memory.  This is used for XIP and NoMMU kernels, or by kernels which
- * have their own mach/memory.h.  Assembly code must always use
- * PLAT_PHYS_OFFSET and not PHYS_OFFSET.
+ * Minimum guaranted alignment in pgd_alloc().  The page table pointers passed
+ * around in head.S and proc-*.S are shifted by this amount, in order to
+ * leave spare high bits for systems with physical address extension.  This
+ * does not fully accomodate the 40-bit addressing capability of ARM LPAE, but
+ * gives us about 38-bits or so.
  */
-#ifndef PLAT_PHYS_OFFSET
-#define PLAT_PHYS_OFFSET	UL(CONFIG_PHYS_OFFSET)
+#ifdef CONFIG_ARM_LPAE
+#define ARCH_PGD_SHIFT		L1_CACHE_SHIFT
+#else
+#define ARCH_PGD_SHIFT		0
 #endif
+#define ARCH_PGD_MASK		((1 << ARCH_PGD_SHIFT) - 1)
 
 #ifndef __ASSEMBLY__
 
