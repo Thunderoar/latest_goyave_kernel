@@ -1933,6 +1933,7 @@ static const char *pp_lib_thermal_controller_names[] = {
 	"Northern Islands",
 	"Southern Islands",
 	"lm96163",
+	"Sea Islands",
 };
 
 union power_info {
@@ -2215,6 +2216,11 @@ static void radeon_atombios_add_pplib_thermal_controller(struct radeon_device *r
 				 (controller->ucFanParameters &
 				  ATOM_PP_FANPARAMETERS_NOFAN) ? "without" : "with");
 			rdev->pm.int_thermal_type = THERMAL_TYPE_SI;
+		} else if (controller->ucType == ATOM_PP_THERMALCONTROLLER_CISLANDS) {
+			DRM_INFO("Internal thermal controller %s fan control\n",
+				 (controller->ucFanParameters &
+				  ATOM_PP_FANPARAMETERS_NOFAN) ? "without" : "with");
+			rdev->pm.int_thermal_type = THERMAL_TYPE_CI;
 		} else if ((controller->ucType ==
 			    ATOM_PP_THERMALCONTROLLER_EXTERNAL_GPIO) ||
 			   (controller->ucType ==
