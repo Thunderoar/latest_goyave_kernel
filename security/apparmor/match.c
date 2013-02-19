@@ -23,6 +23,8 @@
 #include "include/apparmor.h"
 #include "include/match.h"
 
+#define base_idx(X) ((X) & 0xffffff)
+
 /**
  * unpack_table - unpack a dfa table (one of accept, default, base, next check)
  * @blob: data to unpack (NOT NULL)
@@ -141,7 +143,7 @@ static int verify_dfa(struct aa_dfa *dfa, int flags)
 		for (i = 0; i < state_count; i++) {
 			if (DEFAULT_TABLE(dfa)[i] >= state_count)
 				goto out;
-			if (BASE_TABLE(dfa)[i] + 255 >= trans_count) {
+			if (base_idx(BASE_TABLE(dfa)[i]) + 255 >= trans_count) {
 				printk(KERN_ERR "AppArmor DFA next/check upper "
 				       "bounds error\n");
 				goto out;
@@ -317,7 +319,7 @@ unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
 		u8 *equiv = EQUIV_TABLE(dfa);
 		/* default is direct to next state */
 		for (; len; len--) {
-			pos = base[state] + equiv[(u8) *str++];
+			pos = base_idx(base[state]) + equiv[(u8) *str++];
 			if (check[pos] == state)
 				state = next[pos];
 			else
@@ -326,7 +328,7 @@ unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
 	} else {
 		/* default is direct to next state */
 		for (; len; len--) {
-			pos = base[state] + (u8) *str++;
+			pos = base_idx(base[state]) + (u8) *str++;
 			if (check[pos] == state)
 				state = next[pos];
 			else
@@ -367,7 +369,7 @@ unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
 		u8 *equiv = EQUIV_TABLE(dfa);
 		/* default is direct to next state */
 		while (*str) {
-			pos = base[state] + equiv[(u8) *str++];
+			pos = base_idx(base[state]) + equiv[(u8) *str++];
 			if (check[pos] == state)
 				state = next[pos];
 			else
@@ -376,7 +378,7 @@ unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
 	} else {
 		/* default is direct to next state */
 		while (*str) {
-			pos = base[state] + (u8) *str++;
+			pos = base_idx(base[state]) + (u8) *str++;
 			if (check[pos] == state)
 				state = next[pos];
 			else
@@ -412,14 +414,14 @@ unsigned int aa_dfa_next(struct aa_dfa *dfa, unsigned int state,
 		u8 *equiv = EQUIV_TABLE(dfa);
 		/* default is direct to next state */
 
-		pos = base[state] + equiv[(u8) c];
+		pos = base_idx(base[state]) + equiv[(u8) c];
 		if (check[pos] == state)
 			state = next[pos];
 		else
 			state = def[state];
 	} else {
 		/* default is direct to next state */
-		pos = base[state] + (u8) c;
+		pos = base_idx(base[state]) + (u8) c;
 		if (check[pos] == state)
 			state = next[pos];
 		else
