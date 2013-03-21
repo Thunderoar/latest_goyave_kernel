@@ -66,6 +66,11 @@
 
 /* Power Management Commands, Responses, Notifications */
 
+/* Radio LP RX Energy Threshold measured in dBm */
+#define POWER_LPRX_RSSI_THRESHOLD	75
+#define POWER_LPRX_RSSI_THRESHOLD_MAX	94
+#define POWER_LPRX_RSSI_THRESHOLD_MIN	30
+
 /**
  * enum iwl_ltr_config_flags - masks for LTR config command flags
  * @LTR_CFG_FLAG_FEATURE_ENABLE: Feature operational status
