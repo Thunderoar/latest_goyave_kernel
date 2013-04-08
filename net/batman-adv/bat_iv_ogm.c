@@ -19,7 +19,6 @@
 
 #include "main.h"
 #include "translation-table.h"
-#include "ring_buffer.h"
 #include "originator.h"
 #include "routing.h"
 #include "gateway_common.h"
@@ -30,20 +29,47 @@
 #include "network-coding.h"
 
 /**
- * batadv_dup_status - duplicate status
- * @BATADV_NO_DUP: the packet is a duplicate
- * @BATADV_ORIG_DUP: OGM is a duplicate in the originator (but not for the
- *  neighbor)
- * @BATADV_NEIGH_DUP: OGM is a duplicate for the neighbor
- * @BATADV_PROTECTED: originator is currently protected (after reboot)
+ * batadv_ring_buffer_set - update the ring buffer with the given value
+ * @lq_recv: pointer to the ring buffer
+ * @lq_index: index to store the value at
+ * @value: value to store in the ring buffer
  */
-enum batadv_dup_status {
-	BATADV_NO_DUP = 0,
-	BATADV_ORIG_DUP,
-	BATADV_NEIGH_DUP,
-	BATADV_PROTECTED,
-};
+static void batadv_ring_buffer_set(uint8_t lq_recv[], uint8_t *lq_index,
+				   uint8_t value)
+{
+	lq_recv[*lq_index] = value;
+	*lq_index = (*lq_index + 1) % BATADV_TQ_GLOBAL_WINDOW_SIZE;
+}
 
+/**
+ * batadv_ring_buffer_set - compute the average of all non-zero values stored
+ * in the given ring buffer
+ * @lq_recv: pointer to the ring buffer
+ *
+ * Returns computed average value.
+ */
+static uint8_t batadv_ring_buffer_avg(const uint8_t lq_recv[])
+{
+	const uint8_t *ptr;
+	uint16_t count = 0, i = 0, sum = 0;
+
+	ptr = lq_recv;
+
+	while (i < BATADV_TQ_GLOBAL_WINDOW_SIZE) {
+		if (*ptr != 0) {
+			count++;
+			sum += *ptr;
+		}
+
+		i++;
+		ptr++;
+	}
+
+	if (count == 0)
+		return 0;
+
+	return (uint8_t)(sum / count);
+}
 static struct batadv_neigh_node *
 batadv_iv_ogm_neigh_new(struct batadv_hard_iface *hard_iface,
 			const uint8_t *neigh_addr,
