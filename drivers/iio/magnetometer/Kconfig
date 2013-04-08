@@ -1,5 +1,5 @@
 
-source "drivers/staging/iio/magnetometer/inv_compass/Kconfig"
+source "drivers/staging/iio/magnetometer/Kconfig"
 
 
 
@@ -32,4 +32,3 @@ config IIO_ST_MAGN_SPI_3AXIS
 	depends on IIO_ST_MAGN_3AXIS
 	depends on IIO_ST_SENSORS_SPI
 
-endmenu
