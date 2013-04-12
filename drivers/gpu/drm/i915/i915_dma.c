@@ -1648,6 +1648,15 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	if (!IS_I945G(dev) && !IS_I945GM(dev))
 		pci_enable_msi(dev->pdev);
 
+	spin_lock_init(&dev_priv->irq_lock);
+	spin_lock_init(&dev_priv->gpu_error.lock);
+	spin_lock_init(&dev_priv->rps.lock);
+	spin_lock_init(&dev_priv->backlight.lock);
+	mutex_init(&dev_priv->dpio_lock);
+
+	mutex_init(&dev_priv->rps.hw_lock);
+	mutex_init(&dev_priv->modeset_restore_lock);
+
 	dev_priv->num_plane = 1;
 	if (IS_VALLEYVIEW(dev))
 		dev_priv->num_plane = 2;
