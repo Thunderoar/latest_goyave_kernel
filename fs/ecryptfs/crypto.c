@@ -40,98 +40,6 @@
 #define DECRYPT		0
 #define ENCRYPT		1
 
-static int crypt_page_offset(struct ecryptfs_crypt_stat *crypt_stat,
-			     struct page *dst_page, struct page *src_page,
-			     int offset, int size, unsigned char *iv, int op);
-
-#ifdef CONFIG_CRYPTO_FIPS
-static int crypto_cc_reset_rng(struct crypto_rng *tfm)
-{
-    char *seed = NULL;
-    int read_bytes = 0;
-    int trialcount = 10;
-    int err = 0;
-    struct file *filp = NULL;
-    mm_segment_t oldfs;
-
-    seed = kmalloc(SEED_LEN, GFP_KERNEL);
-    if (!seed) {
-        ecryptfs_printk(KERN_ERR, "Failed to get memory space for seed\n");
-        goto out;
-    }
-
-    filp = filp_open("/dev/random", O_RDONLY, 0);
-    if (IS_ERR(filp)) {
-		ecryptfs_printk(KERN_ERR, "Failed to open /dev/random\n");
-        goto out;
-    }
-
-    oldfs = get_fs();
-    set_fs(KERNEL_DS);
-    memset((void *)seed, 0, SEED_LEN);
-
-    while (trialcount > 0) {
-        read_bytes += filp->f_op->read(filp, &(seed[read_bytes]), SEED_LEN-read_bytes, &filp->f_pos);
-
-        if (read_bytes != SEED_LEN)
-            trialcount--;
-        else
-            break;
-    }
-    set_fs(oldfs);
-
-    if (read_bytes != SEED_LEN) {
-        ecryptfs_printk(KERN_ERR, "Failed to get enough random bytes (read=%d/request=%d)\n", read_bytes, SEED_LEN);
-        err = -1;
-        goto out;
-    }
-
-    err = crypto_rng_reset(tfm, seed, SEED_LEN);
-    if (err)
-        crypto_free_rng(tfm);
-
-out:
-    if (seed) kfree(seed);
-    if (filp) filp_close(filp, NULL);
-    return err;
-}
-
-/**
- * crypto_cc_rng_get_bytes
- * @data: Buffer to get random bytes
- * @len: the lengh of random bytes
- */
-static int crypto_cc_rng_get_bytes(u8 *data, unsigned int len)
-{
-    static struct crypto_rng *crypto_cc_rng = NULL;
-    struct crypto_rng *rng;
-    int err = 0;
-
-    if (!crypto_cc_rng) {
-        rng = crypto_alloc_rng("fips(ansi_cprng)", 0, 0);
-        err = PTR_ERR(rng);
-        if (IS_ERR(rng))
-            goto out;
-
-        err = crypto_cc_reset_rng(rng);
-        if (err) {
-            crypto_free_rng(rng);
-            goto out;
-        }
-        crypto_cc_rng = rng;
-    }
-
-    err = crypto_rng_get_bytes(crypto_cc_rng, data, len);
-
-    if (err != len)
-        ecryptfs_printk(KERN_ERR, "Error getting random bytes in CC mode (err=%d, len=%d)\n", err, len);
-
-out:
-    return err;
-
-}
-#endif
-
 /**
  * ecryptfs_to_hex
  * @dst: Buffer to take hex character representation of contents of
@@ -595,10 +503,11 @@ static int crypt_extent(struct page *dst_page,
 	pgoff_t page_index = op == ENCRYPT ? src_page->index : dst_page->index;
 	loff_t extent_base;
 	char extent_iv[ECRYPTFS_MAX_IV_BYTES];
+	struct scatterlist src_sg, dst_sg;
+	size_t extent_size = crypt_stat->extent_size;
 	int rc;
 
-	extent_base = (((loff_t)page_index)
-		       * (PAGE_CACHE_SIZE / crypt_stat->extent_size));
+	extent_base = (((loff_t)page_index) * (PAGE_CACHE_SIZE / extent_size));
 	rc = ecryptfs_derive_iv(extent_iv, crypt_stat,
 				(extent_base + extent_offset));
 	if (rc) {
@@ -607,9 +516,17 @@ static int crypt_extent(struct page *dst_page,
 			(unsigned long long)(extent_base + extent_offset), rc);
 		goto out;
 	}
-	rc = crypt_page_offset(crypt_stat, dst_page, src_page,
-			       (extent_offset * crypt_stat->extent_size),
-			       crypt_stat->extent_size, extent_iv, op);
+
+	sg_init_table(&src_sg, 1);
+	sg_init_table(&dst_sg, 1);
+
+	sg_set_page(&src_sg, src_page, extent_size,
+		    extent_offset * extent_size);
+	sg_set_page(&dst_sg, dst_page, extent_size,
+		    extent_offset * extent_size);
+
+	rc = crypt_scatterlist(crypt_stat, &dst_sg, &src_sg, extent_size,
+			       extent_iv, op);
 	if (rc < 0) {
 		printk(KERN_ERR "%s: Error attempting to crypt page with "
 		       "page_index = [%ld], extent_offset = [%ld]; "
@@ -745,33 +662,6 @@ int ecryptfs_decrypt_page(struct page *page)
 	}
 out:
 	return rc;
-}
-
-/**
- * crypt_page_offset
- * @crypt_stat: The cryptographic context
- * @dst_page: The page to write the result into
- * @src_page: The page to read from
- * @offset: The byte offset into the dst_page and src_page
- * @size: The number of bytes of data
- * @iv: The initialization vector to use for the crypto operation
- * @op: ENCRYPT or DECRYPT to indicate the desired operation
- *
- * Returns the number of bytes encrypted or decrypted
- */
-static int crypt_page_offset(struct ecryptfs_crypt_stat *crypt_stat,
-			     struct page *dst_page, struct page *src_page,
-			     int offset, int size, unsigned char *iv, int op)
-{
-	struct scatterlist src_sg, dst_sg;
-
-	sg_init_table(&src_sg, 1);
-	sg_init_table(&dst_sg, 1);
-
-	sg_set_page(&src_sg, src_page, size, offset);
-	sg_set_page(&dst_sg, dst_page, size, offset);
-
-	return crypt_scatterlist(crypt_stat, &dst_sg, &src_sg, size, iv, op);
 }
 
 #define ECRYPTFS_MAX_SCATTERLIST_LEN 4
