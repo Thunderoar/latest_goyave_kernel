@@ -169,6 +169,7 @@ dtb-$(CONFIG_ARCH_S3C24XX) += s3c2416-smdk2416.dtb
 dtb-$(CONFIG_ARCH_SHMOBILE) += emev2-kzm9d.dtb \
 	r8a7740-armadillo800eva.dtb \
 	r8a7778-bockw.dtb \
+	r8a7740-armadillo800eva-reference.dtb \
 	r8a7779-marzen-reference.dtb \
 	r8a7790-lager.dtb \
 	sh73a0-kzm9g.dtb \
