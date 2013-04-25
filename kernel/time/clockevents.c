@@ -273,65 +273,6 @@ int clockevents_program_event(struct clock_event_device *dev, ktime_t expires,
 }
 
 /*
- * Called after a notify add to make devices available which were
- * released from the notifier call.
- */
-static void clockevents_notify_released(void)
-{
-	struct clock_event_device *dev;
-
-	while (!list_empty(&clockevents_released)) {
-		dev = list_entry(clockevents_released.next,
-				 struct clock_event_device, list);
-		list_del(&dev->list);
-		list_add(&dev->list, &clockevent_devices);
-		tick_check_new_device(dev);
-	}
-}
-
-/*
- * Try to install a replacement clock event device
- */
-static int clockevents_replace(struct clock_event_device *ced)
-{
-	struct clock_event_device *dev, *newdev = NULL;
-
-	list_for_each_entry(dev, &clockevent_devices, list) {
-		if (dev == ced || dev->mode != CLOCK_EVT_MODE_UNUSED)
-			continue;
-
-		if (!tick_check_replacement(newdev, dev))
-			continue;
-
-		if (!try_module_get(dev->owner))
-			continue;
-
-		if (newdev)
-			module_put(newdev->owner);
-		newdev = dev;
-	}
-	if (newdev) {
-		tick_install_replacement(newdev);
-		list_del_init(&ced->list);
-	}
-	return newdev ? 0 : -EBUSY;
-}
-
-/*
- * Called with clockevents_mutex and clockevents_lock held
- */
-static int __clockevents_try_unbind(struct clock_event_device *ced, int cpu)
-{
-	/* Fast track. Device is unused */
-	if (ced->mode == CLOCK_EVT_MODE_UNUSED) {
-		list_del_init(&ced->list);
-		return 0;
-	}
-
-	return ced == per_cpu(tick_cpu_device, cpu).evtdev ? -EAGAIN : -EBUSY;
-}
-
-/*
  * SMP function call to unbind a device
  */
 static void __clockevents_unbind(void *arg)
@@ -347,16 +288,13 @@ static void __clockevents_unbind(void *arg)
 	raw_spin_unlock(&clockevents_lock);
 }
 
-/*
- * Issues smp function call to unbind a per cpu device. Called with
- * clockevents_mutex held.
- */
-static int clockevents_unbind(struct clock_event_device *ced, int cpu)
-{
-	struct ce_unbind cu = { .ce = ced, .res = -ENODEV };
-
-	smp_call_function_single(cpu, __clockevents_unbind, &cu, 1);
-	return cu.res;
+	while (!list_empty(&clockevents_released)) {
+		dev = list_entry(clockevents_released.next,
+				 struct clock_event_device, list);
+		list_del(&dev->list);
+		list_add(&dev->list, &clockevent_devices);
+		tick_check_new_device(dev);
+	}
 }
 
 /*
@@ -534,6 +472,7 @@ void clockevents_notify(unsigned long reason, void *arg)
 	int cpu;
 
 	raw_spin_lock_irqsave(&clockevents_lock, flags);
+	tick_notify(reason, arg);
 
 	switch (reason) {
 	case CLOCK_EVT_NOTIFY_BROADCAST_ON:

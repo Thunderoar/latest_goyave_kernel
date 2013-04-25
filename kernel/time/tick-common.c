@@ -275,6 +275,9 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	struct clock_event_device *curdev;
 	struct tick_device *td;
 	int cpu;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&tick_device_lock, flags);
 
 	cpu = smp_processor_id();
 	if (!cpumask_test_cpu(cpu, newdev->cpumask))
@@ -307,6 +310,8 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	tick_setup_device(td, newdev, cpu, cpumask_of(cpu));
 	if (newdev->features & CLOCK_EVT_FEAT_ONESHOT)
 		tick_oneshot_notify();
+
+	raw_spin_unlock_irqrestore(&tick_device_lock, flags);
 	return;
 
 out_bc:
@@ -314,6 +319,7 @@ out_bc:
 	 * Can the new device be used as a broadcast device ?
 	 */
 	tick_install_broadcast_device(newdev);
+	raw_spin_unlock_irqrestore(&tick_device_lock, flags);
 }
 
 /*
@@ -375,6 +381,45 @@ void tick_resume(void)
 			tick_setup_periodic(td->evtdev, 0);
 		else
 			tick_resume_oneshot();
+	}
+}
+
+void tick_notify(unsigned long reason, void *dev)
+{
+	switch (reason) {
+
+	case CLOCK_EVT_NOTIFY_BROADCAST_ON:
+	case CLOCK_EVT_NOTIFY_BROADCAST_OFF:
+	case CLOCK_EVT_NOTIFY_BROADCAST_FORCE:
+		tick_broadcast_on_off(reason, dev);
+		break;
+
+	case CLOCK_EVT_NOTIFY_BROADCAST_ENTER:
+	case CLOCK_EVT_NOTIFY_BROADCAST_EXIT:
+		tick_broadcast_oneshot_control(reason);
+		break;
+
+	case CLOCK_EVT_NOTIFY_CPU_DYING:
+		tick_handover_do_timer(dev);
+		break;
+
+	case CLOCK_EVT_NOTIFY_CPU_DEAD:
+		tick_shutdown_broadcast_oneshot(dev);
+		tick_shutdown_broadcast(dev);
+		tick_shutdown(dev);
+		break;
+
+	case CLOCK_EVT_NOTIFY_SUSPEND:
+		tick_suspend();
+		tick_suspend_broadcast();
+		break;
+
+	case CLOCK_EVT_NOTIFY_RESUME:
+		tick_resume();
+		break;
+
+	default:
+		break;
 	}
 }
 
