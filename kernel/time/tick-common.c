@@ -294,6 +294,9 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	if (!try_module_get(newdev->owner))
 		return;
 
+	if (!try_module_get(newdev->owner))
+		return;
+
 	/*
 	 * Replace the eventually existing device by the new
 	 * device. If the current device is the broadcast device, do
