@@ -625,6 +625,11 @@ static void clocksource_select(void)
 	return __clocksource_select(false);
 }
 
+static void clocksource_select_fallback(void)
+{
+	return __clocksource_select(true);
+}
+
 #else /* !CONFIG_ARCH_USES_GETTIMEOFFSET */
 
 static inline void clocksource_select(void) { }
@@ -922,7 +927,7 @@ static ssize_t sysfs_unbind_clocksource(struct device *dev,
 	char name[CS_NAME_LEN];
 	size_t ret;
 
-	ret = sysfs_get_uname(buf, name, count);
+	ret = clocksource_get_uname(buf, name, count);
 	if (ret < 0)
 		return ret;
 
