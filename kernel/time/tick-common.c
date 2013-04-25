@@ -206,17 +206,6 @@ static void tick_setup_device(struct tick_device *td,
 		tick_setup_oneshot(newdev, handler, next_event);
 }
 
-void tick_install_replacement(struct clock_event_device *newdev)
-{
-	struct tick_device *td = &__get_cpu_var(tick_cpu_device);
-	int cpu = smp_processor_id();
-
-	clockevents_exchange_device(td->evtdev, newdev);
-	tick_setup_device(td, newdev, cpu, cpumask_of(cpu));
-	if (newdev->features & CLOCK_EVT_FEAT_ONESHOT)
-		tick_oneshot_notify();
-}
-
 static bool tick_check_percpu(struct clock_event_device *curdev,
 			      struct clock_event_device *newdev, int cpu)
 {
@@ -244,26 +233,8 @@ static bool tick_check_preferred(struct clock_event_device *curdev,
 			return false;
 	}
 
-	/*
-	 * Use the higher rated one, but prefer a CPU local device with a lower
-	 * rating than a non-CPU local device
-	 */
-	return !curdev ||
-		newdev->rating > curdev->rating ||
-	       !cpumask_equal(curdev->cpumask, newdev->cpumask);
-}
-
-/*
- * Check whether the new device is a better fit than curdev. curdev
- * can be NULL !
- */
-bool tick_check_replacement(struct clock_event_device *curdev,
-			    struct clock_event_device *newdev)
-{
-	if (tick_check_percpu(curdev, newdev, smp_processor_id()))
-		return false;
-
-	return tick_check_preferred(curdev, newdev);
+	/* Use the higher rated one */
+	return !curdev || newdev->rating > curdev->rating;
 }
 
 /*
@@ -290,9 +261,6 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	/* Preference decision */
 	if (!tick_check_preferred(curdev, newdev))
 		goto out_bc;
-
-	if (!try_module_get(newdev->owner))
-		return;
 
 	if (!try_module_get(newdev->owner))
 		return;
