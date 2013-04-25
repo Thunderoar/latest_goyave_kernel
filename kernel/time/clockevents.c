@@ -553,38 +553,6 @@ static ssize_t sysfs_show_current_tick_dev(struct device *dev,
 }
 static DEVICE_ATTR(current_device, 0444, sysfs_show_current_tick_dev, NULL);
 
-/* We don't support the abomination of removable broadcast devices */
-static ssize_t sysfs_unbind_tick_dev(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t count)
-{
-	char name[CS_NAME_LEN];
-	size_t ret = sysfs_get_uname(buf, name, count);
-	struct clock_event_device *ce;
-
-	if (ret < 0)
-		return ret;
-
-	ret = -ENODEV;
-	mutex_lock(&clockevents_mutex);
-	raw_spin_lock_irq(&clockevents_lock);
-	list_for_each_entry(ce, &clockevent_devices, list) {
-		if (!strcmp(ce->name, name)) {
-			ret = __clockevents_try_unbind(ce, dev->id);
-			break;
-		}
-	}
-	raw_spin_unlock_irq(&clockevents_lock);
-	/*
-	 * We hold clockevents_mutex, so ce can't go away
-	 */
-	if (ret == -EAGAIN)
-		ret = clockevents_unbind(ce, dev->id);
-	mutex_unlock(&clockevents_mutex);
-	return ret ? ret : count;
-}
-static DEVICE_ATTR(unbind_device, 0200, NULL, sysfs_unbind_tick_dev);
-
 #ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
 static struct device tick_bc_dev = {
 	.init_name	= "broadcast",
@@ -627,8 +595,6 @@ static int __init tick_init_sysfs(void)
 		err = device_register(dev);
 		if (!err)
 			err = device_create_file(dev, &dev_attr_current_device);
-		if (!err)
-			err = device_create_file(dev, &dev_attr_unbind_device);
 		if (err)
 			return err;
 	}
