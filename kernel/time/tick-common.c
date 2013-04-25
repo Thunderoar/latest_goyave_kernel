@@ -233,13 +233,8 @@ static bool tick_check_preferred(struct clock_event_device *curdev,
 			return false;
 	}
 
-	/*
-	 * Use the higher rated one, but prefer a CPU local device with a lower
-	 * rating than a non-CPU local device
-	 */
-	return !curdev ||
-		newdev->rating > curdev->rating ||
-	       !cpumask_equal(curdev->cpumask, newdev->cpumask);
+	/* Use the higher rated one */
+	return !curdev || newdev->rating > curdev->rating;
 }
 
 /*
@@ -266,9 +261,6 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	/* Preference decision */
 	if (!tick_check_preferred(curdev, newdev))
 		goto out_bc;
-
-	if (!try_module_get(newdev->owner))
-		return;
 
 	if (!try_module_get(newdev->owner))
 		return;
