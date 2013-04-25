@@ -89,6 +89,8 @@ void tick_install_broadcast_device(struct clock_event_device *dev)
 
 	if (!tick_check_broadcast_device(cur, dev))
 		return;
+	if (!try_module_get(dev->owner))
+		return;
 
 	if (!try_module_get(dev->owner))
 		return;
