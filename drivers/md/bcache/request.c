@@ -536,10 +536,9 @@ static void bch_insert_data_loop(struct closure *cl)
 		if (KEY_CSUM(k))
 			bio_csum(n, k);
 
-		pr_debug("%s", pkey(k));
+		trace_bcache_cache_insert(k);
 		bch_keylist_push(&op->keys);
 
-		trace_bcache_cache_insert(n, n->bi_sector, n->bi_bdev);
 		n->bi_rw |= REQ_WRITE;
 		bch_submit_bbio(n, op->c, k, 0);
 	} while (n != bio);
@@ -790,11 +789,8 @@ static void request_read_error(struct closure *cl)
 	int i;
 
 	if (s->recoverable) {
-		/* The cache read failed, but we can retry from the backing
-		 * device.
-		 */
-		pr_debug("recovering at sector %llu",
-			 (uint64_t) s->orig_bio->bi_sector);
+		/* Retry from the backing device: */
+		trace_bcache_read_retry(s->orig_bio);
 
 		s->error = 0;
 		bv = s->bio.bio.bi_io_vec;
@@ -812,7 +808,6 @@ static void request_read_error(struct closure *cl)
 
 		/* XXX: invalidate cache */
 
-		trace_bcache_read_retry(&s->bio.bio);
 		closure_bio_submit(&s->bio.bio, &s->cl, s->d);
 	}
 
@@ -905,6 +900,7 @@ static void request_read_done_bh(struct closure *cl)
 	struct cached_dev *dc = container_of(s->d, struct cached_dev, disk);
 
 	bch_mark_cache_accounting(s, !s->cache_miss, s->op.skip);
+	trace_bcache_read(s->orig_bio, !s->cache_miss, s->op.skip);
 
 	if (s->error)
 		continue_at_nobarrier(cl, request_read_error, bcache_wq);
@@ -975,7 +971,6 @@ static int cached_dev_cache_miss(struct btree *b, struct search *s,
 	s->cache_miss = miss;
 	bio_get(s->op.cache_bio);
 
-	trace_bcache_cache_miss(s->orig_bio);
 	closure_bio_submit(s->op.cache_bio, &s->cl, s->d);
 
 	return ret;
@@ -1046,14 +1041,15 @@ static void request_write(struct cached_dev *dc, struct search *s)
 	if (should_writeback(dc, s->orig_bio))
 		s->writeback = true;
 
+	trace_bcache_write(s->orig_bio, s->writeback, s->op.skip);
+
 	if (!s->writeback) {
 		s->op.cache_bio = bio_clone_bioset(bio, GFP_NOIO,
 						   dc->disk.bio_split);
 
-		trace_bcache_writethrough(s->orig_bio);
 		closure_bio_submit(bio, cl, s->d);
 	} else {
-		trace_bcache_writeback(s->orig_bio);
+		s->op.cache_bio = bio;
 		bch_writeback_add(dc, bio_sectors(bio));
 		s->op.cache_bio = bio;
 
@@ -1077,7 +1073,6 @@ skip:
 	s->op.skip = true;
 	s->op.cache_bio = s->orig_bio;
 	bio_get(s->op.cache_bio);
-	trace_bcache_write_skip(s->orig_bio);
 
 	if ((bio->bi_rw & REQ_DISCARD) &&
 	    !blk_queue_discard(bdev_get_queue(dc->bdev)))
@@ -1107,9 +1102,10 @@ static void request_nodata(struct cached_dev *dc, struct search *s)
 
 /* Cached devices - read & write stuff */
 
-int bch_get_congested(struct cache_set *c)
+unsigned bch_get_congested(struct cache_set *c)
 {
 	int i;
+	long rand;
 
 	if (!c->congested_read_threshold_us &&
 	    !c->congested_write_threshold_us)
@@ -1125,7 +1121,13 @@ int bch_get_congested(struct cache_set *c)
 
 	i += CONGESTED_MAX;
 
-	return i <= 0 ? 1 : fract_exp_two(i, 6);
+	if (i > 0)
+		i = fract_exp_two(i, 6);
+
+	rand = get_random_int();
+	i -= bitmap_weight(&rand, BITS_PER_LONG);
+
+	return i > 0 ? i : 1;
 }
 
 static void add_sequential(struct task_struct *t)
@@ -1145,10 +1147,8 @@ static void check_should_skip(struct cached_dev *dc, struct search *s)
 {
 	struct cache_set *c = s->op.c;
 	struct bio *bio = &s->bio.bio;
-
-	long rand;
-	int cutoff = bch_get_congested(c);
 	unsigned mode = cache_mode(dc, bio);
+	unsigned sectors, congested = bch_get_congested(c);
 
 	if (atomic_read(&dc->disk.detaching) ||
 	    c->gc_stats.in_use > CUTOFF_CACHE_ADD ||
@@ -1166,17 +1166,14 @@ static void check_should_skip(struct cached_dev *dc, struct search *s)
 		goto skip;
 	}
 
-	if (!cutoff) {
-		cutoff = dc->sequential_cutoff >> 9;
+	if (!congested && !dc->sequential_cutoff)
+		goto rescale;
 
-		if (!cutoff)
-			goto rescale;
-
-		if (mode == CACHE_MODE_WRITEBACK &&
-		    (bio->bi_rw & REQ_WRITE) &&
-		    (bio->bi_rw & REQ_SYNC))
-			goto rescale;
-	}
+	if (!congested &&
+	    mode == CACHE_MODE_WRITEBACK &&
+	    (bio->bi_rw & REQ_WRITE) &&
+	    (bio->bi_rw & REQ_SYNC))
+		goto rescale;
 
 	if (dc->sequential_merge) {
 		struct io *i;
@@ -1211,12 +1208,19 @@ found:
 		add_sequential(s->task);
 	}
 
-	rand = get_random_int();
-	cutoff -= bitmap_weight(&rand, BITS_PER_LONG);
+	sectors = max(s->task->sequential_io,
+		      s->task->sequential_io_avg) >> 9;
 
-	if (cutoff <= (int) (max(s->task->sequential_io,
-				 s->task->sequential_io_avg) >> 9))
+	if (dc->sequential_cutoff &&
+	    sectors >= dc->sequential_cutoff >> 9) {
+		trace_bcache_bypass_sequential(s->orig_bio);
 		goto skip;
+	}
+
+	if (congested && sectors >= congested) {
+		trace_bcache_bypass_congested(s->orig_bio);
+		goto skip;
+	}
 
 rescale:
 	bch_rescale_priorities(c, bio_sectors(bio));
