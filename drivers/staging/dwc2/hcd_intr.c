@@ -241,6 +241,7 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 	u32 usbcfg;
 	u32 prtspd;
 	u32 hcfg;
+	u32 fslspclksel;
 	u32 hfir;
 
 	dev_vdbg(hsotg->dev, "%s(%p)\n", __func__, hsotg);
@@ -272,6 +273,7 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 		}
 
 		hcfg = readl(hsotg->regs + HCFG);
+		fslspclksel = hcfg & HCFG_FSLSPCLKSEL_MASK;
 
 		if (prtspd == HPRT0_SPD_LOW_SPEED &&
 		    params->host_ls_low_power_phy_clk ==
@@ -279,8 +281,7 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 			/* 6 MHZ */
 			dev_vdbg(hsotg->dev,
 				 "FS_PHY programming HCFG to 6 MHz\n");
-			if ((hcfg & HCFG_FSLSPCLKSEL_MASK) !=
-			    HCFG_FSLSPCLKSEL_6_MHZ) {
+			if (fslspclksel != HCFG_FSLSPCLKSEL_6_MHZ) {
 				hcfg &= ~HCFG_FSLSPCLKSEL_MASK;
 				hcfg |= HCFG_FSLSPCLKSEL_6_MHZ;
 				writel(hcfg, hsotg->regs + HCFG);
@@ -290,8 +291,7 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 			/* 48 MHZ */
 			dev_vdbg(hsotg->dev,
 				 "FS_PHY programming HCFG to 48 MHz\n");
-			if ((hcfg & HCFG_FSLSPCLKSEL_MASK) !=
-			    HCFG_FSLSPCLKSEL_48_MHZ) {
+			if (fslspclksel != HCFG_FSLSPCLKSEL_48_MHZ) {
 				hcfg &= ~HCFG_FSLSPCLKSEL_MASK;
 				hcfg |= HCFG_FSLSPCLKSEL_48_MHZ;
 				writel(hcfg, hsotg->regs + HCFG);
