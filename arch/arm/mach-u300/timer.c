@@ -20,7 +20,6 @@
 #include <linux/irq.h>
 #include <linux/sched_clock.h>
 
-#include <mach/hardware.h>
 #include <mach/irqs.h>
 
 /* Generic stuff */
