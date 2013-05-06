@@ -448,7 +448,6 @@ static int lp_gpio_remove(struct platform_device *pdev)
 	err = gpiochip_remove(&lg->chip);
 	if (err)
 		dev_warn(&pdev->dev, "failed to remove gpio_chip.\n");
-	platform_set_drvdata(pdev, NULL);
 	return 0;
 }
 
