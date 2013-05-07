@@ -1683,7 +1683,7 @@ static int ath9k_ampdu_action(struct ieee80211_hw *hw,
 	bool flush = false;
 	int ret = 0;
 
-	local_bh_disable();
+	mutex_lock(&sc->mutex);
 
 	switch (action) {
 	case IEEE80211_AMPDU_RX_START:
@@ -1716,7 +1716,7 @@ static int ath9k_ampdu_action(struct ieee80211_hw *hw,
 		ath_err(ath9k_hw_common(sc->sc_ah), "Unknown AMPDU action\n");
 	}
 
-	local_bh_enable();
+	mutex_unlock(&sc->mutex);
 
 	return ret;
 }
