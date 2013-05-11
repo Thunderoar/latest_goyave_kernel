@@ -367,7 +367,13 @@ int au1100fb_fb_mmap(struct fb_info *fbi, struct vm_area_struct *vma)
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	pgprot_val(vma->vm_page_prot) |= (6 << 9); //CCA=6
 
-	return vm_iomap_memory(vma, fbdev->fb_phys, fbdev->fb_len);
+	if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
+				vma->vm_end - vma->vm_start,
+				vma->vm_page_prot)) {
+		return -EAGAIN;
+	}
+
+	return 0;
 }
 
 static struct fb_ops au1100fb_ops =
