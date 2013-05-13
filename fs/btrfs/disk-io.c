@@ -2823,8 +2823,6 @@ retry_root_backup:
 	location.offset = (u64)-1;
 
 	fs_info->fs_root = btrfs_read_fs_root_no_name(fs_info, &location);
-	if (!fs_info->fs_root)
-		goto fail_qgroup;
 	if (IS_ERR(fs_info->fs_root)) {
 		err = PTR_ERR(fs_info->fs_root);
 		goto fail_qgroup;
