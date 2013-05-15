@@ -1747,6 +1747,7 @@ struct btrfs_root {
 	int force_cow;
 
 	spinlock_t root_item_lock;
+	atomic_t refs;
 };
 
 struct btrfs_ioctl_defrag_range_args {
