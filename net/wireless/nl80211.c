@@ -5920,10 +5920,13 @@ static int nl80211_authenticate(struct sk_buff *skb, struct genl_info *info)
 	if (local_state_change)
 		return 0;
 
-	return cfg80211_mlme_auth(rdev, dev, chan, auth_type, bssid,
-				  ssid, ssid_len, ie, ie_len,
-				  key.p.key, key.p.key_len, key.idx,
-				  sae_data, sae_data_len);
+	wdev_lock(dev->ieee80211_ptr);
+	err = cfg80211_mlme_auth(rdev, dev, chan, auth_type, bssid,
+				 ssid, ssid_len, ie, ie_len,
+				 key.p.key, key.p.key_len, key.idx,
+				 sae_data, sae_data_len);
+	wdev_unlock(dev->ieee80211_ptr);
+	return err;
 }
 
 static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
@@ -6090,9 +6093,12 @@ static int nl80211_associate(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	err = nl80211_crypto_settings(rdev, info, &req.crypto, 1);
-	if (!err)
+	if (!err) {
+		wdev_lock(dev->ieee80211_ptr);
 		err = cfg80211_mlme_assoc(rdev, dev, chan, bssid,
 					  ssid, ssid_len, &req);
+		wdev_unlock(dev->ieee80211_ptr);
+	}
 
 	return err;
 }
@@ -6102,7 +6108,7 @@ static int nl80211_deauthenticate(struct sk_buff *skb, struct genl_info *info)
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 	const u8 *ie = NULL, *bssid;
-	int ie_len = 0;
+	int ie_len = 0, err;
 	u16 reason_code;
 	bool local_state_change;
 
@@ -6137,8 +6143,11 @@ static int nl80211_deauthenticate(struct sk_buff *skb, struct genl_info *info)
 
 	local_state_change = !!info->attrs[NL80211_ATTR_LOCAL_STATE_CHANGE];
 
-	return cfg80211_mlme_deauth(rdev, dev, bssid, ie, ie_len, reason_code,
-				    local_state_change);
+	wdev_lock(dev->ieee80211_ptr);
+	err = cfg80211_mlme_deauth(rdev, dev, bssid, ie, ie_len, reason_code,
+				   local_state_change);
+	wdev_unlock(dev->ieee80211_ptr);
+	return err;
 }
 
 static int nl80211_disassociate(struct sk_buff *skb, struct genl_info *info)
@@ -6146,7 +6155,7 @@ static int nl80211_disassociate(struct sk_buff *skb, struct genl_info *info)
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 	const u8 *ie = NULL, *bssid;
-	int ie_len = 0;
+	int ie_len = 0, err;
 	u16 reason_code;
 	bool local_state_change;
 
@@ -6181,8 +6190,11 @@ static int nl80211_disassociate(struct sk_buff *skb, struct genl_info *info)
 
 	local_state_change = !!info->attrs[NL80211_ATTR_LOCAL_STATE_CHANGE];
 
-	return cfg80211_mlme_disassoc(rdev, dev, bssid, ie, ie_len, reason_code,
-				      local_state_change);
+	wdev_lock(dev->ieee80211_ptr);
+	err = cfg80211_mlme_disassoc(rdev, dev, bssid, ie, ie_len, reason_code,
+				     local_state_change);
+	wdev_unlock(dev->ieee80211_ptr);
+	return err;
 }
 
 static bool
