@@ -181,4 +181,7 @@ config THERMAL_SC2713
 	help
 	  Choose the 2713 thermal system.
 
+menu "Texas Instruments thermal drivers"
+source "drivers/thermal/ti-soc-thermal/Kconfig"
+endmenu
 endif
