@@ -1,7 +1,5 @@
 
-source "drivers/staging/iio/magnetometer/inv_compass/Kconfig"
-
-
+source "drivers/iio/magnetometer/inv_compass/Kconfig"
 
 config IIO_ST_MAGN_3AXIS
 	tristate "STMicroelectronics magnetometers 3-Axis Driver"
@@ -31,5 +29,3 @@ config IIO_ST_MAGN_SPI_3AXIS
 	tristate
 	depends on IIO_ST_MAGN_3AXIS
 	depends on IIO_ST_SENSORS_SPI
-
-endmenu
