@@ -126,6 +126,7 @@ void xenvif_get_rings(struct xenvif *vif);
 void xenvif_put_rings(struct xenvif *vif);
 
 int xenvif_xenbus_init(void);
+void xenvif_xenbus_fini(void);
 
 int xenvif_schedulable(struct xenvif *vif);
 
