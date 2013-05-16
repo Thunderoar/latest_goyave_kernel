@@ -61,8 +61,6 @@ obj-$(CONFIG_FIREWIRE_SERIAL)	+= fwserial/
 obj-$(CONFIG_ZCACHE)		+= zcache/
 obj-$(CONFIG_GOLDFISH)		+= goldfish/
 obj-$(CONFIG_USB_DWC2)		+= dwc2/
-<<<<<<< HEAD
 obj-$(CONFIG_VNSWAP)		+= vnswap/
-=======
 obj-$(CONFIG_LUSTRE_FS)		+= lustre/
->>>>>>> d7e09d03... staging: add Lustre file system client support
+obj-$(CONFIG_USB_BTMTK)		+= btmtk_usb/

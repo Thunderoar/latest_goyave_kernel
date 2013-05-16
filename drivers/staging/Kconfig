@@ -138,10 +138,10 @@ source "drivers/staging/netlogic/Kconfig"
 
 source "drivers/staging/dwc2/Kconfig"
 
-<<<<<<< HEAD
 source "drivers/staging/vnswap/Kconfig"
-=======
+
 source "drivers/staging/lustre/Kconfig"
->>>>>>> d7e09d03... staging: add Lustre file system client support
+
+source "drivers/staging/btmtk_usb/Kconfig"
 
 endif # STAGING
