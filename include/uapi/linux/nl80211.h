@@ -2751,6 +2751,8 @@ enum nl80211_channel_type {
  *	and %NL80211_ATTR_CENTER_FREQ2 attributes must be provided as well
  * @NL80211_CHAN_WIDTH_160: 160 MHz channel, the %NL80211_ATTR_CENTER_FREQ1
  *	attribute must be provided as well
+ * @NL80211_CHAN_WIDTH_5: 5 MHz OFDM channel
+ * @NL80211_CHAN_WIDTH_10: 10 MHz OFDM channel
  */
 enum nl80211_chan_width {
 	NL80211_CHAN_WIDTH_20_NOHT,
@@ -2761,21 +2763,6 @@ enum nl80211_chan_width {
 	NL80211_CHAN_WIDTH_160,
 	NL80211_CHAN_WIDTH_5,
 	NL80211_CHAN_WIDTH_10,
-};
-
-/**
- * enum nl80211_bss_scan_width - control channel width for a BSS
- *
- * These values are used with the %NL80211_BSS_CHAN_WIDTH attribute.
- *
- * @NL80211_BSS_CHAN_WIDTH_20: control channel is 20 MHz wide or compatible
- * @NL80211_BSS_CHAN_WIDTH_10: control channel is 10 MHz wide
- * @NL80211_BSS_CHAN_WIDTH_5: control channel is 5 MHz wide
- */
-enum nl80211_bss_scan_width {
-	NL80211_BSS_CHAN_WIDTH_20,
-	NL80211_BSS_CHAN_WIDTH_10,
-	NL80211_BSS_CHAN_WIDTH_5,
 };
 
 /**
