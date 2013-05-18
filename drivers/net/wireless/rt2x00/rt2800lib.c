@@ -4044,7 +4044,7 @@ static void rt2800_init_bbp_5592(struct rt2x00_dev *rt2x00dev)
 		rt2800_bbp_write(rt2x00dev, 103, 0xc0);
 }
 
-static int rt2800_init_bbp(struct rt2x00_dev *rt2x00dev)
+static void rt2800_init_bbp(struct rt2x00_dev *rt2x00dev)
 {
 	unsigned int i;
 	u16 eeprom;
@@ -4053,7 +4053,7 @@ static int rt2800_init_bbp(struct rt2x00_dev *rt2x00dev)
 
 	if (rt2x00_rt(rt2x00dev, RT5592)) {
 		rt2800_init_bbp_5592(rt2x00dev);
-		return 0;
+		return;
 	}
 
 	if (rt2x00_rt(rt2x00dev, RT3352)) {
@@ -4350,8 +4350,6 @@ static int rt2800_init_bbp(struct rt2x00_dev *rt2x00dev)
 			rt2800_bbp_write(rt2x00dev, reg_id, value);
 		}
 	}
-
-	return 0;
 }
 
 static void rt2800_led_open_drain_enable(struct rt2x00_dev *rt2x00dev)
@@ -5204,7 +5202,8 @@ int rt2800_enable_radio(struct rt2x00_dev *rt2x00dev)
 	rt2800_mcu_request(rt2x00dev, MCU_BOOT_SIGNAL, 0, 0, 0);
 	msleep(1);
 
-	if (unlikely(rt2800_wait_bbp_ready(rt2x00dev)))
+	if (unlikely(rt2800_wait_bbp_rf_ready(rt2x00dev) ||
+		     rt2800_wait_bbp_ready(rt2x00dev)))
 		return -EIO;
 
 	rt2800_init_bbp(rt2x00dev);
