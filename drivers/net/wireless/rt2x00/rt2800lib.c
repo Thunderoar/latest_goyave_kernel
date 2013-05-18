@@ -4179,6 +4179,8 @@ static void rt2800_init_bbp_3352(struct rt2x00_dev *rt2x00dev)
 	rt2800_bbp_write(rt2x00dev, 106, 0x05);
 
 	rt2800_bbp_write(rt2x00dev, 120, 0x50);
+
+	rt2800_bbp_write(rt2x00dev, 137, 0x0f);
 }
 
 static void rt2800_init_bbp_3390(struct rt2x00_dev *rt2x00dev)
@@ -4432,9 +4434,6 @@ static void rt2800_init_bbp(struct rt2x00_dev *rt2x00dev)
 		rt2800_init_bbp_5592(rt2x00dev);
 		return;
 	}
-
-	if (rt2x00_rt(rt2x00dev, RT3352))
-		rt2800_bbp_write(rt2x00dev, 137, 0x0f);
 
 	if (rt2x00_rt(rt2x00dev, RT3071) ||
 	    rt2x00_rt(rt2x00dev, RT3090) ||
