@@ -59,35 +59,6 @@ xfs_attr3_rmt_blocks(
 	return XFS_B_TO_FSB(mp, attrlen);
 }
 
-/*
- * Checking of the remote attribute header is split into two parts. The verifier
- * does CRC, location and bounds checking, the unpacking function checks the
- * attribute parameters and owner.
- */
-static bool
-xfs_attr3_rmt_hdr_ok(
-	struct xfs_mount	*mp,
-	void			*ptr,
-	xfs_ino_t		ino,
-	uint32_t		offset,
-	uint32_t		size,
-	xfs_daddr_t		bno)
-{
-	struct xfs_attr3_rmt_hdr *rmt = ptr;
-
-	if (bno != be64_to_cpu(rmt->rm_blkno))
-		return false;
-	if (offset != be32_to_cpu(rmt->rm_offset))
-		return false;
-	if (size != be32_to_cpu(rmt->rm_bytes))
-		return false;
-	if (ino != be64_to_cpu(rmt->rm_owner))
-		return false;
-
-	/* ok */
-	return true;
-}
-
 static bool
 xfs_attr3_rmt_verify(
 	struct xfs_mount	*mp,
@@ -351,6 +322,7 @@ xfs_attr_rmtval_get(
 
 	while (valuelen > 0) {
 		nmap = ATTR_RMTVALUE_MAPSIZE;
+		blkcnt = xfs_attr3_rmt_blocks(mp, valuelen);
 		error = xfs_bmapi_read(args->dp, (xfs_fileoff_t)lblkno,
 				       blkcnt, map, &nmap,
 				       XFS_BMAPI_ATTRFORK);
@@ -372,9 +344,25 @@ xfs_attr_rmtval_get(
 			if (error)
 				return error;
 
-			error = xfs_attr_rmtval_copyout(mp, bp, args->dp->i_ino,
-							&offset, &valuelen,
-							&dst);
+			byte_cnt = XFS_ATTR3_RMT_BUF_SPACE(mp, BBTOB(bp->b_length));
+			byte_cnt = min_t(int, valuelen, byte_cnt);
+
+			src = bp->b_addr;
+			if (xfs_sb_version_hascrc(&mp->m_sb)) {
+				if (!xfs_attr3_rmt_hdr_ok(mp, args->dp->i_ino,
+							offset, byte_cnt, bp)) {
+					xfs_alert(mp,
+"remote attribute header does not match required off/len/owner (0x%x/Ox%x,0x%llx)",
+						offset, byte_cnt, args->dp->i_ino);
+					xfs_buf_relse(bp);
+					return EFSCORRUPTED;
+
+				}
+
+				src += sizeof(struct xfs_attr3_rmt_hdr);
+			}
+
+			memcpy(dst, src, byte_cnt);
 			xfs_buf_relse(bp);
 			if (error)
 				return error;
