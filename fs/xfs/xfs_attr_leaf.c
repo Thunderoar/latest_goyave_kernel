@@ -2354,8 +2354,9 @@ xfs_attr3_leaf_lookup_int(
 			args->index = probe;
 			args->valuelen = be32_to_cpu(name_rmt->valuelen);
 			args->rmtblkno = be32_to_cpu(name_rmt->valueblk);
-			args->rmtblkcnt = XFS_B_TO_FSB(args->dp->i_mount,
-						       args->valuelen);
+			args->rmtblkcnt = xfs_attr3_rmt_blocks(
+							args->dp->i_mount,
+							args->valuelen);
 			return XFS_ERROR(EEXIST);
 		}
 	}
