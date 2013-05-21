@@ -464,6 +464,31 @@ xfs_attr_rmtval_set(
 		       (map.br_startblock != HOLESTARTBLOCK));
 		lblkno += map.br_blockcount;
 		blkcnt -= map.br_blockcount;
+		hdrcnt++;
+
+		/*
+		 * If we have enough blocks for the attribute data, calculate
+		 * how many extra blocks we need for headers. We might run
+		 * through this multiple times in the case that the additional
+		 * headers in the blocks needed for the data fragments spills
+		 * into requiring more blocks. e.g. for 512 byte blocks, we'll
+		 * spill for another block every 9 headers we require in this
+		 * loop.
+		 *
+		 * Note that this can result in contiguous allocation of blocks,
+		 * so we don't use all the space we allocate for headers as we
+		 * have one less header for each contiguous allocation that
+		 * occurs in the map/write loop below.
+		 */
+		if (crcs && blkcnt == 0) {
+			int total_len;
+
+			total_len = args->valuelen +
+				    hdrcnt * sizeof(struct xfs_attr3_rmt_hdr);
+			blkcnt = XFS_B_TO_FSB(mp, total_len);
+			blkcnt -= args->rmtblkcnt;
+			args->rmtblkcnt += blkcnt;
+		}
 
 		/*
 		 * Start the next trans in the chain.
