@@ -577,13 +577,10 @@ xfs_attr_rmtval_remove(
 	 * lookups.
 	 */
 	lblkno = args->rmtblkno;
-	blkcnt = args->rmtblkcnt;
-	while (blkcnt > 0) {
-		struct xfs_bmbt_irec	map;
-		struct xfs_buf		*bp;
-		xfs_daddr_t		dblkno;
-		int			dblkcnt;
-		int			nmap;
+	valuelen = args->valuelen;
+	blkcnt = xfs_attr3_rmt_blocks(mp, valuelen);
+	while (valuelen > 0) {
+		int dblkcnt;
 
 		/*
 		 * Try to remember where we decided to put the value.
@@ -610,15 +607,19 @@ xfs_attr_rmtval_remove(
 			bp = NULL;
 		}
 
+		valuelen -= XFS_ATTR3_RMT_BUF_SPACE(mp,
+					XFS_FSB_TO_B(mp, map.br_blockcount));
+
 		lblkno += map.br_blockcount;
 		blkcnt -= map.br_blockcount;
+		blkcnt = max(blkcnt, xfs_attr3_rmt_blocks(mp, valuelen));
 	}
 
 	/*
 	 * Keep de-allocating extents until the remote-value region is gone.
 	 */
+	blkcnt = lblkno - args->rmtblkno;
 	lblkno = args->rmtblkno;
-	blkcnt = args->rmtblkcnt;
 	done = 0;
 	while (!done) {
 		int committed;
