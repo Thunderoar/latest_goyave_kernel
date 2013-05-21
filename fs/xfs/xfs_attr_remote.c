@@ -405,6 +405,7 @@ xfs_attr_rmtval_set(
 	 * conversion and have to take the header space into account.
 	 */
 	blkcnt = xfs_attr3_rmt_blocks(mp, args->valuelen);
+
 	error = xfs_bmap_first_unused(args->trans, args->dp, blkcnt, &lfileoff,
 						   XFS_ATTR_FORK);
 	if (error)
@@ -495,12 +496,12 @@ xfs_attr_rmtval_set(
 	lblkno = args->rmtblkno;
 	blkcnt = args->rmtblkcnt;
 	valuelen = args->valuelen;
+	blkcnt = args->rmtblkcnt;
 	while (valuelen > 0) {
-		struct xfs_buf	*bp;
-		xfs_daddr_t	dblkno;
-		int		dblkcnt;
-
-		ASSERT(blkcnt > 0);
+		int	byte_cnt;
+		int	hdr_size;
+		int	dblkcnt;
+		char	*buf;
 
 		xfs_bmap_init(args->flist, args->firstblock);
 		nmap = 1;
@@ -520,15 +521,28 @@ xfs_attr_rmtval_set(
 		if (!bp)
 			return ENOMEM;
 		bp->b_ops = &xfs_attr3_rmt_buf_ops;
+		buf = bp->b_addr;
 
-		xfs_attr_rmtval_copyin(mp, bp, args->dp->i_ino, &offset,
-				       &valuelen, &src);
+		byte_cnt = XFS_ATTR3_RMT_BUF_SPACE(mp, BBTOB(bp->b_length));
+		byte_cnt = min_t(int, valuelen, byte_cnt);
+		hdr_size = xfs_attr3_rmt_hdr_set(mp, dp->i_ino, offset,
+					     byte_cnt, bp);
+		ASSERT(hdr_size + byte_cnt <= BBTOB(bp->b_length));
+
+		memcpy(buf + hdr_size, src, byte_cnt);
+
+		if (byte_cnt + hdr_size < BBTOB(bp->b_length))
+			xfs_buf_zero(bp, byte_cnt + hdr_size,
+				     BBTOB(bp->b_length) - byte_cnt - hdr_size);
 
 		error = xfs_bwrite(bp);	/* GROT: NOTE: synchronous write */
 		xfs_buf_relse(bp);
 		if (error)
 			return error;
 
+		src += byte_cnt;
+		valuelen -= byte_cnt;
+		offset += byte_cnt;
 
 		/* roll attribute extent map forwards */
 		lblkno += map.br_blockcount;
