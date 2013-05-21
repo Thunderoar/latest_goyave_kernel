@@ -59,6 +59,35 @@ xfs_attr3_rmt_blocks(
 	return XFS_B_TO_FSB(mp, attrlen);
 }
 
+/*
+ * Checking of the remote attribute header is split into two parts. The verifier
+ * does CRC, location and bounds checking, the unpacking function checks the
+ * attribute parameters and owner.
+ */
+static bool
+xfs_attr3_rmt_hdr_ok(
+	struct xfs_mount	*mp,
+	void			*ptr,
+	xfs_ino_t		ino,
+	uint32_t		offset,
+	uint32_t		size,
+	xfs_daddr_t		bno)
+{
+	struct xfs_attr3_rmt_hdr *rmt = ptr;
+
+	if (bno != be64_to_cpu(rmt->rm_blkno))
+		return false;
+	if (offset != be32_to_cpu(rmt->rm_offset))
+		return false;
+	if (size != be32_to_cpu(rmt->rm_bytes))
+		return false;
+	if (ino != be64_to_cpu(rmt->rm_owner))
+		return false;
+
+	/* ok */
+	return true;
+}
+
 static bool
 xfs_attr3_rmt_verify(
 	struct xfs_mount	*mp,
@@ -322,7 +351,6 @@ xfs_attr_rmtval_get(
 
 	while (valuelen > 0) {
 		nmap = ATTR_RMTVALUE_MAPSIZE;
-		blkcnt = xfs_attr3_rmt_blocks(mp, valuelen);
 		error = xfs_bmapi_read(args->dp, (xfs_fileoff_t)lblkno,
 				       blkcnt, map, &nmap,
 				       XFS_BMAPI_ATTRFORK);
@@ -344,25 +372,9 @@ xfs_attr_rmtval_get(
 			if (error)
 				return error;
 
-			byte_cnt = XFS_ATTR3_RMT_BUF_SPACE(mp, BBTOB(bp->b_length));
-			byte_cnt = min_t(int, valuelen, byte_cnt);
-
-			src = bp->b_addr;
-			if (xfs_sb_version_hascrc(&mp->m_sb)) {
-				if (!xfs_attr3_rmt_hdr_ok(mp, args->dp->i_ino,
-							offset, byte_cnt, bp)) {
-					xfs_alert(mp,
-"remote attribute header does not match required off/len/owner (0x%x/Ox%x,0x%llx)",
-						offset, byte_cnt, args->dp->i_ino);
-					xfs_buf_relse(bp);
-					return EFSCORRUPTED;
-
-				}
-
-				src += sizeof(struct xfs_attr3_rmt_hdr);
-			}
-
-			memcpy(dst, src, byte_cnt);
+			error = xfs_attr_rmtval_copyout(mp, bp, args->dp->i_ino,
+							&offset, &valuelen,
+							&dst);
 			xfs_buf_relse(bp);
 			if (error)
 				return error;
@@ -405,7 +417,6 @@ xfs_attr_rmtval_set(
 	 * conversion and have to take the header space into account.
 	 */
 	blkcnt = xfs_attr3_rmt_blocks(mp, args->valuelen);
-
 	error = xfs_bmap_first_unused(args->trans, args->dp, blkcnt, &lfileoff,
 						   XFS_ATTR_FORK);
 	if (error)
@@ -453,31 +464,6 @@ xfs_attr_rmtval_set(
 		       (map.br_startblock != HOLESTARTBLOCK));
 		lblkno += map.br_blockcount;
 		blkcnt -= map.br_blockcount;
-		hdrcnt++;
-
-		/*
-		 * If we have enough blocks for the attribute data, calculate
-		 * how many extra blocks we need for headers. We might run
-		 * through this multiple times in the case that the additional
-		 * headers in the blocks needed for the data fragments spills
-		 * into requiring more blocks. e.g. for 512 byte blocks, we'll
-		 * spill for another block every 9 headers we require in this
-		 * loop.
-		 *
-		 * Note that this can result in contiguous allocation of blocks,
-		 * so we don't use all the space we allocate for headers as we
-		 * have one less header for each contiguous allocation that
-		 * occurs in the map/write loop below.
-		 */
-		if (crcs && blkcnt == 0) {
-			int total_len;
-
-			total_len = args->valuelen +
-				    hdrcnt * sizeof(struct xfs_attr3_rmt_hdr);
-			blkcnt = XFS_B_TO_FSB(mp, total_len);
-			blkcnt -= args->rmtblkcnt;
-			args->rmtblkcnt += blkcnt;
-		}
 
 		/*
 		 * Start the next trans in the chain.
@@ -496,12 +482,12 @@ xfs_attr_rmtval_set(
 	lblkno = args->rmtblkno;
 	blkcnt = args->rmtblkcnt;
 	valuelen = args->valuelen;
-	blkcnt = args->rmtblkcnt;
 	while (valuelen > 0) {
-		int	byte_cnt;
-		int	hdr_size;
-		int	dblkcnt;
-		char	*buf;
+		struct xfs_buf	*bp;
+		xfs_daddr_t	dblkno;
+		int		dblkcnt;
+
+		ASSERT(blkcnt > 0);
 
 		xfs_bmap_init(args->flist, args->firstblock);
 		nmap = 1;
@@ -521,28 +507,15 @@ xfs_attr_rmtval_set(
 		if (!bp)
 			return ENOMEM;
 		bp->b_ops = &xfs_attr3_rmt_buf_ops;
-		buf = bp->b_addr;
 
-		byte_cnt = XFS_ATTR3_RMT_BUF_SPACE(mp, BBTOB(bp->b_length));
-		byte_cnt = min_t(int, valuelen, byte_cnt);
-		hdr_size = xfs_attr3_rmt_hdr_set(mp, dp->i_ino, offset,
-					     byte_cnt, bp);
-		ASSERT(hdr_size + byte_cnt <= BBTOB(bp->b_length));
-
-		memcpy(buf + hdr_size, src, byte_cnt);
-
-		if (byte_cnt + hdr_size < BBTOB(bp->b_length))
-			xfs_buf_zero(bp, byte_cnt + hdr_size,
-				     BBTOB(bp->b_length) - byte_cnt - hdr_size);
+		xfs_attr_rmtval_copyin(mp, bp, args->dp->i_ino, &offset,
+				       &valuelen, &src);
 
 		error = xfs_bwrite(bp);	/* GROT: NOTE: synchronous write */
 		xfs_buf_relse(bp);
 		if (error)
 			return error;
 
-		src += byte_cnt;
-		valuelen -= byte_cnt;
-		offset += byte_cnt;
 
 		/* roll attribute extent map forwards */
 		lblkno += map.br_blockcount;
@@ -577,10 +550,13 @@ xfs_attr_rmtval_remove(
 	 * lookups.
 	 */
 	lblkno = args->rmtblkno;
-	valuelen = args->valuelen;
-	blkcnt = xfs_attr3_rmt_blocks(mp, valuelen);
-	while (valuelen > 0) {
-		int dblkcnt;
+	blkcnt = args->rmtblkcnt;
+	while (blkcnt > 0) {
+		struct xfs_bmbt_irec	map;
+		struct xfs_buf		*bp;
+		xfs_daddr_t		dblkno;
+		int			dblkcnt;
+		int			nmap;
 
 		/*
 		 * Try to remember where we decided to put the value.
@@ -607,19 +583,15 @@ xfs_attr_rmtval_remove(
 			bp = NULL;
 		}
 
-		valuelen -= XFS_ATTR3_RMT_BUF_SPACE(mp,
-					XFS_FSB_TO_B(mp, map.br_blockcount));
-
 		lblkno += map.br_blockcount;
 		blkcnt -= map.br_blockcount;
-		blkcnt = max(blkcnt, xfs_attr3_rmt_blocks(mp, valuelen));
 	}
 
 	/*
 	 * Keep de-allocating extents until the remote-value region is gone.
 	 */
-	blkcnt = lblkno - args->rmtblkno;
 	lblkno = args->rmtblkno;
+	blkcnt = args->rmtblkcnt;
 	done = 0;
 	while (!done) {
 		int committed;
