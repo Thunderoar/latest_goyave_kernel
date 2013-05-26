@@ -405,6 +405,8 @@ SMB2_negotiate(const unsigned int xid, struct cifs_ses *ses)
 	}
 	server->dialect = le16_to_cpu(rsp->DialectRevision);
 
+	/* SMB2 only has an extended negflavor */
+	server->negflavor = CIFS_NEGFLAVOR_EXTENDED;
 	server->maxBuf = le32_to_cpu(rsp->MaxTransactSize);
 	/* set it to the maximum buffer size value we can send with 1 credit */
 	server->maxBuf = min_t(unsigned int, le32_to_cpu(rsp->MaxTransactSize),
