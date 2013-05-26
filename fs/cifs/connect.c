@@ -2045,13 +2045,8 @@ match_security(struct TCP_Server_Info *server, struct smb_vol *vol)
 	}
 
 	/* now check if signing mode is acceptable */
-	if ((secFlags & CIFSSEC_MAY_SIGN) == 0 &&
-	    (server->sec_mode & SECMODE_SIGN_REQUIRED))
-			return false;
-	else if (((secFlags & CIFSSEC_MUST_SIGN) == CIFSSEC_MUST_SIGN) &&
-		 (server->sec_mode &
-		  (SECMODE_SIGN_ENABLED|SECMODE_SIGN_REQUIRED)) == 0)
-			return false;
+	if (vol->sign && !server->sign)
+		return false;
 
 	return true;
 }
@@ -3806,8 +3801,7 @@ CIFSTCon(const unsigned int xid, struct cifs_ses *ses,
 		}
 	}
 
-	if (ses->server->sec_mode &
-			(SECMODE_SIGN_REQUIRED | SECMODE_SIGN_ENABLED))
+	if (ses->server->sign)
 		smb_buffer->Flags2 |= SMBFLG2_SECURITY_SIGNATURE;
 
 	if (ses->capabilities & CAP_STATUS32) {
