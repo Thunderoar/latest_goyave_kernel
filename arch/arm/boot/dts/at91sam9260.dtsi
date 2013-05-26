@@ -273,16 +273,6 @@
 
 					pinctrl_macb_rmii_mii_alt: macb_rmii_mii-1 {
 						atmel,pins =
-<<<<<<< HEAD
-							<0 10 0x2 0x0	/* PA10 periph B */
-							 0 11 0x2 0x0	/* PA11 periph B */
-							 0 22 0x2 0x0	/* PA22 periph B */
-							 0 25 0x2 0x0	/* PA25 periph B */
-							 0 26 0x2 0x0	/* PA26 periph B */
-							 0 27 0x2 0x0	/* PA27 periph B */
-							 0 28 0x2 0x0	/* PA28 periph B */
-							 0 29 0x2 0x0>;	/* PA29 periph B */
-=======
 							<AT91_PIOA 10 AT91_PERIPH_B AT91_PINCTRL_NONE	/* PA10 periph B */
 							 AT91_PIOA 11 AT91_PERIPH_B AT91_PINCTRL_NONE	/* PA11 periph B */
 							 AT91_PIOA 24 AT91_PERIPH_B AT91_PINCTRL_NONE	/* PA24 periph B */
@@ -291,7 +281,6 @@
 							 AT91_PIOA 27 AT91_PERIPH_B AT91_PINCTRL_NONE	/* PA27 periph B */
 							 AT91_PIOA 28 AT91_PERIPH_B AT91_PINCTRL_NONE	/* PA28 periph B */
 							 AT91_PIOA 29 AT91_PERIPH_B AT91_PINCTRL_NONE>;	/* PA29 periph B */
->>>>>>> c9d0f31... ARM: at91: dt: switch to pinctrl to pre-processor
 					};
 				};
 
@@ -365,8 +354,8 @@
 				i2c_gpio0 {
 					pinctrl_i2c_gpio0: i2c_gpio0-0 {
 						atmel,pins =
-							<0 23 0x0 0x3   /* PA23 gpio I2C_SDA pin */
-							 0 24 0x0 0x3>; /* PA24 gpio I2C_SCL pin */
+							<AT91_PIOA 23 AT91_PERIPH_GPIO AT91_PINCTRL_MULTI_DRIVE
+							 AT91_PIOA 24 AT91_PERIPH_GPIO AT91_PINCTRL_MULTI_DRIVE>;
 					};
 				};
 
