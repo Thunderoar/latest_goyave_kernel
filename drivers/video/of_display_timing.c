@@ -23,7 +23,7 @@
  * Every display_timing can be specified with either just the typical value or
  * a range consisting of min/typ/max. This function helps handling this
  **/
-static int parse_timing_property(struct device_node *np, const char *name,
+static int parse_timing_property(const struct device_node *np, const char *name,
 			  struct timing_entry *result)
 {
 	struct property *prop;
@@ -56,8 +56,8 @@ static int parse_timing_property(struct device_node *np, const char *name,
  * of_parse_display_timing - parse display_timing entry from device_node
  * @np: device_node with the properties
  **/
-static int of_parse_display_timing(struct device_node *np,
-		struct display_timing *dt)
+static struct display_timing *of_get_display_timing(const struct device_node
+						    *np)
 {
 	u32 val = 0;
 	int ret = 0;
