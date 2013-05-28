@@ -1180,7 +1180,7 @@ int rndis_init(void)
 	rndis_initialized = true;
 	return 0;
 }
-EXPORT_SYMBOL(rndis_init);
+module_init(rndis_init);
 
 void rndis_exit(void)
 {
@@ -1200,6 +1200,6 @@ void rndis_exit(void)
 	}
 #endif
 }
-EXPORT_SYMBOL(rndis_exit);
+module_exit(rndis_exit);
 
 MODULE_LICENSE("GPL");
