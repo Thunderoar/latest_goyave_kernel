@@ -15,6 +15,7 @@
  * binaries.
  */
 #include <linux/compiler.h>
+#include <linux/context_tracking.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -535,6 +536,8 @@ static inline int audit_arch(void)
  */
 asmlinkage void syscall_trace_enter(struct pt_regs *regs)
 {
+	user_exit();
+
 	/* do the secure computing check first */
 	secure_computing_strict(regs->regs[2]);
 
@@ -571,6 +574,13 @@ out:
  */
 asmlinkage void syscall_trace_leave(struct pt_regs *regs)
 {
+        /*
+	 * We may come here right after calling schedule_user()
+	 * or do_notify_resume(), in which case we can be in RCU
+	 * user mode.
+	 */
+	user_exit();
+
 	audit_syscall_exit(regs);
 
 	if (!(current->ptrace & PT_PTRACED))
@@ -593,4 +603,6 @@ asmlinkage void syscall_trace_leave(struct pt_regs *regs)
 		send_sig(current->exit_code, current, 1);
 		current->exit_code = 0;
 	}
+
+	user_enter();
 }
