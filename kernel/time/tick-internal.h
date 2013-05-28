@@ -13,8 +13,6 @@ extern seqlock_t jiffies_lock;
 #define TICK_DO_TIMER_NONE	-1
 #define TICK_DO_TIMER_BOOT	-2
 
-#define CS_NAME_LEN	32
-
 DECLARE_PER_CPU(struct tick_device, tick_cpu_device);
 extern ktime_t tick_next_period;
 extern ktime_t tick_period;
