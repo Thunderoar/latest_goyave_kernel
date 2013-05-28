@@ -784,9 +784,7 @@ int btrfs_write_marked_extents(struct btrfs_root *root,
 	struct extent_state *cached_state = NULL;
 	u64 start = 0;
 	u64 end;
-	struct blk_plug plug;
 
-	blk_start_plug(&plug);
 	while (!find_first_extent_bit(dirty_pages, start, &start, &end,
 				      mark, &cached_state)) {
 		convert_extent_bit(dirty_pages, start, end, EXTENT_NEED_WAIT,
@@ -800,7 +798,6 @@ int btrfs_write_marked_extents(struct btrfs_root *root,
 	}
 	if (err)
 		werr = err;
-	blk_finish_plug(&plug);
 	return werr;
 }
 
@@ -845,8 +842,11 @@ int btrfs_write_and_wait_marked_extents(struct btrfs_root *root,
 {
 	int ret;
 	int ret2;
+	struct blk_plug plug;
 
+	blk_start_plug(&plug);
 	ret = btrfs_write_marked_extents(root, dirty_pages, mark);
+	blk_finish_plug(&plug);
 	ret2 = btrfs_wait_marked_extents(root, dirty_pages, mark);
 
 	if (ret)
