@@ -384,14 +384,14 @@ static int acpi_pci_root_add(struct acpi_device *device,
 	int result;
 	struct acpi_pci_root *root;
 	u32 flags, base_flags;
-	bool no_aspm = false, clear_aspm = false;
+	acpi_handle handle = device->handle;
 
 	root = kzalloc(sizeof(struct acpi_pci_root), GFP_KERNEL);
 	if (!root)
 		return -ENOMEM;
 
 	segment = 0;
-	status = acpi_evaluate_integer(device->handle, METHOD_NAME__SEG, NULL,
+	status = acpi_evaluate_integer(handle, METHOD_NAME__SEG, NULL,
 				       &segment);
 	if (ACPI_FAILURE(status) && status != AE_NOT_FOUND) {
 		printk(KERN_ERR PREFIX "can't evaluate _SEG\n");
@@ -401,7 +401,7 @@ static int acpi_pci_root_add(struct acpi_device *device,
 
 	/* Check _CRS first, then _BBN.  If no _BBN, default to zero. */
 	root->secondary.flags = IORESOURCE_BUS;
-	status = try_get_root_bridge_busnr(device->handle, &root->secondary);
+	status = try_get_root_bridge_busnr(handle, &root->secondary);
 	if (ACPI_FAILURE(status)) {
 		/*
 		 * We need both the start and end of the downstream bus range
@@ -412,7 +412,7 @@ static int acpi_pci_root_add(struct acpi_device *device,
 		root->secondary.end = 0xFF;
 		printk(KERN_WARNING FW_BUG PREFIX
 		       "no secondary bus range in _CRS\n");
-		status = acpi_evaluate_integer(device->handle, METHOD_NAME__BBN,
+		status = acpi_evaluate_integer(handle, METHOD_NAME__BBN,
 					       NULL, &bus);
 		if (ACPI_SUCCESS(status))
 			root->secondary.start = bus;
@@ -436,7 +436,7 @@ static int acpi_pci_root_add(struct acpi_device *device,
 	       acpi_device_name(device), acpi_device_bid(device),
 	       root->segment, &root->secondary);
 
-	root->mcfg_addr = acpi_pci_root_get_mcfg_addr(device->handle);
+	root->mcfg_addr = acpi_pci_root_get_mcfg_addr(handle);
 
 	/*
 	 * All supported architectures that use ACPI have support for
@@ -484,7 +484,7 @@ static int acpi_pci_root_add(struct acpi_device *device,
 		dev_info(&device->dev,
 			"Requesting ACPI _OSC control (0x%02x)\n", flags);
 
-		status = acpi_pci_osc_control_set(device->handle, &flags,
+		status = acpi_pci_osc_control_set(handle, &flags,
 				       OSC_PCI_EXPRESS_CAP_STRUCTURE_CONTROL);
 		if (ACPI_SUCCESS(status)) {
 			dev_info(&device->dev,
