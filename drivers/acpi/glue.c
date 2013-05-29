@@ -81,12 +81,15 @@ static struct acpi_bus_type *acpi_get_bus_type(struct device *dev)
 static acpi_status acpi_dev_present(acpi_handle handle, u32 lvl_not_used,
 				  void *not_used, void **ret_p)
 {
-	struct acpi_device *adev = NULL;
+	unsigned long long addr, sta;
+	acpi_status status;
 
 	acpi_bus_get_device(handle, &adev);
 	if (adev) {
 		*ret_p = handle;
-		return AE_CTRL_TERMINATE;
+		status = acpi_bus_get_status_handle(handle, &sta);
+		if (ACPI_SUCCESS(status) && (sta & ACPI_STA_DEVICE_ENABLED))
+			return AE_CTRL_TERMINATE;
 	}
 	return AE_OK;
 }
