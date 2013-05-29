@@ -2077,7 +2077,6 @@ static void snd_riptide_joystick_remove(struct pci_dev *pci)
 	if (gameport) {
 		release_region(gameport->io, 8);
 		gameport_unregister_port(gameport);
-		pci_set_drvdata(pci, NULL);
 	}
 }
 #endif
@@ -2190,7 +2189,6 @@ snd_card_riptide_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 static void snd_card_riptide_remove(struct pci_dev *pci)
 {
 	snd_card_free(pci_get_drvdata(pci));
-	pci_set_drvdata(pci, NULL);
 }
 
 static struct pci_driver driver = {

@@ -3803,7 +3803,6 @@ static int azx_probe(struct pci_dev *pci,
 
 out_free:
 	snd_card_free(card);
-	pci_set_drvdata(pci, NULL);
 	return err;
 }
 
@@ -3873,7 +3872,6 @@ static void azx_remove(struct pci_dev *pci)
 
 	if (card)
 		snd_card_free(card);
-	pci_set_drvdata(pci, NULL);
 }
 
 /* PCI IDs */
