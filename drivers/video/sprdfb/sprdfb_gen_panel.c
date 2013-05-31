@@ -556,7 +556,7 @@ static struct platform_driver sprd_panel_driver = {
 
 static int sprd_panel_module_init(void)
 {
-	return __platform_driver_register(&sprd_panel_driver);
+	return platform_driver_register(&sprd_panel_driver);
 }
 
 static void sprd_panel_module_exit(void)
