@@ -4574,7 +4574,6 @@ static void i9xx_update_pll(struct intel_crtc *crtc,
 }
 
 static void i8xx_update_pll(struct intel_crtc *crtc,
-			    struct drm_display_mode *adjusted_mode,
 			    intel_clock_t *reduced_clock,
 			    int num_connectors)
 {
@@ -4629,14 +4628,15 @@ static void i8xx_update_pll(struct intel_crtc *crtc,
 	I915_WRITE(DPLL(pipe), dpll);
 }
 
-static void intel_set_pipe_timings(struct intel_crtc *intel_crtc,
-				   struct drm_display_mode *mode,
-				   struct drm_display_mode *adjusted_mode)
+static void intel_set_pipe_timings(struct intel_crtc *intel_crtc)
 {
 	struct drm_device *dev = intel_crtc->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	enum pipe pipe = intel_crtc->pipe;
 	enum transcoder cpu_transcoder = intel_crtc->config.cpu_transcoder;
+	struct drm_display_mode *adjusted_mode =
+		&intel_crtc->config.adjusted_mode;
+	struct drm_display_mode *mode = &intel_crtc->config.requested_mode;
 	uint32_t vsyncshift, crtc_vtotal, crtc_vblank_end;
 
 	/* We need to be careful not to changed the adjusted mode, for otherwise
@@ -4818,8 +4818,6 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct drm_display_mode *adjusted_mode =
-		&intel_crtc->config.adjusted_mode;
 	struct drm_display_mode *mode = &intel_crtc->config.requested_mode;
 	int pipe = intel_crtc->pipe;
 	int plane = intel_crtc->plane;
@@ -4884,7 +4882,7 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 	}
 
 	if (IS_GEN2(dev))
-		i8xx_update_pll(intel_crtc, adjusted_mode,
+		i8xx_update_pll(intel_crtc,
 				has_reduced_clock ? &reduced_clock : NULL,
 				num_connectors);
 	else if (IS_VALLEYVIEW(dev))
@@ -4904,7 +4902,7 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 			dspcntr |= DISPPLANE_SEL_PIPE_B;
 	}
 
-	intel_set_pipe_timings(intel_crtc, mode, adjusted_mode);
+	intel_set_pipe_timings(intel_crtc);
 
 	/* pipesrc and dspsize control the size that is scaled from,
 	 * which should always be the user's requested size.
@@ -5661,9 +5659,6 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct drm_display_mode *adjusted_mode =
-		&intel_crtc->config.adjusted_mode;
-	struct drm_display_mode *mode = &intel_crtc->config.requested_mode;
 	int pipe = intel_crtc->pipe;
 	int plane = intel_crtc->plane;
 	int num_connectors = 0;
@@ -5758,7 +5753,7 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 		}
 	}
 
-	intel_set_pipe_timings(intel_crtc, mode, adjusted_mode);
+	intel_set_pipe_timings(intel_crtc);
 
 	if (intel_crtc->config.has_pch_encoder) {
 		intel_cpu_transcoder_set_m_n(intel_crtc,
@@ -5866,9 +5861,6 @@ static int haswell_crtc_mode_set(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct drm_display_mode *adjusted_mode =
-		&intel_crtc->config.adjusted_mode;
-	struct drm_display_mode *mode = &intel_crtc->config.requested_mode;
 	int pipe = intel_crtc->pipe;
 	int plane = intel_crtc->plane;
 	int num_connectors = 0;
@@ -5901,7 +5893,7 @@ static int haswell_crtc_mode_set(struct drm_crtc *crtc,
 
 	intel_crtc->lowfreq_avail = false;
 
-	intel_set_pipe_timings(intel_crtc, mode, adjusted_mode);
+	intel_set_pipe_timings(intel_crtc);
 
 	if (intel_crtc->config.has_pch_encoder) {
 		intel_cpu_transcoder_set_m_n(intel_crtc,
