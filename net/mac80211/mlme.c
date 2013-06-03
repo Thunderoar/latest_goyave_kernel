@@ -2881,23 +2881,8 @@ static void ieee80211_rx_bss_info(struct ieee80211_sub_if_data *sdata,
 	int freq;
 	struct ieee80211_bss *bss;
 	struct ieee80211_channel *channel;
-	bool need_ps = false;
 
 	lockdep_assert_held(&sdata->u.mgd.mtx);
-
-	if ((sdata->u.mgd.associated &&
-	     ether_addr_equal(mgmt->bssid, sdata->u.mgd.associated->bssid)) ||
-	    (sdata->u.mgd.assoc_data &&
-	     ether_addr_equal(mgmt->bssid,
-			      sdata->u.mgd.assoc_data->bss->bssid))) {
-		/* not previously set so we may need to recalc */
-		need_ps = sdata->u.mgd.associated && !sdata->u.mgd.dtim_period;
-
-		if (elems->tim && !elems->parse_error) {
-			const struct ieee80211_tim_ie *tim_ie = elems->tim;
-			sdata->u.mgd.dtim_period = tim_ie->dtim_period;
-		}
-	}
 
 	if (elems->ds_params)
 		freq = ieee80211_channel_to_frequency(elems->ds_params[0],
@@ -2918,12 +2903,6 @@ static void ieee80211_rx_bss_info(struct ieee80211_sub_if_data *sdata,
 	if (!sdata->u.mgd.associated ||
 	    !ether_addr_equal(mgmt->bssid, sdata->u.mgd.associated->bssid))
 		return;
-
-	if (need_ps) {
-		mutex_lock(&local->iflist_mtx);
-		ieee80211_recalc_ps(local, -1);
-		mutex_unlock(&local->iflist_mtx);
-	}
 
 	ieee80211_sta_process_chanswitch(sdata, rx_status->mactime,
 					 elems, true);
@@ -3038,6 +3017,10 @@ ieee80211_rx_mgmt_beacon(struct ieee80211_sub_if_data *sdata,
 				       len - baselen, false, &elems);
 
 		ieee80211_rx_bss_info(sdata, mgmt, len, rx_status, &elems);
+		if (elems.tim && !elems.parse_error) {
+			const struct ieee80211_tim_ie *tim_ie = elems.tim;
+			ifmgd->dtim_period = tim_ie->dtim_period;
+		}
 		ifmgd->assoc_data->have_beacon = true;
 		ifmgd->assoc_data->need_beacon = false;
 		if (local->hw.flags & IEEE80211_HW_TIMING_BEACON_ONLY) {
@@ -3240,6 +3223,11 @@ ieee80211_rx_mgmt_beacon(struct ieee80211_sub_if_data *sdata,
 		}
 
 		changed |= BSS_CHANGED_DTIM_PERIOD;
+
+		mutex_lock(&local->iflist_mtx);
+		ieee80211_recalc_ps(local, -1);
+		mutex_unlock(&local->iflist_mtx);
+
 		ieee80211_recalc_ps_vif(sdata);
 	}
 
