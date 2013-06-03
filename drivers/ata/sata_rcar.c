@@ -186,7 +186,7 @@ static void sata_rcar_thaw(struct ata_port *ap)
 	void __iomem *base = priv->base;
 
 	/* ack */
-	iowrite32(~SATA_RCAR_INT_MASK, base + SATAINTSTAT_REG);
+	iowrite32(~(u32)SATA_RCAR_INT_MASK, priv->base + SATAINTSTAT_REG);
 
 	ata_sff_thaw(ap);
 
@@ -679,20 +679,11 @@ static irqreturn_t sata_rcar_interrupt(int irq, void *dev_instance)
 
 	spin_lock_irqsave(&host->lock, flags);
 
-<<<<<<< HEAD
-	sataintstat = ioread32(priv->base + SATAINTSTAT_REG);
-	sataintstat &= SATA_RCAR_INT_MASK;
-	if (!sataintstat)
-		goto done;
-	/* ack */
-	iowrite32(~sataintstat & 0x7ff, priv->base + SATAINTSTAT_REG);
-=======
 	sataintstat = ioread32(base + SATAINTSTAT_REG);
 	if (!sataintstat)
 		goto done;
 	/* ack */
 	iowrite32(sataintstat & ~SATA_RCAR_INT_MASK, base + SATAINTSTAT_REG);
->>>>>>> 1b20f6a... sata_rcar: add 'base' local variable to some functions
 
 	ap = host->ports[0];
 
