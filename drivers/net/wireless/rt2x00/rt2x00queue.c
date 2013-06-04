@@ -1151,7 +1151,7 @@ static int rt2x00queue_alloc_entries(struct data_queue *queue,
 	/*
 	 * Allocate all queue entries.
 	 */
-	entry_size = sizeof(*entries) + qdesc->priv_size;
+	entry_size = sizeof(*entries) + queue->priv_size;
 	entries = kcalloc(queue->limit, entry_size, GFP_KERNEL);
 	if (!entries)
 		return -ENOMEM;
@@ -1167,7 +1167,7 @@ static int rt2x00queue_alloc_entries(struct data_queue *queue,
 		entries[i].entry_idx = i;
 		entries[i].priv_data =
 		    QUEUE_ENTRY_PRIV_OFFSET(entries, i, queue->limit,
-					    sizeof(*entries), qdesc->priv_size);
+					    sizeof(*entries), queue->priv_size);
 	}
 
 #undef QUEUE_ENTRY_PRIV_OFFSET
@@ -1307,6 +1307,7 @@ static void rt2x00queue_init(struct rt2x00_dev *rt2x00dev,
 	queue->data_size = qdesc->data_size;
 	queue->desc_size = qdesc->desc_size;
 	queue->winfo_size = qdesc->winfo_size;
+	queue->priv_size = qdesc->priv_size;
 }
 
 int rt2x00queue_allocate(struct rt2x00_dev *rt2x00dev)
