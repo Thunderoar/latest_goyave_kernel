@@ -764,7 +764,7 @@ repeat:
 			JBUFFER_TRACE(jh, "on shadow: sleep");
 			jbd_unlock_bh_state(bh);
 			wait_on_bit(&bh->b_state, BH_Shadow,
-					sleep_on_shadow_bh, TASK_UNINTERRUPTIBLE);
+				    sleep_on_shadow_bh, TASK_UNINTERRUPTIBLE);
 			goto repeat;
 		}
 

@@ -247,7 +247,7 @@ typedef struct journal_superblock_s
 
 enum jbd_state_bits {
 	BH_JBD			/* Has an attached ext3 journal_head */
-		= BH_PrivateStart,
+	  = BH_PrivateStart,
 	BH_JWrite,		/* Being written to log (@@@ DEBUGGING) */
 	BH_Freed,		/* Has been freed (truncated) */
 	BH_Revoked,		/* Has been revoked from the log */

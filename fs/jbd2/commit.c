@@ -30,7 +30,7 @@
 #include <trace/events/jbd2.h>
 
 /*
- *  IO end handler for temporary buffer_heads handling writes to the journal
+ * IO end handler for temporary buffer_heads handling writes to the journal.
  */
 static void journal_end_buffer_io_sync(struct buffer_head *bh, int uptodate)
 {
@@ -840,7 +840,7 @@ start_journal_io:
 		clear_buffer_jwrite(bh);
 		J_ASSERT_BH(bh, buffer_jbddirty(bh));
 		J_ASSERT_BH(bh, !buffer_shadow(bh));
-		
+
 		/* The metadata is now released for reuse, but we need
                    to remember it against this transaction so that when
                    we finally commit, we can do any checkpointing
