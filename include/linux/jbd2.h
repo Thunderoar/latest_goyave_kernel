@@ -1204,9 +1204,10 @@ extern void	   jbd2_journal_destroy_revoke(journal_t *);
 extern int	   jbd2_journal_revoke (handle_t *, unsigned long long, struct buffer_head *);
 extern int	   jbd2_journal_cancel_revoke(handle_t *, struct journal_head *);
 extern void	   jbd2_journal_write_revoke_records(journal_t *journal,
-												 transaction_t *transaction,
-												 struct list_head *log_bufs,
-												 int write_op);
+						     transaction_t *transaction,
+						     struct list_head *log_bufs,
+						     int write_op);
+
 /* Recovery revoke support */
 extern int	jbd2_journal_set_revoke(journal_t *, unsigned long long, tid_t);
 extern int	jbd2_journal_test_revoke(journal_t *, unsigned long long, tid_t);
@@ -1313,9 +1314,8 @@ static inline int jbd_space_needed(journal_t *journal)
 #define BJ_Metadata	1	/* Normal journaled metadata */
 #define BJ_Forget	2	/* Buffer superseded by this transaction */
 #define BJ_Shadow	3	/* Buffer contents being shadowed to the log */
-#define BJ_LogCtl	4	/* Buffer contains log descriptors */
-#define BJ_Reserved	5	/* Buffer is reserved for access by journal */
-#define BJ_Types	6
+#define BJ_Reserved	4	/* Buffer is reserved for access by journal */
+#define BJ_Types	5
 
 extern int jbd_blocks_per_page(struct inode *inode);
 

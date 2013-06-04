@@ -368,7 +368,8 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 {
 	struct transaction_stats_s stats;
 	transaction_t *commit_transaction;
-	struct journal_head *jh, *descriptor;
+	struct journal_head *jh;
+	struct buffer_head *descriptor;
 	struct buffer_head **wbuf = journal->j_wbuf;
 	int bufs;
 	int flags;
@@ -393,6 +394,7 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	int update_tail;
 	int csum_size = 0;
 	LIST_HEAD(io_bufs);
+	LIST_HEAD(log_bufs);
 
 	if (JBD2_HAS_INCOMPAT_FEATURE(journal, JBD2_FEATURE_INCOMPAT_CSUM_V2))
 		csum_size = sizeof(struct jbd2_journal_block_tail);
@@ -616,8 +618,8 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 			}
 
 			jbd_debug(4, "JBD2: got buffer %llu (%p)\n",
-					(unsigned long long)descriptor->b_blocknr,
-					descriptor->b_data);
+				(unsigned long long)descriptor->b_blocknr,
+				descriptor->b_data);
 			header = (journal_header_t *)descriptor->b_data;
 			header->h_magic     = cpu_to_be32(JBD2_MAGIC_NUMBER);
 			header->h_blocktype = cpu_to_be32(JBD2_DESCRIPTOR_BLOCK);
@@ -625,7 +627,7 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 
 			tagp = &descriptor->b_data[sizeof(journal_header_t)];
 			space_left = descriptor->b_size -
-				sizeof(journal_header_t);
+						sizeof(journal_header_t);
 			first_tag = 1;
 			set_buffer_jwrite(descriptor);
 			set_buffer_dirty(descriptor);
