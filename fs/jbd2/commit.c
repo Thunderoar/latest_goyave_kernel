@@ -367,9 +367,8 @@ static void jbd2_block_tag_csum_set(journal_t *j, journal_block_tag_t *tag,
 void jbd2_journal_commit_transaction(journal_t *journal)
 {
 	struct transaction_stats_s stats;
-	transaction_t *commit_transaction;	
-	struct journal_head *jh;
-	struct buffer_head *descriptor;
+	transaction_t *commit_transaction;
+	struct journal_head *jh, *descriptor;
 	struct buffer_head **wbuf = journal->j_wbuf;
 	int bufs;
 	int flags;
@@ -394,7 +393,6 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	int update_tail;
 	int csum_size = 0;
 	LIST_HEAD(io_bufs);
-	LIST_HEAD(log_bufs);
 
 	if (JBD2_HAS_INCOMPAT_FEATURE(journal, JBD2_FEATURE_INCOMPAT_CSUM_V2))
 		csum_size = sizeof(struct jbd2_journal_block_tail);
@@ -667,10 +665,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 		 * (this will requeue the metadata buffer to BJ_Shadow).
 		 */
 		set_bit(BH_JWrite, &jh2bh(jh)->b_state);
-
 		JBUFFER_TRACE(jh, "ph3: write metadata");
 		flags = jbd2_journal_write_metadata_buffer(commit_transaction,
-						      jh, &wbuf[bufs], blocknr);
+						jh, &wbuf[bufs], blocknr);
 		if (flags < 0) {
 			jbd2_journal_abort(journal, flags);
 			continue;
@@ -816,8 +813,8 @@ start_journal_io:
 
 	while (!list_empty(&io_bufs)) {
 		struct buffer_head *bh = list_entry(io_bufs.prev,
-				struct buffer_head,
-				b_assoc_buffers);
+						    struct buffer_head,
+						    b_assoc_buffers);
 
 		wait_on_buffer(bh);
 		cond_resched();

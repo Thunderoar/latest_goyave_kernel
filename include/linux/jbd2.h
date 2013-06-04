@@ -1066,9 +1066,10 @@ extern void jbd2_buffer_abort_trigger(struct journal_head *jh,
 
 /* Buffer IO */
 extern int jbd2_journal_write_metadata_buffer(transaction_t *transaction,
-		struct journal_head *jh_in,
-		struct buffer_head **bh_out,
-		sector_t blocknr);
+					      struct journal_head *jh_in,
+					      struct buffer_head **bh_out,
+					      sector_t blocknr);
+
 /* Transaction locking */
 extern void		__wait_on_journal (journal_t *);
 
@@ -1312,8 +1313,9 @@ static inline int jbd_space_needed(journal_t *journal)
 #define BJ_Metadata	1	/* Normal journaled metadata */
 #define BJ_Forget	2	/* Buffer superseded by this transaction */
 #define BJ_Shadow	3	/* Buffer contents being shadowed to the log */
-#define BJ_Reserved	4	/* Buffer is reserved for access by journal */
-#define BJ_Types	5
+#define BJ_LogCtl	4	/* Buffer contains log descriptors */
+#define BJ_Reserved	5	/* Buffer is reserved for access by journal */
+#define BJ_Types	6
 
 extern int jbd_blocks_per_page(struct inode *inode);
 

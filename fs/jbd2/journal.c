@@ -310,7 +310,7 @@ static void journal_kill_thread(journal_t *journal)
  *
  * If the source buffer has already been modified by a new transaction
  * since we took the last commit snapshot, we use the frozen copy of
- * that data for IO.  If we end up using the existing buffer_head's data
+ * that data for IO. If we end up using the existing buffer_head's data
  * for the write, then we have to make sure nobody modifies it while the
  * IO is in progress. do_get_write_access() handles this.
  *

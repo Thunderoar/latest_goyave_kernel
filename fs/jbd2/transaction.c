@@ -1600,10 +1600,10 @@ __blist_del_buffer(struct journal_head **list, struct journal_head *jh)
  * Remove a buffer from the appropriate transaction list.
  *
  * Note that this function can *change* the value of
- * bh->b_transaction->t_buffers, t_forget, t_shadow_list,
- * t_log_list or t_reserved_list.  If the caller is holding onto a copy of one
- * of these pointers, it could go bad.  Generally the caller needs to re-read
- * the pointer from the transaction_t.
+ * bh->b_transaction->t_buffers, t_forget, t_shadow_list, t_log_list or
+ * t_reserved_list.  If the caller is holding onto a copy of one of these
+ * pointers, it could go bad.  Generally the caller needs to re-read the
+ * pointer from the transaction_t.
  *
  * Called under j_list_lock.
  */
