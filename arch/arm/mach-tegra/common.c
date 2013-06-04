@@ -30,6 +30,7 @@
 
 #include "board.h"
 #include "common.h"
+#include "cpuidle.h"
 #include "fuse.h"
 #include "iomap.h"
 #include "irq.h"
@@ -119,5 +120,6 @@ void __init tegra_init_early(void)
 void __init tegra_init_late(void)
 {
 	tegra_init_suspend();
+	tegra_cpuidle_init();
 	tegra_powergate_debugfs_init();
 }
