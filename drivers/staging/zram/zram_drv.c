@@ -53,7 +53,7 @@ module_param_named(lzo_algo_type, lzo_algo_type, uint, S_IRUGO);
 
 /* Globals */
 static int zram_major;
-struct zram *zram_devices;
+static struct zram *zram_devices;
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
@@ -703,11 +703,6 @@ static void destroy_device(struct zram *zram)
 
 	if (zram->queue)
 		blk_cleanup_queue(zram->queue);
-}
-
-unsigned int zram_get_num_devices(void)
-{
-	return num_devices;
 }
 
 static int __init zram_init(void)
