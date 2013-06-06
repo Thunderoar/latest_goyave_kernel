@@ -8096,6 +8096,9 @@ intel_pipe_config_compare(struct drm_device *dev,
 		return false; \
 	}
 
+#define PIPE_CONF_QUIRK(quirk)	\
+	((current_config->quirks | pipe_config->quirks) & (quirk))
+
 	PIPE_CONF_CHECK_I(cpu_transcoder);
 
 	PIPE_CONF_CHECK_I(has_pch_encoder);
@@ -8126,14 +8129,16 @@ intel_pipe_config_compare(struct drm_device *dev,
 	PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
 			      DRM_MODE_FLAG_INTERLACE);
 
-	PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
-			      DRM_MODE_FLAG_PHSYNC);
-	PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
-			      DRM_MODE_FLAG_NHSYNC);
-	PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
-			      DRM_MODE_FLAG_PVSYNC);
-	PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
-			      DRM_MODE_FLAG_NVSYNC);
+	if (!PIPE_CONF_QUIRK(PIPE_CONFIG_QUIRK_MODE_SYNC_FLAGS)) {
+		PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
+				      DRM_MODE_FLAG_PHSYNC);
+		PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
+				      DRM_MODE_FLAG_NHSYNC);
+		PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
+				      DRM_MODE_FLAG_PVSYNC);
+		PIPE_CONF_CHECK_FLAGS(adjusted_mode.flags,
+				      DRM_MODE_FLAG_NVSYNC);
+	}
 
 	PIPE_CONF_CHECK_I(requested_mode.hdisplay);
 	PIPE_CONF_CHECK_I(requested_mode.vdisplay);
@@ -8150,6 +8155,7 @@ intel_pipe_config_compare(struct drm_device *dev,
 
 #undef PIPE_CONF_CHECK_I
 #undef PIPE_CONF_CHECK_FLAGS
+#undef PIPE_CONF_QUIRK
 
 	return true;
 }
