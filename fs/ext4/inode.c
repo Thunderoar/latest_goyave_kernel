@@ -2190,7 +2190,7 @@ out_no_pagelock:
  * lock so we have to do some magic.
  *
  * This function can get called via...
- *   - ext4_da_writepages after taking page lock (have journal handle)
+ *   - ext4_writepages after taking page lock (have journal handle)
  *   - journal_submit_inode_data_buffers (no journal handle)
  *   - shrink_page_list via the kswapd/direct reclaim (no journal handle)
  *   - grab_page_cache when doing write_begin (have journal handle)
@@ -2311,21 +2311,116 @@ static int write_cache_pages_da(handle_t *handle,
 				struct mpage_da_data *mpd,
 				pgoff_t *done_index)
 {
-	struct buffer_head	*bh, *head;
-	struct inode		*inode = mapping->host;
-	struct pagevec		pvec;
-	unsigned int		nr_pages;
-	sector_t		logical;
-	pgoff_t			index, end;
-	long			nr_to_write = wbc->nr_to_write;
-	int			i, tag, ret = 0;
+	struct inode *inode = mpd->inode;
+	struct ext4_map_blocks *map = &mpd->map;
+	int err;
+	loff_t disksize;
 
-	memset(mpd, 0, sizeof(struct mpage_da_data));
-	mpd->wbc = wbc;
-	mpd->inode = inode;
-	pagevec_init(&pvec, 0);
-	index = wbc->range_start >> PAGE_CACHE_SHIFT;
-	end = wbc->range_end >> PAGE_CACHE_SHIFT;
+	mpd->io_submit.io_end->offset =
+				((loff_t)map->m_lblk) << inode->i_blkbits;
+	while (map->m_len) {
+		err = mpage_map_one_extent(handle, mpd);
+		if (err < 0) {
+			struct super_block *sb = inode->i_sb;
+
+			/*
+			 * Need to commit transaction to free blocks. Let upper
+			 * layers sort it out.
+			 */
+			if (err == -ENOSPC && ext4_count_free_clusters(sb))
+				return -ENOSPC;
+
+			if (!(EXT4_SB(sb)->s_mount_flags & EXT4_MF_FS_ABORTED)) {
+				ext4_msg(sb, KERN_CRIT,
+					 "Delayed block allocation failed for "
+					 "inode %lu at logical offset %llu with"
+					 " max blocks %u with error %d",
+					 inode->i_ino,
+					 (unsigned long long)map->m_lblk,
+					 (unsigned)map->m_len, err);
+				ext4_msg(sb, KERN_CRIT,
+					 "This should not happen!! Data will "
+					 "be lost\n");
+				if (err == -ENOSPC)
+					ext4_print_free_blocks(inode);
+			}
+			/* invalidate all the pages */
+			mpage_release_unused_pages(mpd, true);
+			return err;
+		}
+		/*
+		 * Update buffer state, submit mapped pages, and get us new
+		 * extent to map
+		 */
+		err = mpage_map_and_submit_buffers(mpd);
+		if (err < 0)
+			return err;
+	}
+
+	/* Update on-disk size after IO is submitted */
+	disksize = ((loff_t)mpd->first_page) << PAGE_CACHE_SHIFT;
+	if (disksize > i_size_read(inode))
+		disksize = i_size_read(inode);
+	if (disksize > EXT4_I(inode)->i_disksize) {
+		int err2;
+
+		ext4_update_i_disksize(inode, disksize);
+		err2 = ext4_mark_inode_dirty(handle, inode);
+		if (err2)
+			ext4_error(inode->i_sb,
+				   "Failed to mark inode %lu dirty",
+				   inode->i_ino);
+		if (!err)
+			err = err2;
+	}
+	return err;
+}
+
+/*
+ * Calculate the total number of credits to reserve for one writepages
+ * iteration. This is called from ext4_writepages(). We map an extent of
+ * upto MAX_WRITEPAGES_EXTENT_LEN blocks and then we go on and finish mapping
+ * the last partial page. So in total we can map MAX_WRITEPAGES_EXTENT_LEN +
+ * bpp - 1 blocks in bpp different extents.
+ */
+static int ext4_da_writepages_trans_blocks(struct inode *inode)
+{
+	int bpp = ext4_journal_blocks_per_page(inode);
+
+	return ext4_meta_trans_blocks(inode,
+				MAX_WRITEPAGES_EXTENT_LEN + bpp - 1, bpp);
+}
+
+/*
+ * mpage_prepare_extent_to_map - find & lock contiguous range of dirty pages
+ * 				 and underlying extent to map
+ *
+ * @mpd - where to look for pages
+ *
+ * Walk dirty pages in the mapping. If they are fully mapped, submit them for
+ * IO immediately. When we find a page which isn't mapped we start accumulating
+ * extent of buffers underlying these pages that needs mapping (formed by
+ * either delayed or unwritten buffers). We also lock the pages containing
+ * these buffers. The extent found is returned in @mpd structure (starting at
+ * mpd->lblk with length mpd->len blocks).
+ *
+ * Note that this function can attach bios to one io_end structure which are
+ * neither logically nor physically contiguous. Although it may seem as an
+ * unnecessary complication, it is actually inevitable in blocksize < pagesize
+ * case as we need to track IO to all buffers underlying a page in one io_end.
+ */
+static int mpage_prepare_extent_to_map(struct mpage_da_data *mpd)
+{
+	struct address_space *mapping = mpd->inode->i_mapping;
+	struct pagevec pvec;
+	unsigned int nr_pages;
+	pgoff_t index = mpd->first_page;
+	pgoff_t end = mpd->last_page;
+	int tag;
+	int i, err = 0;
+	int blkbits = mpd->inode->i_blkbits;
+	ext4_lblk_t lblk;
+	struct buffer_head *head;
 
 	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages)
 		tag = PAGECACHE_TAG_TOWRITE;
@@ -2464,9 +2559,17 @@ out:
 	return ret;
 }
 
+static int __writepage(struct page *page, struct writeback_control *wbc,
+		       void *data)
+{
+	struct address_space *mapping = data;
+	int ret = ext4_writepage(page, wbc);
+	mapping_set_error(mapping, ret);
+	return ret;
+}
 
-static int ext4_da_writepages(struct address_space *mapping,
-			      struct writeback_control *wbc)
+static int ext4_writepages(struct address_space *mapping,
+			   struct writeback_control *wbc)
 {
 	pgoff_t	index;
 	int range_whole = 0;
@@ -2484,7 +2587,7 @@ static int ext4_da_writepages(struct address_space *mapping,
 	pgoff_t end;
 	struct blk_plug plug;
 
-	trace_ext4_da_writepages(inode, wbc);
+	trace_ext4_writepages(inode, wbc);
 
 	/*
 	 * No pages to write? This is mainly a kludge to avoid starting
@@ -2494,13 +2597,23 @@ static int ext4_da_writepages(struct address_space *mapping,
 	if (!mapping->nrpages || !mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
 		return 0;
 
+	if (ext4_should_journal_data(inode)) {
+		struct blk_plug plug;
+		int ret;
+
+		blk_start_plug(&plug);
+		ret = write_cache_pages(mapping, wbc, __writepage, mapping);
+		blk_finish_plug(&plug);
+		return ret;
+	}
+
 	/*
 	 * If the filesystem has aborted, it is read-only, so return
 	 * right away instead of dumping stack traces later on that
 	 * will obscure the real source of the problem.  We test
 	 * EXT4_MF_FS_ABORTED instead of sb->s_flag's MS_RDONLY because
 	 * the latter could be true if the filesystem is mounted
-	 * read-only, and in that case, ext4_da_writepages should
+	 * read-only, and in that case, ext4_writepages should
 	 * *never* be called, so if that ever happens, we would want
 	 * the stack trace.
 	 */
@@ -2649,9 +2762,8 @@ retry:
 		mapping->writeback_index = done_index;
 
 out_writepages:
-	wbc->nr_to_write -= nr_to_writebump;
-	wbc->range_start = range_start;
-	trace_ext4_da_writepages_result(inode, wbc, ret, pages_written);
+	trace_ext4_writepages_result(inode, wbc, ret,
+				     nr_to_write - wbc->nr_to_write);
 	return ret;
 }
 
@@ -2913,7 +3025,7 @@ int ext4_alloc_da_blocks(struct inode *inode)
 	 * laptop_mode, not even desirable).  However, to do otherwise
 	 * would require replicating code paths in:
 	 *
-	 * ext4_da_writepages() ->
+	 * ext4_writepages() ->
 	 *    write_cache_pages() ---> (via passed in callback function)
 	 *        __mpage_da_writepage() -->
 	 *           mpage_add_bh_to_extent()
@@ -3341,6 +3453,7 @@ static const struct address_space_operations ext4_aops = {
 	.readpage		= ext4_readpage,
 	.readpages		= ext4_readpages,
 	.writepage		= ext4_writepage,
+	.writepages		= ext4_writepages,
 	.write_begin		= ext4_write_begin,
 	.write_end		= ext4_write_end,
 	.bmap			= ext4_bmap,
@@ -3356,6 +3469,7 @@ static const struct address_space_operations ext4_journalled_aops = {
 	.readpage		= ext4_readpage,
 	.readpages		= ext4_readpages,
 	.writepage		= ext4_writepage,
+	.writepages		= ext4_writepages,
 	.write_begin		= ext4_write_begin,
 	.write_end		= ext4_journalled_write_end,
 	.set_page_dirty		= ext4_journalled_set_page_dirty,
@@ -3371,7 +3485,7 @@ static const struct address_space_operations ext4_da_aops = {
 	.readpage		= ext4_readpage,
 	.readpages		= ext4_readpages,
 	.writepage		= ext4_writepage,
-	.writepages		= ext4_da_writepages,
+	.writepages		= ext4_writepages,
 	.write_begin		= ext4_da_write_begin,
 	.write_end		= ext4_da_write_end,
 	.bmap			= ext4_bmap,
