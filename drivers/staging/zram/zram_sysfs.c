@@ -189,26 +189,8 @@ static ssize_t mem_used_total_show(struct device *dev,
 	struct zram_meta *meta = zram->meta;
 
 	down_read(&zram->init_lock);
-	if (zram->init_done)
-		val = zs_get_total_pages(meta->mem_pool);
+		val = zs_get_total_size_bytes(meta->mem_pool);
 	up_read(&zram->init_lock);
-
-	return sprintf(buf, "%llu\n", val << PAGE_SHIFT);
-}
-
-static uint32_t total_mem_usage_percent = 30;
-module_param_named(total_mem_usage_percent, total_mem_usage_percent, uint, S_IRUGO | S_IWUSR);
-
-static ssize_t mem_free_percent(void)
-{
-	unsigned long mem_used_pages = 0;
-	u64 val = 0;
-	int i = 0;
-	struct zram *zram = NULL;
-	struct zram_meta *meta = NULL;
-	unsigned long total_zram_pages = totalram_pages*total_mem_usage_percent/100;
-
-	for (i = 0; i < zram_get_num_devices(); i++) {
 
 		zram = &zram_devices[i];
 		if(!zram || !zram->disk)
