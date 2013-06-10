@@ -20,6 +20,9 @@
 #include "cfg80211.h"
 #include "main.h"
 
+static char *reg_alpha2;
+module_param(reg_alpha2, charp, 0);
+
 static const struct ieee80211_iface_limit mwifiex_ap_sta_limits[] = {
 	{
 		.max = 2, .types = BIT(NL80211_IFTYPE_STATION),
@@ -2476,6 +2479,27 @@ static struct cfg80211_ops mwifiex_cfg80211_ops = {
 #endif
 };
 
+#ifdef CONFIG_PM
+static const struct wiphy_wowlan_support mwifiex_wowlan_support = {
+	.flags = WIPHY_WOWLAN_MAGIC_PKT,
+	.n_patterns = MWIFIEX_MAX_FILTERS,
+	.pattern_min_len = 1,
+	.pattern_max_len = MWIFIEX_MAX_PATTERN_LEN,
+	.max_pkt_offset = MWIFIEX_MAX_OFFSET_LEN,
+};
+#endif
+
+static bool mwifiex_is_valid_alpha2(const char *alpha2)
+{
+	if (!alpha2 || strlen(alpha2) != 2)
+		return false;
+
+	if (isalpha(alpha2[0]) && isalpha(alpha2[1]))
+		return true;
+
+	return false;
+}
+
 /*
  * This function registers the device with CFG802.11 subsystem.
  *
@@ -2528,6 +2552,7 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 			WIPHY_FLAG_AP_PROBE_RESP_OFFLOAD |
 			WIPHY_FLAG_AP_UAPSD |
 			WIPHY_FLAG_CUSTOM_REGULATORY |
+			WIPHY_FLAG_STRICT_REGULATORY |
 			WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
 
 	wiphy_apply_custom_regulatory(wiphy, &mwifiex_world_regdom_custom);
@@ -2569,10 +2594,16 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 		wiphy_free(wiphy);
 		return ret;
 	}
-	country_code = mwifiex_11d_code_2_region(priv->adapter->region_code);
-	if (country_code)
-		dev_info(adapter->dev,
-			 "ignoring F/W country code %2.2s\n", country_code);
+
+	if (reg_alpha2 && mwifiex_is_valid_alpha2(reg_alpha2)) {
+		wiphy_info(wiphy, "driver hint alpha2: %2.2s\n", reg_alpha2);
+		regulatory_hint(wiphy, reg_alpha2);
+	} else {
+		country_code = mwifiex_11d_code_2_region(adapter->region_code);
+		if (country_code)
+			wiphy_info(wiphy, "ignoring F/W country code %2.2s\n",
+				   country_code);
+	}
 
 	adapter->wiphy = wiphy;
 	return ret;
