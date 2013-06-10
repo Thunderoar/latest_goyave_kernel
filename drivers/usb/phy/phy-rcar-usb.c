@@ -195,15 +195,17 @@ static int rcar_usb_phy_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	reg0 = devm_ioremap_resource(dev, res0);
-	if (IS_ERR(reg0))
-		return PTR_ERR(reg0);
-
-	res1 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res1) {
-		reg1 = devm_ioremap_resource(dev, res1);
-		if (IS_ERR(reg1))
-			return PTR_ERR(reg1);
+	/*
+	 * CAUTION
+	 *
+	 * Because this phy address is also mapped under OHCI/EHCI address area,
+	 * this driver can't use devm_ioremap_resource(dev, res) here
+	 */
+	reg0 = devm_ioremap_nocache(dev, res0->start, resource_size(res0));
+	reg1 = devm_ioremap_nocache(dev, res1->start, resource_size(res1));
+	if (!reg0 || !reg1) {
+		dev_err(dev, "ioremap error\n");
+		return -ENOMEM;
 	}
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
