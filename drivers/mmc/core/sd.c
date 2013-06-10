@@ -1128,6 +1128,8 @@ static int mmc_sd_suspend(struct mmc_host *host)
 	if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
 	host->card->state &= ~MMC_STATE_HIGHSPEED;
+	if (!err)
+		mmc_power_off(host);
 	mmc_release_host(host);
 
 	return err;
@@ -1165,6 +1167,8 @@ static int mmc_sd_resume(struct mmc_host *host)
 		break;
 	}
 #else
+	mmc_power_up(host);
+	mmc_select_voltage(host, host->ocr);
 	err = mmc_sd_init_card(host, host->ocr, host->card);
 #endif
 	mmc_release_host(host);
