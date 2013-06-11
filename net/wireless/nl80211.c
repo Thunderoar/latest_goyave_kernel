@@ -1588,8 +1588,7 @@ static int nl80211_dump_wiphy(struct sk_buff *skb, struct netlink_callback *cb)
 
 			netdev = dev_get_by_index(sock_net(skb->sk), ifidx);
 			if (!netdev) {
-				mutex_unlock(&cfg80211_mutex);
-				kfree(tb);
+				rtnl_unlock();
 				return -ENODEV;
 			}
 			if (netdev->ieee80211_ptr) {
@@ -1636,7 +1635,7 @@ static int nl80211_dump_wiphy(struct sk_buff *skb, struct netlink_callback *cb)
 				    !skb->len &&
 				    cb->min_dump_alloc < 4096) {
 					cb->min_dump_alloc = 4096;
-					mutex_unlock(&cfg80211_mutex);
+					rtnl_unlock();
 					return 1;
 				}
 				idx--;
