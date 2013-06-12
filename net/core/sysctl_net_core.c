@@ -28,12 +28,12 @@ static int min_sndbuf = SOCK_MIN_SNDBUF;
 static int min_rcvbuf = SOCK_MIN_RCVBUF;
 
 #ifdef CONFIG_RPS
-static int rps_sock_flow_sysctl(ctl_table *table, int write,
+static int rps_sock_flow_sysctl(struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	unsigned int orig_size, size;
 	int ret, i;
-	ctl_table tmp = {
+	struct ctl_table tmp = {
 		.data = &size,
 		.maxlen = sizeof(size),
 		.mode = table->mode
@@ -95,7 +95,7 @@ static int rps_sock_flow_sysctl(ctl_table *table, int write,
 #ifdef CONFIG_NET_FLOW_LIMIT
 static DEFINE_MUTEX(flow_limit_update_mutex);
 
-static int flow_limit_cpu_sysctl(ctl_table *table, int write,
+static int flow_limit_cpu_sysctl(struct ctl_table *table, int write,
 				 void __user *buffer, size_t *lenp,
 				 loff_t *ppos)
 {
@@ -160,7 +160,7 @@ done:
 	return ret;
 }
 
-static int flow_limit_table_len_sysctl(ctl_table *table, int write,
+static int flow_limit_table_len_sysctl(struct ctl_table *table, int write,
 				       void __user *buffer, size_t *lenp,
 				       loff_t *ppos)
 {
