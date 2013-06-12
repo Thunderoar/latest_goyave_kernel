@@ -161,3 +161,4 @@ obj-$(CONFIG_SENSORS)           += sensor/
 
 obj-$(CONFIG_SPRD_IQ)           += iq/
 obj-$(CONFIG_ANDROID)		+= android/
+obj-$(CONFIG_FMC)		+= fmc/

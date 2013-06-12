@@ -180,4 +180,6 @@ source "drivers/cpuhotplug/Kconfig"
 
 source "drivers/android/Kconfig"
 
+source "drivers/fmc/Kconfig"
+
 endmenu
