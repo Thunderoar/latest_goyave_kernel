@@ -52,7 +52,7 @@ bad_area:
 	return 1;
 }
 
-void do_page_fault(struct pt_regs *regs, int write, unsigned long address,
+void do_page_fault(struct pt_regs *regs, unsigned long address,
 		   unsigned long cause_code)
 {
 	struct vm_area_struct *vma = NULL;
@@ -60,7 +60,9 @@ void do_page_fault(struct pt_regs *regs, int write, unsigned long address,
 	struct mm_struct *mm = tsk->mm;
 	siginfo_t info;
 	int fault, ret;
-	unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
+	int write = cause_code & (1 << ECR_C_BIT_DTLB_ST_MISS);  /* ST/EX */
+	unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE |
+				(write ? FAULT_FLAG_WRITE : 0);
 
 	/*
 	 * We fault-in kernel-space virtual memory on-demand. The
