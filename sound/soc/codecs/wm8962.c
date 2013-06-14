@@ -3386,8 +3386,7 @@ static int wm8962_probe(struct snd_soc_codec *codec)
 {
 	int ret;
 	struct wm8962_priv *wm8962 = snd_soc_codec_get_drvdata(codec);
-	struct wm8962_pdata *pdata = &wm8962->pdata;
-	u16 *reg_cache = codec->reg_cache;
+	struct wm8962_pdata *pdata = dev_get_platdata(codec->dev);
 	int i, trigger, irq_pol;
 	bool dmicclk, dmicdat;
 
@@ -3434,13 +3433,20 @@ static int wm8962_probe(struct snd_soc_codec *codec)
 			    WM8962_OSC_ENA | WM8962_PLL2_ENA | WM8962_PLL3_ENA,
 			    0);
 
-	/* Apply static configuration for GPIOs */
-	for (i = 0; i < ARRAY_SIZE(pdata->gpio_init); i++)
-		if (pdata->gpio_init[i]) {
-			wm8962_set_gpio_mode(codec, i + 1);
-			snd_soc_write(codec, 0x200 + i,
-					pdata->gpio_init[i] & 0xffff);
-		}
+	if (pdata) {
+		/* Apply static configuration for GPIOs */
+		for (i = 0; i < ARRAY_SIZE(pdata->gpio_init); i++)
+			if (pdata->gpio_init[i]) {
+				wm8962_set_gpio_mode(codec, i + 1);
+				snd_soc_write(codec, 0x200 + i,
+					      pdata->gpio_init[i] & 0xffff);
+			}
+
+		/* Put the speakers into mono mode? */
+		if (pdata->spk_mono)
+			snd_soc_update_bits(codec, WM8962_CLASS_D_CONTROL_2,
+				WM8962_SPK_MONO_MASK, WM8962_SPK_MONO);
+
 
 	/* Put the speakers into mono mode? */
 	if (pdata->spk_mono)
