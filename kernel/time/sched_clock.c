@@ -55,6 +55,9 @@ static unsigned long long notrace sched_clock_32(void)
 	u32 epoch_cyc;
 	u32 cyc;
 
+	if (cd.suspended)
+		return cd.epoch_ns;
+
 	/*
 	 * Load the epoch_cyc and epoch_ns atomically.  We do this by
 	 * ensuring that we always write epoch_cyc, epoch_ns and
@@ -167,9 +170,6 @@ unsigned long long __read_mostly (*sched_clock_func)(void) = sched_clock_32;
 
 unsigned long long notrace sched_clock(void)
 {
-	if (cd.suspended)
-		return cd.epoch_ns;
-
 	return sched_clock_func();
 }
 
