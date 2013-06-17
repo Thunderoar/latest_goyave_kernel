@@ -1400,7 +1400,7 @@ static int backlog_rcv(struct sock *sk, struct sk_buff *buf)
  */
 static u32 dispatch(struct tipc_port *tport, struct sk_buff *buf)
 {
-	struct sock *sk = (struct sock *)tport->usr_handle;
+	struct sock *sk = tport->sk;
 	u32 res;
 
 	/*
@@ -1431,7 +1431,7 @@ static u32 dispatch(struct tipc_port *tport, struct sk_buff *buf)
  */
 static void wakeupdispatch(struct tipc_port *tport)
 {
-	struct sock *sk = (struct sock *)tport->usr_handle;
+	struct sock *sk = tport->sk;
 
 	sk->sk_write_space(sk);
 }
