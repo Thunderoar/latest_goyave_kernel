@@ -1259,6 +1259,17 @@ static int vxlan_init(struct net_device *dev)
 	return 0;
 }
 
+static void vxlan_uninit(struct net_device *dev)
+{
+	struct vxlan_dev *vxlan = netdev_priv(dev);
+	struct vxlan_net *vn = net_generic(dev_net(dev), vxlan_net_id);
+	struct vxlan_sock *vs = vxlan->vn_sock;
+
+	if (vs)
+		vxlan_sock_release(vn, vs);
+	free_percpu(dev->tstats);
+}
+
 /* Start ageing timer and join group when device is brought up */
 static int vxlan_open(struct net_device *dev)
 {
@@ -1324,6 +1335,7 @@ static void vxlan_set_multicast_list(struct net_device *dev)
 
 static const struct net_device_ops vxlan_netdev_ops = {
 	.ndo_init		= vxlan_init,
+	.ndo_uninit		= vxlan_uninit,
 	.ndo_open		= vxlan_open,
 	.ndo_stop		= vxlan_stop,
 	.ndo_start_xmit		= vxlan_xmit,
@@ -1342,12 +1354,6 @@ static struct device_type vxlan_type = {
 	.name = "vxlan",
 };
 
-static void vxlan_free(struct net_device *dev)
-{
-	free_percpu(dev->tstats);
-	free_netdev(dev);
-}
-
 /* Initialize the device structure. */
 static void vxlan_setup(struct net_device *dev)
 {
@@ -1360,7 +1366,7 @@ static void vxlan_setup(struct net_device *dev)
 	dev->needed_headroom = ETH_HLEN + VXLAN_HEADROOM;
 
 	dev->netdev_ops = &vxlan_netdev_ops;
-	dev->destructor = vxlan_free;
+	dev->destructor = free_netdev;
 	SET_NETDEV_DEVTYPE(dev, &vxlan_type);
 
 	dev->tx_queue_len = 0;
@@ -1663,14 +1669,10 @@ static int vxlan_newlink(struct net *net, struct net_device *dev,
 static void vxlan_dellink(struct net_device *dev, struct list_head *head)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
-	struct vxlan_net *vn = net_generic(dev_net(dev), vxlan_net_id);
-	struct vxlan_sock *vs = vxlan->vn_sock;
 
 	hlist_del_rcu(&vxlan->hlist);
 	list_del(&vxlan->next);
 	unregister_netdevice_queue(dev, head);
-	if (vs)
-		vxlan_sock_release(vn, vs);
 }
 
 static size_t vxlan_get_size(const struct net_device *dev)
