@@ -187,8 +187,7 @@ endmenu
 
 config X86_PKG_TEMP_THERMAL
 	tristate "X86 package temperature thermal driver"
-	depends on THERMAL
-	depends on X86
+	depends on X86_THERMAL_VECTOR
 	select THERMAL_GOV_USER_SPACE
 	default m
 	help
