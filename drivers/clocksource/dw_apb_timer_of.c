@@ -78,9 +78,6 @@ static void add_clockevent(struct device_node *event_timer)
 	dw_apb_clockevent_register(ced);
 }
 
-static void __iomem *sched_io_base;
-static u32 sched_rate;
-
 static void add_clocksource(struct device_node *source_timer)
 {
 	void __iomem *iobase;
@@ -95,29 +92,43 @@ static void add_clocksource(struct device_node *source_timer)
 
 	dw_apb_clocksource_start(cs);
 	dw_apb_clocksource_register(cs);
-
-	/*
-	 * Fallback to use the clocksource as sched_clock if no separate
-	 * timer is found. sched_io_base then points to the current_value
-	 * register of the clocksource timer.
-	 */
-	sched_io_base = iobase + 0x04;
-	sched_rate = rate;
 }
+
+static void __iomem *sched_io_base;
 
 static u32 read_sched_clock(void)
 {
 	return __raw_readl(sched_io_base);
 }
 
-static const struct of_device_id osctimer_ids[] __initconst = {
-	{ .compatible = "picochip,pc3x2-timer" },
-	{ .compatible = "snps,dw-apb-timer-osc" },
+static const struct of_device_id sptimer_ids[] __initconst = {
+	{ .compatible = "picochip,pc3x2-rtc" },
 	{ .compatible = "snps,dw-apb-timer-sp" },
-	{  /* Sentinel */ },
+	{ /* Sentinel */ },
 };
 
 static void init_sched_clock(void)
+{
+	struct device_node *sched_timer;
+	u32 rate;
+
+	sched_timer = of_find_matching_node(NULL, sptimer_ids);
+	if (!sched_timer)
+		panic("No RTC for sched clock to use");
+
+	timer_get_base_and_rate(sched_timer, &sched_io_base, &rate);
+	of_node_put(sched_timer);
+
+	setup_sched_clock(read_sched_clock, 32, rate);
+}
+
+static const struct of_device_id osctimer_ids[] __initconst = {
+	{ .compatible = "picochip,pc3x2-timer" },
+	{ .compatible = "snps,dw-apb-timer-osc" },
+	{},
+};
+
+void __init dw_apb_timer_init(void)
 {
 	struct device_node *sched_timer;
 
@@ -131,26 +142,9 @@ static void init_sched_clock(void)
 	setup_sched_clock(read_sched_clock, 32, sched_rate);
 }
 
-static int num_called;
-static void __init dw_apb_timer_init(struct device_node *timer)
-{
-	switch (num_called) {
-	case 0:
-		pr_debug("%s: found clockevent timer\n", __func__);
-		add_clockevent(timer);
-		of_node_put(timer);
-		break;
-	case 1:
-		pr_debug("%s: found clocksource timer\n", __func__);
-		add_clocksource(timer);
-		of_node_put(timer);
-		init_sched_clock();
-		break;
-	default:
-		break;
-	}
+	of_node_put(source_timer);
 
-	num_called++;
+	init_sched_clock();
 }
 CLOCKSOURCE_OF_DECLARE(pc3x2_timer, "picochip,pc3x2-timer", dw_apb_timer_init);
 CLOCKSOURCE_OF_DECLARE(apb_timer, "snps,dw-apb-timer-osc", dw_apb_timer_init);
