@@ -419,6 +419,15 @@ void cfg80211_sme_failed_assoc(struct wireless_dev *wdev)
 	schedule_work(&rdev->conn_work);
 }
 
+static DECLARE_WORK(cfg80211_disconnect_work, disconnect_work);
+
+
+/*
+ * API calls for drivers implementing connect/disconnect and
+ * SME event handling
+ */
+
+/* This method must consume bss one way or another */
 void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 			       const u8 *req_ie, size_t req_ie_len,
 			       const u8 *resp_ie, size_t resp_ie_len,
@@ -434,8 +443,10 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 	ASSERT_WDEV_LOCK(wdev);
 
 	if (WARN_ON(wdev->iftype != NL80211_IFTYPE_STATION &&
-		    wdev->iftype != NL80211_IFTYPE_P2P_CLIENT))
+		    wdev->iftype != NL80211_IFTYPE_P2P_CLIENT)) {
+		cfg80211_put_bss(wdev->wiphy, bss);
 		return;
+	}
 
 	if (wdev->sme_state != CFG80211_SME_CONNECTING)
 		return;
