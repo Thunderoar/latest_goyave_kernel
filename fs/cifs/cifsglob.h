@@ -219,6 +219,7 @@ struct smb_version_operations {
 	void (*dump_detail)(void *);
 	void (*clear_stats)(struct cifs_tcon *);
 	void (*print_stats)(struct seq_file *m, struct cifs_tcon *);
+	void (*dump_share_caps)(struct seq_file *, struct cifs_tcon *);
 	/* verify the message */
 	int (*check_message)(char *, unsigned int);
 	bool (*is_oplock_break)(char *, struct TCP_Server_Info *);
@@ -819,7 +820,8 @@ struct cifs_tcon {
 	bool need_reconnect:1; /* connection reset, tid now invalid */
 #ifdef CONFIG_CIFS_SMB2
 	bool print:1;		/* set if connection to printer share */
-	__u32 capabilities;
+	bool bad_network_name:1; /* set if ret status STATUS_BAD_NETWORK_NAME */
+	__le32 capabilities;
 	__u32 share_flags;
 	__u32 maximal_access;
 	__u32 vol_serial_number;
