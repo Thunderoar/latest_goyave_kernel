@@ -573,6 +573,7 @@ static int cmp_bss(struct cfg80211_bss *a,
 	}
 }
 
+/* Returned bss is reference counted and must be cleaned up appropriately. */
 struct cfg80211_bss *cfg80211_get_bss(struct wiphy *wiphy,
 				      struct ieee80211_channel *channel,
 				      const u8 *bssid,
@@ -739,6 +740,7 @@ static bool cfg80211_combine_bsses(struct cfg80211_registered_device *dev,
 	return true;
 }
 
+/* Returned bss is reference counted and must be cleaned up appropriately. */
 static struct cfg80211_internal_bss *
 cfg80211_bss_update(struct cfg80211_registered_device *dev,
 		    struct cfg80211_internal_bss *tmp)
@@ -934,6 +936,7 @@ cfg80211_get_bss_channel(struct wiphy *wiphy, const u8 *ie, size_t ielen,
 	return channel;
 }
 
+/* Returned bss is reference counted and must be cleaned up appropriately. */
 struct cfg80211_bss*
 cfg80211_inform_bss(struct wiphy *wiphy,
 		    struct ieee80211_channel *channel,
@@ -991,6 +994,7 @@ cfg80211_inform_bss(struct wiphy *wiphy,
 }
 EXPORT_SYMBOL(cfg80211_inform_bss);
 
+/* Returned bss is reference counted and must be cleaned up appropriately. */
 struct cfg80211_bss *
 cfg80211_inform_bss_frame(struct wiphy *wiphy,
 			  struct ieee80211_channel *channel,
