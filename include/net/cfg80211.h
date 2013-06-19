@@ -1458,7 +1458,8 @@ const u8 *ieee80211_bss_get_ie(struct cfg80211_bss *bss, u8 ie);
  * This structure provides information needed to complete IEEE 802.11
  * authentication.
  *
- * @bss: The BSS to authenticate with.
+ * @bss: The BSS to authenticate with, the callee must obtain a reference
+ *	to it if it needs to keep it.
  * @auth_type: Authentication type (algorithm)
  * @ie: Extra IEs to add to Authentication frame or %NULL
  * @ie_len: Length of ie buffer in octets
@@ -1496,11 +1497,10 @@ enum cfg80211_assoc_req_flags {
  *
  * This structure provides information needed to complete IEEE 802.11
  * (re)association.
- * @bss: The BSS to associate with. If the call is successful the driver
- *	is given a reference that it must release, normally via a call to
- *	cfg80211_send_rx_assoc(), or, if association timed out, with a
- *	call to cfg80211_put_bss() (in addition to calling
- *	cfg80211_send_assoc_timeout())
+ * @bss: The BSS to associate with. If the call is successful the driver is
+ *	given a reference that it must give back to cfg80211_send_rx_assoc()
+ *	or to cfg80211_assoc_timeout(). To ensure proper refcounting, new
+ *	association requests while already associating must be rejected.
  * @ie: Extra IEs to add to (Re)Association Request frame or %NULL
  * @ie_len: Length of ie buffer in octets
  * @use_mfp: Use management frame protection (IEEE 802.11w) in this association
@@ -3510,11 +3510,11 @@ void cfg80211_send_rx_assoc(struct net_device *dev, struct cfg80211_bss *bss,
 /**
  * cfg80211_send_assoc_timeout - notification of timed out association
  * @dev: network device
- * @addr: The MAC address of the device with which the association timed out
+ * @bss: The BSS entry with which association timed out.
  *
  * This function may sleep.
  */
-void cfg80211_send_assoc_timeout(struct net_device *dev, const u8 *addr);
+void cfg80211_assoc_timeout(struct net_device *dev, struct cfg80211_bss *bss);
 
 /**
  * cfg80211_send_deauth - notification of processed deauthentication

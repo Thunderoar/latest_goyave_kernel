@@ -2867,8 +2867,13 @@ ieee80211_rx_mgmt_assoc_resp(struct ieee80211_sub_if_data *sdata,
 		if (!ieee80211_assoc_success(sdata, *bss, mgmt, len)) {
 			/* oops -- internal error -- send timeout for now */
 			ieee80211_destroy_assoc_data(sdata, false);
+<<<<<<< HEAD
 			cfg80211_put_bss(sdata->local->hw.wiphy, *bss);
 			return RX_MGMT_CFG80211_ASSOC_TIMEOUT;
+=======
+			cfg80211_assoc_timeout(sdata->dev, bss);
+			return;
+>>>>>>> 959867f... cfg80211: require passing BSS struct back to cfg80211_assoc_timeout
 		}
 		sdata_info(sdata, "associated\n");
 
@@ -3632,15 +3637,10 @@ void ieee80211_sta_work(struct ieee80211_sub_if_data *sdata)
 	    time_after(jiffies, ifmgd->assoc_data->timeout)) {
 		if ((ifmgd->assoc_data->need_beacon && !ifmgd->have_beacon) ||
 		    ieee80211_do_assoc(sdata)) {
-			u8 bssid[ETH_ALEN];
-
-			memcpy(bssid, ifmgd->assoc_data->bss->bssid, ETH_ALEN);
+			struct cfg80211_bss *bss = ifmgd->assoc_data->bss;
 
 			ieee80211_destroy_assoc_data(sdata, false);
-
-			mutex_unlock(&ifmgd->mtx);
-			cfg80211_send_assoc_timeout(sdata->dev, bssid);
-			mutex_lock(&ifmgd->mtx);
+			cfg80211_assoc_timeout(sdata->dev, bss);
 		}
 	} else if (ifmgd->assoc_data && ifmgd->assoc_data->timeout_started)
 		run_again(ifmgd, ifmgd->assoc_data->timeout);
@@ -4613,9 +4613,17 @@ void ieee80211_mgd_stop(struct ieee80211_sub_if_data *sdata)
 	cancel_work_sync(&ifmgd->csa_connection_drop_work);
 	cancel_work_sync(&ifmgd->chswitch_work);
 
+<<<<<<< HEAD
 	mutex_lock(&ifmgd->mtx);
 	if (ifmgd->assoc_data)
+=======
+	sdata_lock(sdata);
+	if (ifmgd->assoc_data) {
+		struct cfg80211_bss *bss = ifmgd->assoc_data->bss;
+>>>>>>> 959867f... cfg80211: require passing BSS struct back to cfg80211_assoc_timeout
 		ieee80211_destroy_assoc_data(sdata, false);
+		cfg80211_assoc_timeout(sdata->dev, bss);
+	}
 	if (ifmgd->auth_data)
 		ieee80211_destroy_auth_data(sdata, false);
 	del_timer_sync(&ifmgd->timer);
