@@ -259,8 +259,8 @@ int kvm_s390_handle_lpsw(struct kvm_vcpu *vcpu)
 	u64 addr;
 
 	if (gpsw->mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu,
-						   PGM_PRIVILEGED_OPERATION);
+		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
+
 	addr = kvm_s390_get_base_disp_s(vcpu);
 	if (addr & 7)
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
@@ -447,7 +447,7 @@ int kvm_s390_handle_b2(struct kvm_vcpu *vcpu)
 	if (handler) {
 		if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
 			return kvm_s390_inject_program_int(vcpu,
-						   PGM_PRIVILEGED_OPERATION);
+							   PGM_PRIVILEGED_OP);
 		else
 			return handler(vcpu);
 	}
@@ -494,7 +494,7 @@ static int handle_pfmf(struct kvm_vcpu *vcpu)
 		return kvm_s390_inject_program_int(vcpu, PGM_OPERATION);
 
 	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OPERATION);
+		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
 
 	if (vcpu->run->s.regs.gprs[reg1] & PFMF_RESERVED)
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
@@ -565,7 +565,7 @@ int kvm_s390_handle_b9(struct kvm_vcpu *vcpu)
 		if ((handler != handle_epsw) &&
 		    (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE))
 			return kvm_s390_inject_program_int(vcpu,
-						   PGM_PRIVILEGED_OPERATION);
+							   PGM_PRIVILEGED_OP);
 		else
 			return handler(vcpu);
 	}
@@ -582,8 +582,7 @@ int kvm_s390_handle_priv_eb(struct kvm_vcpu *vcpu)
 
 	/* All eb instructions that end up here are privileged. */
 	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu,
-						   PGM_PRIVILEGED_OPERATION);
+		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
 	handler = eb_handlers[vcpu->arch.sie_block->ipb & 0xff];
 	if (handler)
 		return handler(vcpu);
@@ -643,8 +642,7 @@ static int handle_sckpf(struct kvm_vcpu *vcpu)
 	u32 value;
 
 	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu,
-						   PGM_PRIVILEGED_OPERATION);
+		return kvm_s390_inject_program_int(vcpu, PGM_PRIVILEGED_OP);
 
 	if (vcpu->run->s.regs.gprs[0] & 0x00000000ffff0000)
 		return kvm_s390_inject_program_int(vcpu,
