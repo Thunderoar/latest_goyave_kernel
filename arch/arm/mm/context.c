@@ -156,7 +156,7 @@ static void flush_context(unsigned int cpu)
 			 */
 			if (asid == 0)
 				asid = per_cpu(reserved_asids, i);
-			__set_bit(asid & ~ASID_MASK, asid_map);
+			__set_bit(ASID_TO_IDX(asid), asid_map);
 		}
 		per_cpu(reserved_asids, i) = asid;
 	}
