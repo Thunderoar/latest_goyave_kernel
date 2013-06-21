@@ -440,6 +440,7 @@ guest_trap:
 
 4:	pop	{r0, r1}		@ Failed translation, return to guest
 	mcrr	p15, 0, r0, r1, c7	@ PAR
+	clrex
 	pop	{r0, r1, r2}
 	eret
 
