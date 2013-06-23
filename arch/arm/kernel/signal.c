@@ -402,7 +402,9 @@ setup_return(struct pt_regs *regs, struct ksignal *ksig,
 		    __put_user(sigreturn_codes[idx+1], rc+1))
 			return 1;
 
-		if ((cpsr & MODE32_BIT) && !IS_ENABLED(CONFIG_ARM_MPU)) {
+#ifdef CONFIG_MMU
+		if (cpsr & MODE32_BIT) {
+			struct mm_struct *mm = current->mm;
 			/*
 			 * 32-bit code can use the new high-page
 			 * signal return code support except when the MPU has

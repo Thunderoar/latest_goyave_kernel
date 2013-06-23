@@ -267,6 +267,13 @@ static int notify_on_release(const struct cgroup *cgrp)
 	return test_bit(CGRP_NOTIFY_ON_RELEASE, &cgrp->flags);
 }
 
+/*
+ * for_each_subsys() allows you to iterate on each subsystem attached to
+ * an active hierarchy
+ */
+#define for_each_subsys(_root, _ss) \
+list_for_each_entry(_ss, &_root->subsys_list, sibling)
+
 /* iterate each subsystem attached to a hierarchy */
 #define for_each_root_subsys(root, ss)					\
 	list_for_each_entry((ss), &(root)->subsys_list, sibling)
