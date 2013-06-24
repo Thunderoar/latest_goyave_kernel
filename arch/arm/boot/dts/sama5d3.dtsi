@@ -82,16 +82,15 @@
 				#size-cells = <0>;
 				compatible = "atmel,at91rm9200-spi";
 				reg = <0xf0004000 0x100>;
-<<<<<<< HEAD
-				interrupts = <24 4 3>;
-=======
 				interrupts = <24 IRQ_TYPE_LEVEL_HIGH 3>;
 				cs-gpios = <&pioD 13 0
 					    &pioD 14 0 /* conflicts with SCK0 and CANRX0 */
 					    &pioD 15 0 /* conflicts with CTS0 and CANTX0 */
 					    &pioD 16 0 /* conflicts with RTS0 and PWMFI3 */
 					   >;
->>>>>>> 5e8b3bc... ARM: at91: dt: switch to standard IRQ flag defines
+				dmas = <&dma0 2 AT91_DMA_CFG_PER_ID(1)>,
+				       <&dma0 2 AT91_DMA_CFG_PER_ID(2)>;
+				dma-names = "tx", "rx";
 				pinctrl-names = "default";
 				pinctrl-0 = <&pinctrl_spi0>;
 				status = "disabled";
@@ -214,16 +213,15 @@
 				#size-cells = <0>;
 				compatible = "atmel,at91rm9200-spi";
 				reg = <0xf8008000 0x100>;
-<<<<<<< HEAD
-				interrupts = <25 4 3>;
-=======
 				interrupts = <25 IRQ_TYPE_LEVEL_HIGH 3>;
 				cs-gpios = <&pioC 25 0
 					    &pioC 26 0 /* conflitcs with TWD1 and ISI_D11 */
 					    &pioC 27 0 /* conflitcs with TWCK1 and ISI_D10 */
 					    &pioC 28 0 /* conflitcs with PWMFI0 and ISI_D9 */
 					   >;
->>>>>>> 5e8b3bc... ARM: at91: dt: switch to standard IRQ flag defines
+				dmas = <&dma1 2 AT91_DMA_CFG_PER_ID(15)>,
+				       <&dma1 2 AT91_DMA_CFG_PER_ID(16)>;
+				dma-names = "tx", "rx";
 				pinctrl-names = "default";
 				pinctrl-0 = <&pinctrl_spi1>;
 				status = "disabled";
