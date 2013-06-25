@@ -2624,6 +2624,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 		in_ctx = virt_dev->in_ctx;
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, in_ctx);
 	if (!ctrl_ctx) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
 		xhci_warn(xhci, "%s: Could not get input context, bad type.\n",
 				__func__);
 		return -ENOMEM;
@@ -3312,6 +3313,7 @@ int xhci_free_streams(struct usb_hcd *hcd, struct usb_device *udev,
 	command = vdev->eps[ep_index].stream_info->free_streams_command;
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, command->in_ctx);
 	if (!ctrl_ctx) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
 		xhci_warn(xhci, "%s: Could not get input context, bad type.\n",
 				__func__);
 		return -EINVAL;
