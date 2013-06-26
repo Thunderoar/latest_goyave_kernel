@@ -308,6 +308,7 @@ static struct net_device *__ip_tunnel_create(struct net *net,
 
 	tunnel = netdev_priv(dev);
 	tunnel->parms = *parms;
+	tunnel->net = net;
 
 	err = register_netdevice(dev);
 	if (err)
@@ -481,6 +482,15 @@ int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 	tstats->rx_bytes += skb->len;
 	u64_stats_update_end(&tstats->syncp);
 
+	if (tunnel->net != dev_net(tunnel->dev))
+		skb_scrub_packet(skb);
+
+	if (tunnel->dev->type == ARPHRD_ETHER) {
+		skb->protocol = eth_type_trans(skb, tunnel->dev);
+		skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
+	} else {
+		skb->dev = tunnel->dev;
+	}
 	gro_cells_receive(&tunnel->gro_cells, skb);
 	return 0;
 
@@ -611,7 +621,7 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 			tos = ipv6_get_dsfield((const struct ipv6hdr *)inner_iph);
 	}
 
-	rt = ip_route_output_tunnel(dev_net(dev), &fl4,
+	rt = ip_route_output_tunnel(tunnel->net, &fl4,
 				    protocol,
 				    dst, tnl_params->saddr,
 				    tunnel->parms.o_key,
@@ -634,6 +644,9 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 		ip_rt_put(rt);
 		goto tx_error;
 	}
+
+	if (tunnel->net != dev_net(dev))
+		skb_scrub_packet(skb);
 
 	if (tunnel->err_count > 0) {
 		if (time_before(jiffies,
@@ -942,6 +955,7 @@ int ip_tunnel_newlink(struct net_device *dev, struct nlattr *tb[],
 	if (ip_tunnel_find(itn, p, dev->type))
 		return -EEXIST;
 
+	nt->net = net;
 	nt->parms = *p;
 	err = register_netdevice(dev);
 	if (err)
