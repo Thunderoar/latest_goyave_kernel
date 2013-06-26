@@ -3476,26 +3476,24 @@ bool skb_try_coalesce(struct sk_buff *to, struct sk_buff *from,
 EXPORT_SYMBOL(skb_try_coalesce);
 
 /**
- * skb_gso_transport_seglen - Return length of individual segments of a gso packet
+ * skb_scrub_packet - scrub an skb before sending it to another netns
  *
- * @skb: GSO skb
+ * @skb: buffer to clean
  *
- * skb_gso_transport_seglen is used to determine the real size of the
- * individual segments, including Layer4 headers (TCP/UDP).
- *
- * The MAC/L2 or network (IP, IPv6) headers are not accounted for.
+ * skb_scrub_packet can be used to clean an skb before injecting it in
+ * another namespace. We have to clear all information in the skb that
+ * could impact namespace isolation.
  */
-unsigned int skb_gso_transport_seglen(const struct sk_buff *skb)
+void skb_scrub_packet(struct sk_buff *skb)
 {
-	const struct skb_shared_info *shinfo = skb_shinfo(skb);
-
-	if (likely(shinfo->gso_type & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6)))
-		return tcp_hdrlen(skb) + shinfo->gso_size;
-
-	/* UFO sets gso_size to the size of the fragmentation
-	 * payload, i.e. the size of the L4 (UDP) header is already
-	 * accounted for.
-	 */
-	return shinfo->gso_size;
+	skb_orphan(skb);
+	skb->tstamp.tv64 = 0;
+	skb->pkt_type = PACKET_HOST;
+	skb->skb_iif = 0;
+	skb_dst_drop(skb);
+	skb->mark = 0;
+	secpath_reset(skb);
+	nf_reset(skb);
+	nf_reset_trace(skb);
 }
-EXPORT_SYMBOL_GPL(skb_gso_transport_seglen);
+EXPORT_SYMBOL_GPL(skb_scrub_packet);
