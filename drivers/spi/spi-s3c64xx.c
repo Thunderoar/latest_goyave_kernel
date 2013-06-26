@@ -1640,7 +1640,6 @@ static struct platform_device_id s3c64xx_spi_driver_ids[] = {
 	{ },
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id s3c64xx_spi_dt_match[] = {
 	{ .compatible = "samsung,exynos4210-spi",
 			.data = (void *)&exynos4_spi_port_config,
@@ -1651,7 +1650,6 @@ static const struct of_device_id s3c64xx_spi_dt_match[] = {
 	{ },
 };
 MODULE_DEVICE_TABLE(of, s3c64xx_spi_dt_match);
-#endif /* CONFIG_OF */
 
 static struct platform_driver s3c64xx_spi_driver = {
 	.driver = {
