@@ -735,6 +735,8 @@ struct smb_version_values smb20_values = {
 	.cap_nt_find = SMB2_NT_FIND,
 	.cap_large_files = SMB2_LARGE_FILES,
 	.oplock_read = SMB2_OPLOCK_LEVEL_II,
+	.signing_enabled = SMB2_NEGOTIATE_SIGNING_ENABLED | SMB2_NEGOTIATE_SIGNING_REQUIRED,
+	.signing_required = SMB2_NEGOTIATE_SIGNING_REQUIRED,
 };
 
 struct smb_version_values smb21_values = {
@@ -753,6 +755,8 @@ struct smb_version_values smb21_values = {
 	.cap_nt_find = SMB2_NT_FIND,
 	.cap_large_files = SMB2_LARGE_FILES,
 	.oplock_read = SMB2_OPLOCK_LEVEL_II,
+	.signing_enabled = SMB2_NEGOTIATE_SIGNING_ENABLED | SMB2_NEGOTIATE_SIGNING_REQUIRED,
+	.signing_required = SMB2_NEGOTIATE_SIGNING_REQUIRED,
 };
 
 struct smb_version_values smb30_values = {
@@ -771,6 +775,8 @@ struct smb_version_values smb30_values = {
 	.cap_nt_find = SMB2_NT_FIND,
 	.cap_large_files = SMB2_LARGE_FILES,
 	.oplock_read = SMB2_OPLOCK_LEVEL_II,
+	.signing_enabled = SMB2_NEGOTIATE_SIGNING_ENABLED | SMB2_NEGOTIATE_SIGNING_REQUIRED,
+	.signing_required = SMB2_NEGOTIATE_SIGNING_REQUIRED,
 };
 
 struct smb_version_values smb302_values = {
@@ -789,4 +795,6 @@ struct smb_version_values smb302_values = {
 	.cap_nt_find = SMB2_NT_FIND,
 	.cap_large_files = SMB2_LARGE_FILES,
 	.oplock_read = SMB2_OPLOCK_LEVEL_II,
+	.signing_enabled = SMB2_NEGOTIATE_SIGNING_ENABLED | SMB2_NEGOTIATE_SIGNING_REQUIRED,
+	.signing_required = SMB2_NEGOTIATE_SIGNING_REQUIRED,
 };
