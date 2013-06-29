@@ -161,9 +161,4 @@ obj-$(CONFIG_SIPC)		+= sipc/
 obj-$(CONFIG_SENSORS)           += sensor/
 
 obj-$(CONFIG_SPRD_IQ)           += iq/
-obj-$(CONFIG_FMC)		+= fmc/
-obj-$(CONFIG_POWERCAP)		+= powercap/
-obj-$(CONFIG_MCB)		+= mcb/
-obj-$(CONFIG_RAS)		+= ras/
-obj-$(CONFIG_THUNDERBOLT)	+= thunderbolt/
 obj-$(CONFIG_ANDROID)		+= android/
