@@ -1413,6 +1413,7 @@
 0x70f5d462	phy_find_first	vmlinux	EXPORT_SYMBOL
 0x9ff5c649	xfrm6_tunnel_spi_lookup	vmlinux	EXPORT_SYMBOL
 0xfa567176	set_binfmt	vmlinux	EXPORT_SYMBOL
+0x1acef7d2	pm_freezing	vmlinux	EXPORT_SYMBOL_GPL
 0x1b70cfe4	scsi_ioctl	vmlinux	EXPORT_SYMBOL
 0x33ca9a1b	km_policy_expired	vmlinux	EXPORT_SYMBOL
 0xa9effda5	__first_cpu	vmlinux	EXPORT_SYMBOL
