@@ -68,9 +68,12 @@ void ext4_free_io_end(ext4_io_end_t *io)
 	BUG_ON(!list_empty(&io->list));
 	BUG_ON(io->flag & EXT4_IO_END_UNWRITTEN);
 
-	if (atomic_dec_and_test(&EXT4_I(io->inode)->i_ioend_count))
-		wake_up_all(ext4_ioend_wq(io->inode));
-	kmem_cache_free(io_end_cachep, io);
+	for (bio = io_end->bio; bio; bio = next_bio) {
+		next_bio = bio->bi_private;
+		ext4_finish_bio(bio);
+		bio_put(bio);
+	}
+	kmem_cache_free(io_end_cachep, io_end);
 }
 
 /* check a range of space and convert unwritten extents to written. */
@@ -136,13 +139,14 @@ void ext4_add_complete_io(ext4_io_end_t *io_end)
 	struct workqueue_struct *wq;
 	unsigned long flags;
 
-	BUG_ON(!(io_end->flag & EXT4_IO_END_UNWRITTEN));
-	wq = EXT4_SB(io_end->inode->i_sb)->dio_unwritten_wq;
-
+	/* Only reserved conversions from writeback should enter here */
+	WARN_ON(!(io_end->flag & EXT4_IO_END_UNWRITTEN));
+	WARN_ON(!io_end->handle);
 	spin_lock_irqsave(&ei->i_completed_io_lock, flags);
-	if (list_empty(&ei->i_completed_io_list))
-		queue_work(wq, &ei->i_unwritten_work);
-	list_add_tail(&io_end->list, &ei->i_completed_io_list);
+	wq = EXT4_SB(io_end->inode->i_sb)->rsv_conversion_wq;
+	if (list_empty(&ei->i_rsv_conversion_list))
+		queue_work(wq, &ei->i_rsv_conversion_work);
+	list_add_tail(&io_end->list, &ei->i_rsv_conversion_list);
 	spin_unlock_irqrestore(&ei->i_completed_io_lock, flags);
 }
 
@@ -181,16 +185,6 @@ void ext4_end_io_work(struct work_struct *work)
 	struct ext4_inode_info *ei = container_of(work, struct ext4_inode_info,
 						  i_unwritten_work);
 	ext4_do_flush_completed_IO(&ei->vfs_inode);
-}
-
-int ext4_flush_unwritten_io(struct inode *inode)
-{
-	int ret;
-	WARN_ON_ONCE(!mutex_is_locked(&inode->i_mutex) &&
-		     !(inode->i_state & I_FREEING));
-	ret = ext4_do_flush_completed_IO(inode);
-	ext4_unwritten_wait(inode);
-	return ret;
 }
 
 ext4_io_end_t *ext4_init_io_end(struct inode *inode, gfp_t flags)

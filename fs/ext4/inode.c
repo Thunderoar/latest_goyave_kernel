@@ -814,8 +814,12 @@ static int _ext4_get_block(struct inode *inode, sector_t iblock,
 
 	ret = ext4_map_blocks(handle, inode, &map, flags);
 	if (ret > 0) {
+		ext4_io_end_t *io_end = ext4_inode_aio(inode);
+
 		map_bh(bh, inode->i_sb, map.m_pblk);
 		bh->b_state = (bh->b_state & ~EXT4_MAP_FLAGS) | map.m_flags;
+		if (io_end && io_end->flag & EXT4_IO_END_UNWRITTEN)
+			set_buffer_defer_completion(bh);
 		bh->b_size = inode->i_sb->s_blocksize * map.m_len;
 		ret = 0;
 	}
@@ -3110,15 +3114,13 @@ static int ext4_get_block_write_nolock(struct inode *inode, sector_t iblock,
 }
 
 static void ext4_end_io_dio(struct kiocb *iocb, loff_t offset,
-			    ssize_t size, void *private, int ret,
-			    bool is_async)
+			    ssize_t size, void *private)
 {
-	struct inode *inode = file_inode(iocb->ki_filp);
         ext4_io_end_t *io_end = iocb->private;
 
-	/* if not async direct IO or dio with 0 bytes write, just return */
-	if (!io_end || !size)
-		goto out;
+	/* if not async direct IO just return */
+	if (!io_end)
+		return;
 
 	ext_debug("ext4_end_io_dio(): io_end 0x%p "
 		  "for inode %lu, iocb 0x%p, offset %llu, size %zd\n",
@@ -3139,12 +3141,7 @@ out:
 
 	io_end->offset = offset;
 	io_end->size = size;
-	if (is_async) {
-		io_end->iocb = iocb;
-		io_end->result = ret;
-	}
-
-	ext4_add_complete_io(io_end);
+	ext4_put_io_end(io_end);
 }
 
 /*
@@ -3221,8 +3218,10 @@ static ssize_t ext4_ext_direct_IO(int rw, struct kiocb *iocb,
 			ret = -ENOMEM;
 			goto retake_lock;
 		}
-		io_end->flag |= EXT4_IO_END_DIRECT;
-		iocb->private = io_end;
+		/*
+		 * Grab reference for DIO. Will be dropped in ext4_end_io_dio()
+		 */
+		iocb->private = ext4_get_io_end(io_end);
 		/*
 		 * we save the io structure for current async direct
 		 * IO, so that later ext4_map_blocks() could flag the
@@ -3262,10 +3261,21 @@ static ssize_t ext4_ext_direct_IO(int rw, struct kiocb *iocb,
 	 * direct IO won't invoke the end_io call back function, we
 	 * need to free the end_io structure here.
 	 */
-	if (ret != -EIOCBQUEUED && ret <= 0 && iocb->private) {
-		ext4_free_io_end(iocb->private);
-		iocb->private = NULL;
-	} else if (ret > 0 && !overwrite && ext4_test_inode_state(inode,
+	if (io_end) {
+		ext4_inode_aio_set(inode, NULL);
+		ext4_put_io_end(io_end);
+		/*
+		 * When no IO was submitted ext4_end_io_dio() was not
+		 * called so we have to put iocb's reference.
+		 */
+		if (ret <= 0 && ret != -EIOCBQUEUED && iocb->private) {
+			WARN_ON(iocb->private != io_end);
+			WARN_ON(io_end->flag & EXT4_IO_END_UNWRITTEN);
+			ext4_put_io_end(io_end);
+			iocb->private = NULL;
+		}
+	}
+	if (ret > 0 && !overwrite && ext4_test_inode_state(inode,
 						EXT4_STATE_DIO_UNWRITTEN)) {
 		int err;
 		/*
