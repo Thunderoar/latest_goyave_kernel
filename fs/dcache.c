@@ -2531,18 +2531,30 @@ static int prepend_path(const struct path *path,
 	int orig_len = *buflen;
 	bool slash = false;
 	int error = 0;
+	unsigned seq, m_seq = 0;
+	char *bptr;
+	int blen;
 
+	rcu_read_lock();
+restart_mnt:
+	read_seqbegin_or_lock(&mount_lock, &m_seq);
+	seq = 0;
+restart:
+	bptr = *buffer;
+	blen = *buflen;
+	error = 0;
+	read_seqbegin_or_lock(&rename_lock, &seq);
 	while (dentry != root->dentry || vfsmnt != root->mnt) {
 		struct dentry * parent;
 
 		if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
-			/* Escaped? */
-			if (dentry != vfsmnt->mnt_root) {
-				*buffer = orig_buffer;
-				*buflen = orig_len;
-				slash = false;
-				error = 3;
-				goto global_root;
+			struct mount *parent = ACCESS_ONCE(mnt->mnt_parent);
+			/* Global root? */
+			if (mnt != parent) {
+				dentry = ACCESS_ONCE(mnt->mnt_mountpoint);
+				mnt = parent;
+				vfsmnt = &mnt->mnt;
+				continue;
 			}
 			/* Global root? */
 			if (!mnt_has_parent(mnt))
@@ -2565,6 +2577,18 @@ static int prepend_path(const struct path *path,
 		slash = true;
 		dentry = parent;
 	}
+	if (!(seq & 1))
+		rcu_read_unlock();
+	if (need_seqretry(&rename_lock, seq)) {
+		seq = 1;
+		goto restart;
+	}
+	done_seqretry(&rename_lock, seq);
+	if (need_seqretry(&mount_lock, m_seq)) {
+		m_seq = 1;
+		goto restart_mnt;
+	}
+	done_seqretry(&mount_lock, m_seq);
 
 	if (!error && !slash)
 		error = prepend(buffer, buflen, "/", 1);

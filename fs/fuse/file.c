@@ -1558,6 +1558,7 @@ static int fuse_writepage_locked(struct page *page)
 	struct fuse_req *req;
 	struct fuse_file *ff;
 	struct page *tmp_page;
+	int error = -ENOMEM;
 
 	set_page_writeback(page);
 
@@ -1604,7 +1605,7 @@ err_free:
 	fuse_request_free(req);
 err:
 	end_page_writeback(page);
-	return -ENOMEM;
+	return error;
 }
 
 static int fuse_writepage(struct page *page, struct writeback_control *wbc)
