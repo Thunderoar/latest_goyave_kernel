@@ -330,11 +330,7 @@ static int evdev_open(struct inode *inode, struct file *file)
 
 	client = kzalloc(size, GFP_KERNEL | __GFP_NOWARN);
 	if (!client)
-<<<<<<< HEAD
-		client = vzalloc(size); 
-=======
 		client = vzalloc(size);
->>>>>>> cb8e5e9... Input: evdev - fall back to vmalloc for client event buffer
 	if (!client)
 		return -ENOMEM;
 
