@@ -1,4 +1,5 @@
 # Prerequisites
+.*
 *.d
 
 # Object files
@@ -50,3 +51,32 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+*.builtin
+*.tmp
+*.lds
+scripts/*
+arch/arm/boot/Image
+arch/arm/boot/compressed/ashldi3.S
+arch/arm/boot/compressed/hyp-stub.S
+arch/arm/boot/compressed/lib1funcs.S
+arch/arm/boot/compressed/piggy.gzip
+arch/arm/boot/compressed/vmlinux
+arch/arm/boot/dts/sprd-scx35_goyave3g_rev04.dtb
+arch/arm/boot/zImage
+arch/arm/include/generated/
+arch/arm/kernel/asm-offsets.s
+firmware/melfas/KANAS_NEW_TSP_FW.mfsb.gen.S
+firmware/melfas/melfas_mms400.fw
+firmware/melfas/melfas_mms400.fw.gen.S
+include/config/
+include/generated/
+kernel/bounds.s
+kernel/hz.bc
+kernel/timeconst.h
+lib/crc32table.h
+lib/gen_crc32table
+security/selinux/av_permissions.h
+security/selinux/flask.h
+usr/gen_init_cpio
+usr/initramfs_data.cpio
+vmlinux
