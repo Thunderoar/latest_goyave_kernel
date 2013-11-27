@@ -127,7 +127,7 @@ static int af9035_wr_regs(struct dvb_usb_device *d, u32 reg, u8 *val, int len)
 {
 	u8 wbuf[6 + len];
 	u8 mbox = (reg >> 16) & 0xff;
-	struct usb_req req = { CMD_MEM_WR, mbox, sizeof(wbuf), wbuf, 0, NULL };
+	struct usb_req req = { CMD_MEM_WR, mbox, 6 + len, wbuf, 0, NULL };
 
 	wbuf[0] = len;
 	wbuf[1] = 2;
@@ -227,8 +227,8 @@ static int af9035_i2c_master_xfer(struct i2c_adapter *adap,
 					msg[1].len);
 		} else {
 			/* I2C */
-			u8 buf[5 + msg[0].len];
-			struct usb_req req = { CMD_I2C_RD, 0, sizeof(buf),
+			u8 buf[MAX_XFER_SIZE];
+			struct usb_req req = { CMD_I2C_RD, 0, 5 + msg[0].len,
 					buf, msg[1].len, msg[1].buf };
 			req.mbox |= ((msg[0].addr & 0x80)  >>  3);
 			buf[0] = msg[1].len;
@@ -256,9 +256,16 @@ static int af9035_i2c_master_xfer(struct i2c_adapter *adap,
 					msg[0].len - 3);
 		} else {
 			/* I2C */
-			u8 buf[5 + msg[0].len];
-			struct usb_req req = { CMD_I2C_WR, 0, sizeof(buf), buf,
-					0, NULL };
+			u8 buf[MAX_XFER_SIZE];
+			struct usb_req req = { CMD_I2C_WR, 0, 5 + msg[0].len,
+					buf, 0, NULL };
+
+			if (5 + msg[0].len > sizeof(buf)) {
+				dev_warn(&d->udev->dev,
+					 "%s: i2c xfer: len=%d is too big!\n",
+					 KBUILD_MODNAME, msg[0].len);
+				return -EOPNOTSUPP;
+			}
 			req.mbox |= ((msg[0].addr & 0x80)  >>  3);
 			buf[0] = msg[0].len;
 			buf[1] = msg[0].addr << 1;
