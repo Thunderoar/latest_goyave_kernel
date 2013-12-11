@@ -299,11 +299,6 @@ static int evdev_release(struct inode *inode, struct file *file)
 	mutex_unlock(&evdev->mutex);
 
 	evdev_detach_client(evdev, client);
-<<<<<<< HEAD
-	if (client->use_wake_lock)
-		wake_lock_destroy(&client->wake_lock);
-=======
->>>>>>> cb8e5e9... Input: evdev - fall back to vmalloc for client event buffer
 
 	if (is_vmalloc_addr(client))
 		vfree(client);
