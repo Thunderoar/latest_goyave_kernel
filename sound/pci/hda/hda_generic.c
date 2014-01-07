@@ -2775,6 +2775,44 @@ static int add_loopback_list(struct hda_gen_spec *spec, hda_nid_t mix, int idx)
 	return 0;
 }
 
+/* return true if either a volume or a mute amp is found for the given
+ * aamix path; the amp has to be either in the mixer node or its direct leaf
+ */
+static bool look_for_mix_leaf_ctls(struct hda_codec *codec, hda_nid_t mix_nid,
+				   hda_nid_t pin, unsigned int *mix_val,
+				   unsigned int *mute_val)
+{
+	int idx, num_conns;
+	const hda_nid_t *list;
+	hda_nid_t nid;
+
+	idx = snd_hda_get_conn_index(codec, mix_nid, pin, true);
+	if (idx < 0)
+		return false;
+
+	*mix_val = *mute_val = 0;
+	if (nid_has_volume(codec, mix_nid, HDA_INPUT))
+		*mix_val = HDA_COMPOSE_AMP_VAL(mix_nid, 3, idx, HDA_INPUT);
+	if (nid_has_mute(codec, mix_nid, HDA_INPUT))
+		*mute_val = HDA_COMPOSE_AMP_VAL(mix_nid, 3, idx, HDA_INPUT);
+	if (*mix_val && *mute_val)
+		return true;
+
+	/* check leaf node */
+	num_conns = snd_hda_get_conn_list(codec, mix_nid, &list);
+	if (num_conns < idx)
+		return false;
+	nid = list[idx];
+	if (!*mix_val && nid_has_volume(codec, nid, HDA_OUTPUT) &&
+	    !is_ctl_associated(codec, nid, HDA_OUTPUT, 0, NID_PATH_VOL_CTL))
+		*mix_val = HDA_COMPOSE_AMP_VAL(nid, 3, 0, HDA_OUTPUT);
+	if (!*mute_val && nid_has_mute(codec, nid, HDA_OUTPUT) &&
+	    !is_ctl_associated(codec, nid, HDA_OUTPUT, 0, NID_PATH_MUTE_CTL))
+		*mute_val = HDA_COMPOSE_AMP_VAL(nid, 3, 0, HDA_OUTPUT);
+
+	return *mix_val || *mute_val;
+}
+
 /* create input playback/capture controls for the given pin */
 static int new_analog_input(struct hda_codec *codec, int input_idx,
 			    hda_nid_t pin, const char *ctlname, int ctlidx,
