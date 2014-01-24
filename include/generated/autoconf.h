@@ -1,7 +1,7 @@
 /*
  *
  * Automatically generated file; DO NOT EDIT.
- * Linux/arm 3.10.26 Kernel Configuration
+ * Linux/arm 3.10.30 Kernel Configuration
  *
  */
 #define CONFIG_RING_BUFFER 1
@@ -242,6 +242,7 @@
 #define CONFIG_USB_COMMON 1
 #define CONFIG_IP6_NF_IPTABLES 1
 #define CONFIG_CPU_FREQ_GOV_USERSPACE 1
+#define CONFIG_BLK_DEV_DM_BUILTIN 1
 #define CONFIG_SPRD_IQ 1
 #define CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES 1
 #define CONFIG_OF_NET 1

@@ -1,7 +1,7 @@
-/* This file is auto generated, version 9 */
+/* This file is auto generated, version 10 */
 /* SMP PREEMPT */
 #define UTS_MACHINE "arm"
-#define UTS_VERSION "#9 SMP PREEMPT Sat Mar 3 07:39:21 +08 2018"
+#define UTS_VERSION "#10 SMP PREEMPT Sat Mar 3 08:09:37 +08 2018"
 #define LINUX_COMPILE_BY "thn-dev"
 #define LINUX_COMPILE_HOST "thn-dev"
 #define LINUX_COMPILER "gcc version 4.8 (GCC) "
