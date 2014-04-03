@@ -162,7 +162,7 @@ int ip_forward(struct sk_buff *skb)
 			  htonl(dst_mtu(&rt->dst)));
 		goto drop;
 	}
-#endif
+
 	/* We are about to mangle packet. Copy it! */
 	if (skb_cow(skb, LL_RESERVED_SPACE(rt->dst.dev)+rt->dst.header_len))
 		goto drop;
