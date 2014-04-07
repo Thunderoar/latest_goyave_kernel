@@ -1396,10 +1396,10 @@ static int try_to_unmap_cluster(unsigned long cursor, unsigned int *mapcount,
 				ret = SWAP_MLOCK;
 			} else if (trylock_page(page)) {
 				/*
-				* If we can lock the page, perform mlock.
-				* Otherwise leave the page alone, it will be
-				* eventually encountered again later.
-				*/
+				 * If we can lock the page, perform mlock.
+				 * Otherwise leave the page alone, it will be
+				 * eventually encountered again later.
+				 */
 				mlock_vma_page(page);
 				unlock_page(page);
 			}
