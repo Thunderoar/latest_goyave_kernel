@@ -25,7 +25,7 @@
 			regulator-name = "vddarm";
 			reg = <0x40038810 0x400 0x40038a04 0x3ff 0x400388c0 0x4>; /* pd reg && vol trm reg && otp_sel_reg */
 			regulator-cal-channel = <0x40038888 0x2000 0xd>;
-			regulator-default-microvolt = <900000>;
+			regulator-default-microvolt = <850000>;
 			regulator-step-microvolt = <3125>;
 			regulator-min-microvolt = <600000>;
 			regulator-max-microvolt = <3125000>;
