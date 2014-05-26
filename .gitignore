@@ -44,6 +44,7 @@
 *.pdb
 
 # Kernel Module Compile Results
+*.patch
 *.mod*
 *.cmd
 .tmp_versions/
