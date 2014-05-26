@@ -164,8 +164,13 @@ static int __init test_suspend(void)
 	/* PM is initialized by now; is that state testable? */
 	if (test_state == PM_SUSPEND_ON)
 		goto done;
+<<<<<<< HEAD
 	if (!valid_state(test_state)) {
 		printk(warn_bad_state, pm_states[test_state]);
+=======
+	if (!pm_states[test_state].state) {
+		printk(warn_bad_state, pm_states[test_state].label);
+>>>>>>> 5c95fef... PM / sleep: Use valid_state() for platform-dependent sleep states only
 		goto done;
 	}
 
