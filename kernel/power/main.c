@@ -15,9 +15,9 @@
 #include <linux/workqueue.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
-#include <mach/system.h>
-#include <linux/reboot.h>
 #ifdef CONFIG_CPU_FREQ_LIMIT_USERSPACE
+#include <soc/sprd/system.h>
+#include <linux/reboot.h>
 #include <linux/cpufreq.h>
 #include <linux/cpufreq_limit.h>
 #endif
@@ -301,12 +301,12 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	char *s = buf;
 #ifdef CONFIG_SUSPEND
-	int i;
+	suspend_state_t i;
 
-	for (i = 0; i < PM_SUSPEND_MAX; i++) {
-		if (pm_states[i] && valid_state(i))
-			s += sprintf(s,"%s ", pm_states[i]);
-	}
+	for (i = PM_SUSPEND_MIN; i < PM_SUSPEND_MAX; i++)
+		if (pm_states[i].state)
+			s += sprintf(s,"%s ", pm_states[i].label);
+
 #endif
 #ifdef CONFIG_HIBERNATION
 	s += sprintf(s, "%s\n", "disk");
@@ -322,7 +322,7 @@ static suspend_state_t decode_state(const char *buf, size_t n)
 {
 #ifdef CONFIG_SUSPEND
 	suspend_state_t state = PM_SUSPEND_MIN;
-	const char * const *s;
+	struct pm_sleep_state *s;
 #endif
 	char *p;
 	int len;
@@ -336,8 +336,9 @@ static suspend_state_t decode_state(const char *buf, size_t n)
 
 #ifdef CONFIG_SUSPEND
 	for (s = &pm_states[state]; state < PM_SUSPEND_MAX; s++, state++)
-		if (*s && len == strlen(*s) && !strncmp(buf, *s, len))
-			return state;
+		if (s->state && len == strlen(s->label)
+		    && !strncmp(buf, s->label, len))
+			return s->state;
 #endif
 
 	return PM_SUSPEND_ON;
@@ -352,7 +353,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 #else
 	suspend_state_t state = PM_SUSPEND_STANDBY;
 #endif
-	const char * const *s;
+	struct pm_sleep_state *s;
 #endif
 	char *p;
 	int len;
@@ -369,9 +370,10 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 #ifdef CONFIG_SUSPEND
 	for (s = &pm_states[state]; state < PM_SUSPEND_MAX; s++, state++) {
-		if (*s && len == strlen(*s) && !strncmp(buf, *s, len)) {
+		if (s->label && len == strlen(s->label) &&
+				!strncmp(buf, s->label, len)) {
 #ifdef CONFIG_EARLYSUSPEND
-			if (state == PM_SUSPEND_ON || pm_states[state].state) {
+			if (state == PM_SUSPEND_ON || valid_state(state)) {
 				error = 0;
 				request_suspend_state(state);
 				break;
@@ -617,8 +619,8 @@ static ssize_t autosleep_show(struct kobject *kobj,
 
 #ifdef CONFIG_SUSPEND
 	if (state < PM_SUSPEND_MAX)
-		return sprintf(buf, "%s\n", valid_state(state) ?
-						pm_states[state] : "error");
+		return sprintf(buf, "%s\n", pm_states[state].state ?
+					pm_states[state].label : "error");
 #endif
 #ifdef CONFIG_HIBERNATION
 	return sprintf(buf, "disk\n");
@@ -711,6 +713,7 @@ static ssize_t pm_freeze_timeout_store(struct kobject *kobj,
 power_attr(pm_freeze_timeout);
 
 #endif	/* CONFIG_FREEZER*/
+
 #ifdef CONFIG_ARCH_SC
 extern void cp_abort(void *debug_info);
 static ssize_t restart_cpc_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -732,7 +735,7 @@ static ssize_t restart_cpc_store(struct kobject *kobj, struct kobj_attribute *at
 #else
 		unsigned long base_cp_dbg = 0;
 #endif
-	
+
 	memcpy(cp_assert_info, buf, 1);
 	if (sscanf(cp_assert_info, "%d", &val) == 1 && val > 0){
 		if(sec_log_buf_nocache_enable == 1){
@@ -745,15 +748,15 @@ static ssize_t restart_cpc_store(struct kobject *kobj, struct kobj_attribute *at
 			memcpy(phys_to_virt(base_cp_dbg), buf+2, CP_DBG_LEN);
 		} else
 			printk("Fail to copy cp debug log!!!\n");
-		
+
 		cp_abort(buf+2);
 	}
-
 	return n;
 }
 
 power_attr(restart_cpc);
 #endif
+
 #ifdef CONFIG_USER_WAKELOCK
 power_attr(wake_lock);
 power_attr(wake_unlock);
