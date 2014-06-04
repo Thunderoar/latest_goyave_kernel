@@ -85,6 +85,18 @@ extern void setup_per_cpu_areas(void);
 #define this_cpu_ptr(ptr)	per_cpu_ptr(ptr, 0)
 #define __this_cpu_ptr(ptr)	this_cpu_ptr(ptr)
 
+/*
+ * Arch may define arch_raw_cpu_ptr() to provide more efficient address
+ * translations for raw_cpu_ptr().
+ */
+#ifndef arch_raw_cpu_ptr
+#define arch_raw_cpu_ptr(ptr) SHIFT_PERCPU_PTR(ptr, __my_cpu_offset)
+#endif
+
+#ifdef CONFIG_HAVE_SETUP_PER_CPU_AREA
+extern void setup_per_cpu_areas(void);
+#endif
+
 #endif	/* SMP */
 
 #ifndef PER_CPU_BASE_SECTION

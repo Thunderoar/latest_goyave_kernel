@@ -160,4 +160,11 @@
 #define EXPORT_PER_CPU_SYMBOL_GPL(var)
 #endif
 
+#define raw_cpu_ptr(ptr)						\
+({									\
+	__verify_pcpu_ptr(ptr);						\
+	arch_raw_cpu_ptr(ptr);						\
+})
+
 #endif /* _LINUX_PERCPU_DEFS_H */
+
