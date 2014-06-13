@@ -308,13 +308,11 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 			s += sprintf(s,"%s ", pm_states[i]);
 	}
 #endif
-#ifdef CONFIG_HIBERNATION
-	s += sprintf(s, "%s\n", "disk");
-#else
+	if (hibernation_available())
+		s += sprintf(s, "disk ");
 	if (s != buf)
 		/* convert the last space to a newline */
 		*(s-1) = '\n';
-#endif
 	return (s - buf);
 }
 
