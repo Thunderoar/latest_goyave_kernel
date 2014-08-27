@@ -1710,8 +1710,11 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	 * - If user has indicated to prevent autosuspend by passing
 	 *   usbcore.autosuspend = -1 then keep autosuspend disabled.
 	 */
+#ifdef CONFIG_PM_RUNTIME
 	if (hdev->dev.power.autosuspend_delay >= 0)
 		pm_runtime_set_autosuspend_delay(&hdev->dev, 0);
+#endif
+
 #ifdef CONFIG_USB_EXTERNAL_DETECT
 	hcd = bus_to_hcd(hdev->bus);
 	if (!hcd->no_suspend)
