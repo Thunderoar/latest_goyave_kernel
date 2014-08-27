@@ -1717,8 +1717,10 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		/* Hubs have proper suspend/resume support. */
 		usb_enable_autosuspend(hdev);
 #else
+#ifdef CONFIG_PM_RUNTIME
 	if (hdev->dev.power.autosuspend_delay >= 0)
 		pm_runtime_set_autosuspend_delay(&hdev->dev, 0);
+#endif
 
 	/*
 	 * Hubs have proper suspend/resume support, except for root hubs
