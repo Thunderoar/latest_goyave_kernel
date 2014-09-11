@@ -2452,7 +2452,6 @@ struct dentry *d_materialise_unique(struct dentry *dentry, struct inode *inode)
 				 * could splice into our tree? */
 				__d_materialise_dentry(dentry, alias);
 				write_sequnlock(&rename_lock);
-				__d_drop(alias);
 				goto found;
 			} else {
 				/* Nope, but we must(!) avoid directory
