@@ -350,7 +350,7 @@ static void *persistent_ram_vmap(phys_addr_t start, size_t size)
 #if 0
 	prot = pgprot_noncached(PAGE_KERNEL);
 #else
-	prot = PAGE_KERNEL;
+	prot = pgprot_writecombine(PAGE_KERNEL);
 #endif
 
 	pages = kmalloc(sizeof(struct page *) * page_count, GFP_KERNEL);
@@ -378,7 +378,7 @@ static void *persistent_ram_iomap(phys_addr_t start, size_t size)
 		return NULL;
 	}
 
-	return ioremap(start, size);
+	return ioremap_wc(start, size);
 }
 
 static int persistent_ram_buffer_map(phys_addr_t start, phys_addr_t size,
