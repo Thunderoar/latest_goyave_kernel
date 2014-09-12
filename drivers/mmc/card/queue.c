@@ -20,7 +20,11 @@
 #include <linux/mmc/host.h>
 #include "queue.h"
 
-#define MMC_QUEUE_BOUNCESZ	65536
+#define MMC_QUEUE_BOUNCESZ	 131072
+#define MMC_QUEUE_SD_BOUNCESZ	 524288
+
+static char mmc_queue_cur_bounce_buf[MMC_QUEUE_SD_BOUNCESZ] ____cacheline_aligned;
+static char mmc_queue_prev_bounce_buf[MMC_QUEUE_SD_BOUNCESZ] ____cacheline_aligned;
 
 /*
  * Prepare a MMC request. This just filters out odd stuff.
@@ -216,7 +220,10 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	if (host->max_segs == 1) {
 		unsigned int bouncesz;
 
-		bouncesz = MMC_QUEUE_BOUNCESZ;
+		if(!mmc_card_sd(card))
+			bouncesz = MMC_QUEUE_BOUNCESZ;
+		else
+			bouncesz = MMC_QUEUE_SD_BOUNCESZ;
 
 		if (bouncesz > host->max_req_size)
 			bouncesz = host->max_req_size;
@@ -226,13 +233,19 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 			bouncesz = host->max_blk_count * 512;
 
 		if (bouncesz > 512) {
-			mqrq_cur->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
+			if(!mmc_card_sd(card))
+				mqrq_cur->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
+			else
+				mqrq_cur->bounce_buf = mmc_queue_cur_bounce_buf;
 			if (!mqrq_cur->bounce_buf) {
 				pr_warning("%s: unable to "
 					"allocate bounce cur buffer\n",
 					mmc_card_name(card));
 			}
-			mqrq_prev->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
+			if(!mmc_card_sd(card))
+				mqrq_prev->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
+			else
+				mqrq_prev->bounce_buf = mmc_queue_prev_bounce_buf;
 			if (!mqrq_prev->bounce_buf) {
 				pr_warning("%s: unable to "
 					"allocate bounce prev buffer\n",
@@ -343,7 +356,8 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	kfree(mqrq_cur->sg);
 	mqrq_cur->sg = NULL;
 
-	kfree(mqrq_cur->bounce_buf);
+	if(!mmc_card_sd(mq->card))
+		kfree(mqrq_cur->bounce_buf);
 	mqrq_cur->bounce_buf = NULL;
 
 	kfree(mqrq_prev->bounce_sg);
@@ -352,7 +366,8 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	kfree(mqrq_prev->sg);
 	mqrq_prev->sg = NULL;
 
-	kfree(mqrq_prev->bounce_buf);
+	if(!mmc_card_sd(mq->card))
+		kfree(mqrq_prev->bounce_buf);
 	mqrq_prev->bounce_buf = NULL;
 
 	mq->card = NULL;
