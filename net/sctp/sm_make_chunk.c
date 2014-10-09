@@ -3097,16 +3097,15 @@ static __be16 sctp_process_asconf_param(struct sctp_association *asoc,
 	return SCTP_ERROR_NO_ERROR;
 }
 
-/* Verify the ASCONF packet before we process it.  */
+/* Verify the ASCONF packet before we process it. */
 bool sctp_verify_asconf(const struct sctp_association *asoc,
-		       struct sctp_chunk *chunk, bool addr_param_needed,
-		       struct sctp_paramhdr **errp) 
+			struct sctp_chunk *chunk, bool addr_param_needed,
+			struct sctp_paramhdr **errp)
 {
 	sctp_addip_chunk_t *addip = (sctp_addip_chunk_t *) chunk->chunk_hdr;
 	union sctp_params param;
-
 	bool addr_param_seen = false;
-	
+
 	sctp_walk_params(param, addip, addip_hdr.params) {
 		size_t length = ntohs(param.p->length);
 
@@ -3132,7 +3131,7 @@ bool sctp_verify_asconf(const struct sctp_association *asoc,
 				return false;
 			length = ntohs(param.addip->param_hdr.length);
 			if (length < sizeof(sctp_addip_param_t) +
-					sizeof(sctp_paramhdr_t))
+				     sizeof(sctp_paramhdr_t))
 				return false;
 			break;
 		case SCTP_PARAM_SUCCESS_REPORT:
@@ -3153,6 +3152,7 @@ bool sctp_verify_asconf(const struct sctp_association *asoc,
 		return false;
 	if (param.v != chunk->chunk_end)
 		return false;
+
 	return true;
 }
 
@@ -3203,8 +3203,9 @@ struct sctp_chunk *sctp_process_asconf(struct sctp_association *asoc,
 	sctp_walk_params(param, addip, addip_hdr.params) {
 		/* Skip preceeding address parameters. */
 		if (param.p->type == SCTP_PARAM_IPV4_ADDRESS ||
-				param.p->type == SCTP_PARAM_IPV6_ADDRESS)
-					continue;
+		    param.p->type == SCTP_PARAM_IPV6_ADDRESS)
+			continue;
+
 		err_code = sctp_process_asconf_param(asoc, asconf,
 						     param.addip);
 		/* ADDIP 4.1 A7)
@@ -3218,7 +3219,7 @@ struct sctp_chunk *sctp_process_asconf(struct sctp_association *asoc,
 			all_param_pass = false;
 		if (!all_param_pass)
 			sctp_add_asconf_response(asconf_ack, param.addip->crr_id,
-									err_code, param.addip);
+						 err_code, param.addip);
 
 		/* ADDIP 4.3 D11) When an endpoint receiving an ASCONF to add
 		 * an IP address sends an 'Out of Resource' in its response, it
