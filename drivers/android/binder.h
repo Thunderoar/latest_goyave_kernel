@@ -22,6 +22,7 @@
 
 #include <linux/ioctl.h>
 
+<<<<<<< HEAD:drivers/staging/android/binder.h
 #define B_PACK_CHARS(c1, c2, c3, c4) \
 	((((c1)<<24)) | (((c2)<<16)) | (((c3)<<8)) | (c4))
 #define B_TYPE_LARGE 0x85
@@ -325,6 +326,9 @@ enum binder_driver_command_protocol {
 	 * void *: cookie
 	 */
 };
+=======
+#include <uapi/linux/android/binder.h>
+>>>>>>> 777783e... staging: android: binder: move to the "real" part of the kernel:drivers/android/binder.h
 
 #endif /* _LINUX_BINDER_H */
 
