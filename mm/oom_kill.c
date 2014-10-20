@@ -413,7 +413,7 @@ static void dump_header(struct task_struct *p, gfp_t gfp_mask, int order,
 
 static void set_thread_group_flag(struct task_struct *p, int flag)
 {
-	struct task_struct *tp = p;
+	struct task_struct *t;
 	/*
 	 * In some situation, a thread group member holds the mm->mmap_sem
 	 * as a writer and then blocks waiting for memory.
@@ -425,9 +425,28 @@ static void set_thread_group_flag(struct task_struct *p, int flag)
 	 * Here grants TIF_MEMDIE to all thread group members to avoid the
 	 * deadlock.
 	 */
-	do {
-		set_tsk_thread_flag(tp, TIF_MEMDIE);
-	} while_each_thread(p, tp);
+	rcu_read_lock();
+	for_each_thread(p, t) {
+		set_tsk_thread_flag(t, TIF_MEMDIE);
+	}
+	rcu_read_unlock();
+}
+
+/*
+ * Number of OOM killer invocations (including memcg OOM killer).
+ * Primarily used by PM freezer to check for potential races with
+ * OOM killed frozen task.
+ */
+static atomic_t oom_kills = ATOMIC_INIT(0);
+
+int oom_kills_count(void)
+{
+	return atomic_read(&oom_kills);
+}
+
+void note_oom_kill(void)
+{
+	atomic_inc(&oom_kills);
 }
 
 #define K(x) ((x) << (PAGE_SHIFT-10))
