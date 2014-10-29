@@ -243,7 +243,7 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		{8, 1094400},
 		{9, 998400},
 		{10, SHARK_TDPLL_FREQUENCY},
-		{11, 533333},
+		{11, 533330},
 		{12, 400000},
 		{13, 302400},
 		{14, 200000},
@@ -364,7 +364,7 @@ static void sprd_raw_set_cpufreq(int cpu, struct cpufreq_freqs *freq, int index)
 		CPUFREQ_SET_VOLTAGE();
 	}
 
-	pr_info("%u --> %u, real=%u, index=%d\n",
+	pr_debug("%u --> %u, real=%u, index=%d\n",
 		freq->old, freq->new, sprd_raw_get_cpufreq(), index);
 
 #undef CPUFREQ_SET_VOLTAGE
@@ -386,7 +386,7 @@ static void sprd_real_set_cpufreq(struct cpufreq_policy *policy, unsigned int ne
 		mutex_unlock(&freq_lock);
 		return;
 	}
-	pr_info("--xing-- set %u khz for cpu%u\n",
+	pr_debug("--xing-- set %u khz for cpu%u\n",
 		new_speed, policy->cpu);
 	global_freqs.cpu = policy->cpu;
 	global_freqs.new = new_speed;
@@ -530,7 +530,7 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 	return sprd_raw_get_cpufreq();
 }
 
-static void sprd_set_cpufreq_limit(void)
+static void sprd_set_cpureq_limit(void)
 {
 	int i;
 	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
@@ -538,7 +538,7 @@ static void sprd_set_cpufreq_limit(void)
 		cpufreq_min_limit = min(tmp[i].frequency, cpufreq_min_limit);
 		cpufreq_max_limit = max(tmp[i].frequency, cpufreq_max_limit);
 	}
-	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
+	pr_debug("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
 
 static int sprd_freq_table_init(void)
@@ -569,7 +569,7 @@ static int sprd_freq_table_init(void)
 		pr_err("%s error chip id\n", __func__);
 		return -EINVAL;
 	}
-	sprd_set_cpufreq_limit();
+	sprd_set_cpureq_limit();
 	return 0;
 }
 
@@ -596,10 +596,10 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 		pr_err("%s Failed to config freq table: %d\n", __func__, ret);
 
 
-	pr_info("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
+	pr_debug("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
 		__func__, policy->cpu, policy->cur, ret);
 
-       cpumask_setall(policy->cpus);
+       //cpumask_setall(policy->cpus);
 
 	return ret;
 }
