@@ -78,6 +78,8 @@ static spinlock_t target_loads_lock;
 static unsigned int *target_loads = default_target_loads;
 static int ntarget_loads = ARRAY_SIZE(default_target_loads);
 
+#define DOWN_LOW_LOAD_THRESHOLD 6
+
 /*
  * The minimum amount of time to spend at a frequency before we can ramp down.
  */
@@ -406,6 +408,8 @@ static void cpufreq_interactive_timer(unsigned long data)
 			if (new_freq < hispeed_freq)
 				new_freq = hispeed_freq;
 		}
+	} else if (cpu_load <= DOWN_LOW_LOAD_THRESHOLD) {
+		new_freq = pcpu->policy->cpuinfo.min_freq;
 	} else {
 		new_freq = choose_freq(pcpu, loadadjfreq);
 	}
