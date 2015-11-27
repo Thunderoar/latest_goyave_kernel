@@ -414,14 +414,21 @@ EXPORT_SYMBOL_GPL(tty_ldisc_flush);
  *	they are not on hot paths so a little discipline won't do
  *	any harm.
  *
- *	Locking: takes termios_rwsem
+ *	The line discipline-related tty_struct fields are reset to
+ *	prevent the ldisc driver from re-using stale information for
+ *	the new ldisc instance.
+ *
+ *	Locking: takes termios_mutex
  */
 
 static void tty_set_termios_ldisc(struct tty_struct *tty, int num)
 {
 	down_write(&tty->termios_rwsem);
 	tty->termios.c_line = num;
-	up_write(&tty->termios_rwsem);
+	mutex_unlock(&tty->termios_mutex);
+
+	tty->disc_data = NULL;
+	tty->receive_room = 0;
 }
 
 /**
