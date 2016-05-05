@@ -270,36 +270,8 @@ static void mmc_select_card_type(struct mmc_card *card)
 	card->ext_csd.card_type = card_type;
 }
 
-/* eMMC 5.0 or later only */
-/*
- * mmc_merge_ext_csd - merge some ext_csd field to a variable.
- * @ext_csd : pointer of ext_csd.(1 Byte/field)
- * @continuous : if you want to merge continuous field, set true.
- * @count : a number of ext_csd field to merge(=< 8)
- * @args : list of ext_csd index or first index.
- */
-static unsigned long long mmc_merge_ext_csd(u8 *ext_csd, bool continuous, int count, ...)
-{
-	unsigned long long merge_ext_csd = 0;
-	va_list args;
-	int i = 0;
-	int index;
-
-	va_start(args, count);
-
-	index = va_arg(args, int);
-	for (i = 0; i < count; i++) {
-		if (continuous) {
-			merge_ext_csd = merge_ext_csd << 8 | ext_csd[index + count - 1 - i];
-		} else {
-			merge_ext_csd = merge_ext_csd << 8 | ext_csd[index];
-			index = va_arg(args, int);
-		}
-	}
-	va_end(args);
-
-	return merge_ext_csd;
-}
+/* Minimum partition switch timeout in milliseconds */
+#define MMC_MIN_PART_SWITCH_TIME	300
 
 /*
  * Decode extended CSD.
@@ -362,6 +334,10 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 		/* EXT_CSD value is in units of 10ms, but we store in ms */
 		card->ext_csd.part_time = 10 * ext_csd[EXT_CSD_PART_SWITCH_TIME];
+		/* Some eMMC set the value too low so set a minimum */
+		if (card->ext_csd.part_time &&
+		    card->ext_csd.part_time < MMC_MIN_PART_SWITCH_TIME)
+			card->ext_csd.part_time = MMC_MIN_PART_SWITCH_TIME;
 
 		/* Sleep / awake timeout in 100ns units */
 		if (sa_shift > 0 && sa_shift <= 0x17)
