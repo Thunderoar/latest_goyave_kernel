@@ -2410,7 +2410,7 @@ static void __d_materialise_dentry(struct dentry *dentry, struct dentry *anon)
 		__hlist_bl_del(&anon->d_hash);
 		anon->d_hash.pprev = NULL;
 		hlist_bl_unlock(&anon->d_sb->s_anon);
-	}
+        }
 	list_move(&anon->d_child, &dparent->d_subdirs);
 
 	write_seqcount_end(&dentry->d_seq);
