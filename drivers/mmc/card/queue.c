@@ -18,14 +18,9 @@
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
-#include <linux/sched/rt.h>
 #include "queue.h"
 
-#define MMC_QUEUE_BOUNCESZ	 131072
-#define MMC_QUEUE_SD_BOUNCESZ	 524288
-
-static char mmc_queue_cur_bounce_buf[MMC_QUEUE_SD_BOUNCESZ] ____cacheline_aligned;
-static char mmc_queue_prev_bounce_buf[MMC_QUEUE_SD_BOUNCESZ] ____cacheline_aligned;
+#define MMC_QUEUE_BOUNCESZ	65536
 
 /*
  * Prepare a MMC request. This just filters out odd stuff.
@@ -54,11 +49,6 @@ static int mmc_queue_thread(void *d)
 {
 	struct mmc_queue *mq = d;
 	struct request_queue *q = mq->queue;
-
-	struct sched_param scheduler_params = {0};
-	scheduler_params.sched_priority = 1;
-
-	sched_setscheduler(current, SCHED_FIFO, &scheduler_params);
 
 	current->flags |= PF_MEMALLOC;
 
@@ -226,10 +216,7 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	if (host->max_segs == 1) {
 		unsigned int bouncesz;
 
-		if(!mmc_card_sd(card))
-			bouncesz = MMC_QUEUE_BOUNCESZ;
-		else
-			bouncesz = MMC_QUEUE_SD_BOUNCESZ;
+		bouncesz = MMC_QUEUE_BOUNCESZ;
 
 		if (bouncesz > host->max_req_size)
 			bouncesz = host->max_req_size;
@@ -239,19 +226,13 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 			bouncesz = host->max_blk_count * 512;
 
 		if (bouncesz > 512) {
-			if(!mmc_card_sd(card))
-				mqrq_cur->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
-			else
-				mqrq_cur->bounce_buf = mmc_queue_cur_bounce_buf;
+			mqrq_cur->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
 			if (!mqrq_cur->bounce_buf) {
 				pr_warning("%s: unable to "
 					"allocate bounce cur buffer\n",
 					mmc_card_name(card));
 			}
-			if(!mmc_card_sd(card))
-				mqrq_prev->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
-			else
-				mqrq_prev->bounce_buf = mmc_queue_prev_bounce_buf;
+			mqrq_prev->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
 			if (!mqrq_prev->bounce_buf) {
 				pr_warning("%s: unable to "
 					"allocate bounce prev buffer\n",
@@ -362,8 +343,7 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	kfree(mqrq_cur->sg);
 	mqrq_cur->sg = NULL;
 
-	if(!mmc_card_sd(mq->card))
-		kfree(mqrq_cur->bounce_buf);
+	kfree(mqrq_cur->bounce_buf);
 	mqrq_cur->bounce_buf = NULL;
 
 	kfree(mqrq_prev->bounce_sg);
@@ -372,8 +352,7 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	kfree(mqrq_prev->sg);
 	mqrq_prev->sg = NULL;
 
-	if(!mmc_card_sd(mq->card))
-		kfree(mqrq_prev->bounce_buf);
+	kfree(mqrq_prev->bounce_buf);
 	mqrq_prev->bounce_buf = NULL;
 
 	mq->card = NULL;
