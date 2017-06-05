@@ -446,6 +446,35 @@ static void remove_event_file_dir(struct ftrace_event_file *file)
 }
 
 /*
+ * Open and update trace_array ref count.
+ * Must have the current trace_array passed to it.
+ */
+static int tracing_open_generic_file(struct inode *inode, struct file *filp)
+{
+	struct ftrace_event_file *file = inode->i_private;
+	struct trace_array *tr = file->tr;
+	int ret;
+
+	if (trace_array_get(tr) < 0)
+		return -ENODEV;
+
+	ret = tracing_open_generic(inode, filp);
+	if (ret < 0)
+		trace_array_put(tr);
+	return ret;
+}
+
+static int tracing_release_generic_file(struct inode *inode, struct file *filp)
+{
+	struct ftrace_event_file *file = inode->i_private;
+	struct trace_array *tr = file->tr;
+
+	trace_array_put(tr);
+
+	return 0;
+}
+
+/*
  * __ftrace_set_clr_event(NULL, NULL, NULL, set) will set/unset all events.
  */
 static int
@@ -1287,9 +1316,10 @@ static const struct file_operations ftrace_set_event_fops = {
 };
 
 static const struct file_operations ftrace_enable_fops = {
-	.open = tracing_open_generic,
+	.open = tracing_open_generic_file,
 	.read = event_enable_read,
 	.write = event_enable_write,
+	.release = tracing_release_generic_file,
 	.llseek = default_llseek,
 };
 
