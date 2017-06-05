@@ -1259,8 +1259,6 @@ static inline void accumulate_nsecs_to_secs(struct timekeeper *tk)
 				timespec_sub(tk->wall_to_monotonic, ts));
 
 			__timekeeping_set_tai_offset(tk, tk->tai_offset - leap);
-
-			clock_was_set_delayed();
 		}
 	}
 }
@@ -1419,6 +1417,19 @@ static void update_wall_time(void)
 	write_seqcount_end(&timekeeper_seq);
 out:
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
+	if (clock_was_set) {
+		/*
+		 * XXX -  I'd rather we just call clock_was_set(), but
+		 * since we're currently holding the jiffies lock, calling
+		 * clock_was_set would trigger an ipi which would then grab
+		 * the jiffies lock and we'd deadlock. :(
+		 * The right solution should probably be droping
+		 * the jiffies lock before calling update_wall_time
+		 * but that requires some rework of the tick sched
+		 * code.
+		 */
+		clock_was_set_delayed();
+	}
 }
 
 /**
@@ -1677,10 +1688,12 @@ int do_adjtimex(struct timex *txc)
 
 	if (tai != orig_tai) {
 		__timekeeping_set_tai_offset(tk, tai);
-		clock_was_set_delayed();
 	}
 	write_seqcount_end(&timekeeper_seq);
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
+
+	if (tai != orig_tai)
+		clock_was_set();
 
 	ntp_notify_cmos_timer();
 
