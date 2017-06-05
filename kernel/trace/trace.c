@@ -3037,6 +3037,23 @@ int tracing_open_generic_tr(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+int tracing_open_generic_tc(struct inode *inode, struct file *filp)
+{
+	struct trace_cpu *tc = inode->i_private;
+	struct trace_array *tr = tc->tr;
+
+	if (tracing_disabled)
+		return -ENODEV;
+
+	if (trace_array_get(tr) < 0)
+		return -ENODEV;
+
+	filp->private_data = inode->i_private;
+
+	return 0;
+	
+}
+
 static int tracing_release(struct inode *inode, struct file *file)
 {
 	struct trace_array *tr = inode->i_private;
@@ -3081,6 +3098,15 @@ static int tracing_release(struct inode *inode, struct file *file)
 static int tracing_release_generic_tr(struct inode *inode, struct file *file)
 {
 	struct trace_array *tr = inode->i_private;
+
+	trace_array_put(tr);
+	return 0;
+}
+
+static int tracing_release_generic_tc(struct inode *inode, struct file *file)
+{
+	struct trace_cpu *tc = inode->i_private;
+	struct trace_array *tr = tc->tr;
 
 	trace_array_put(tr);
 	return 0;
@@ -4096,7 +4122,8 @@ fail:
 static int tracing_release_pipe(struct inode *inode, struct file *file)
 {
 	struct trace_iterator *iter = file->private_data;
-	struct trace_array *tr = inode->i_private;
+	struct trace_cpu *tc = inode->i_private;
+	struct trace_array *tr = tc->tr;
 
 	mutex_lock(&trace_types_lock);
 
@@ -4960,11 +4987,11 @@ static const struct file_operations tracing_pipe_fops = {
 };
 
 static const struct file_operations tracing_entries_fops = {
-	.open		= tracing_open_generic_tr,
+	.open		= tracing_open_generic_tc,
 	.read		= tracing_entries_read,
 	.write		= tracing_entries_write,
 	.llseek		= generic_file_llseek,
-	.release	= tracing_release_generic_tr,
+	.release	= tracing_release_generic_tc,
 };
 
 static const struct file_operations tracing_total_entries_fops = {
