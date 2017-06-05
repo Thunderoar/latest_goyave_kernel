@@ -2915,9 +2915,9 @@ static const struct seq_operations tracer_seq_ops = {
 };
 
 static struct trace_iterator *
-__tracing_open(struct inode *inode, struct file *file, bool snapshot)
+__tracing_open(struct trace_array *tr, struct trace_cpu *tc,
+	       struct inode *inode, struct file *file, bool snapshot)
 {
-	struct trace_array *tr = inode->i_private;
 	struct trace_iterator *iter;
 	int cpu;
 
@@ -3061,7 +3061,11 @@ static int tracing_release(struct inode *inode, struct file *file)
 	struct trace_iterator *iter;
 	int cpu;
 
+	/* Writes do not use seq_file, need to grab tr from inode */
 	if (!(file->f_mode & FMODE_READ)) {
+		struct trace_cpu *tc = inode->i_private;
+
+		trace_array_put(tc->tr);
 		trace_array_put(tr);
 		return 0;
 	}
@@ -3069,6 +3073,7 @@ static int tracing_release(struct inode *inode, struct file *file)
 	/* Writes do not use seq_file */
 	iter = m->private;
 	mutex_lock(&trace_types_lock);
+	trace_array_put(tr);
 
 	for_each_tracing_cpu(cpu) {
 		if (iter->buffer_iter[cpu])
@@ -3123,7 +3128,8 @@ static int tracing_single_release_tr(struct inode *inode, struct file *file)
 
 static int tracing_open(struct inode *inode, struct file *file)
 {
-	struct trace_array *tr = inode->i_private;
+	struct trace_cpu *tc = inode->i_private;
+	struct trace_array *tr = tc->tr;
 	struct trace_iterator *iter;
 	int ret = 0;
 
@@ -3141,7 +3147,7 @@ static int tracing_open(struct inode *inode, struct file *file)
 	}
 
 	if (file->f_mode & FMODE_READ) {
-		iter = __tracing_open(inode, file, false);
+		iter = __tracing_open(tr, tc, inode, file, false);
 		if (IS_ERR(iter))
 			ret = PTR_ERR(iter);
 		else if (trace_flags & TRACE_ITER_LATENCY_FMT)
@@ -4801,7 +4807,8 @@ struct ftrace_buffer_info {
 #ifdef CONFIG_TRACER_SNAPSHOT
 static int tracing_snapshot_open(struct inode *inode, struct file *file)
 {
-	struct trace_array *tr = inode->i_private;
+	struct trace_array *tc = inode->i_private;
+	struct trace_array *tr = tc->tr;
 	struct trace_iterator *iter;
 	struct seq_file *m;
 	int ret = 0;
@@ -4810,7 +4817,7 @@ static int tracing_snapshot_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 
 	if (file->f_mode & FMODE_READ) {
-		iter = __tracing_open(inode, file, true);
+		iter = __tracing_open(tr, tc, inode, file, true);
 		if (IS_ERR(iter))
 			ret = PTR_ERR(iter);
 	} else {
