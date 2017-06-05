@@ -2915,9 +2915,9 @@ static const struct seq_operations tracer_seq_ops = {
 };
 
 static struct trace_iterator *
-__tracing_open(struct trace_array *tr, struct trace_cpu *tc,
-	       struct inode *inode, struct file *file, bool snapshot)
+__tracing_open(struct inode *inode, struct file *file, bool snapshot)
 {
+	struct trace_array *tr = inode->i_private;
 	struct trace_iterator *iter;
 	int cpu;
 
@@ -3037,23 +3037,6 @@ int tracing_open_generic_tr(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-int tracing_open_generic_tc(struct inode *inode, struct file *filp)
-{
-	struct trace_cpu *tc = inode->i_private;
-	struct trace_array *tr = tc->tr;
-
-	if (tracing_disabled)
-		return -ENODEV;
-
-	if (trace_array_get(tr) < 0)
-		return -ENODEV;
-
-	filp->private_data = inode->i_private;
-
-	return 0;
-	
-}
-
 static int tracing_release(struct inode *inode, struct file *file)
 {
 	struct trace_array *tr = inode->i_private;
@@ -3061,11 +3044,7 @@ static int tracing_release(struct inode *inode, struct file *file)
 	struct trace_iterator *iter;
 	int cpu;
 
-	/* Writes do not use seq_file, need to grab tr from inode */
 	if (!(file->f_mode & FMODE_READ)) {
-		struct trace_cpu *tc = inode->i_private;
-
-		trace_array_put(tc->tr);
 		trace_array_put(tr);
 		return 0;
 	}
@@ -3073,7 +3052,6 @@ static int tracing_release(struct inode *inode, struct file *file)
 	/* Writes do not use seq_file */
 	iter = m->private;
 	mutex_lock(&trace_types_lock);
-	trace_array_put(tr);
 
 	for_each_tracing_cpu(cpu) {
 		if (iter->buffer_iter[cpu])
@@ -3108,15 +3086,6 @@ static int tracing_release_generic_tr(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int tracing_release_generic_tc(struct inode *inode, struct file *file)
-{
-	struct trace_cpu *tc = inode->i_private;
-	struct trace_array *tr = tc->tr;
-
-	trace_array_put(tr);
-	return 0;
-}
-
 static int tracing_single_release_tr(struct inode *inode, struct file *file)
 {
 	struct trace_array *tr = inode->i_private;
@@ -3128,8 +3097,7 @@ static int tracing_single_release_tr(struct inode *inode, struct file *file)
 
 static int tracing_open(struct inode *inode, struct file *file)
 {
-	struct trace_cpu *tc = inode->i_private;
-	struct trace_array *tr = tc->tr;
+	struct trace_array *tr = inode->i_private;
 	struct trace_iterator *iter;
 	int ret = 0;
 
@@ -3147,7 +3115,7 @@ static int tracing_open(struct inode *inode, struct file *file)
 	}
 
 	if (file->f_mode & FMODE_READ) {
-		iter = __tracing_open(tr, tc, inode, file, false);
+		iter = __tracing_open(inode, file, false);
 		if (IS_ERR(iter))
 			ret = PTR_ERR(iter);
 		else if (trace_flags & TRACE_ITER_LATENCY_FMT)
@@ -4128,8 +4096,7 @@ fail:
 static int tracing_release_pipe(struct inode *inode, struct file *file)
 {
 	struct trace_iterator *iter = file->private_data;
-	struct trace_cpu *tc = inode->i_private;
-	struct trace_array *tr = tc->tr;
+	struct trace_array *tr = inode->i_private;
 
 	mutex_lock(&trace_types_lock);
 
@@ -4807,8 +4774,7 @@ struct ftrace_buffer_info {
 #ifdef CONFIG_TRACER_SNAPSHOT
 static int tracing_snapshot_open(struct inode *inode, struct file *file)
 {
-	struct trace_array *tc = inode->i_private;
-	struct trace_array *tr = tc->tr;
+	struct trace_array *tr = inode->i_private;
 	struct trace_iterator *iter;
 	struct seq_file *m;
 	int ret = 0;
@@ -4817,7 +4783,7 @@ static int tracing_snapshot_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 
 	if (file->f_mode & FMODE_READ) {
-		iter = __tracing_open(tr, tc, inode, file, true);
+		iter = __tracing_open(inode, file, true);
 		if (IS_ERR(iter))
 			ret = PTR_ERR(iter);
 	} else {
@@ -4994,11 +4960,11 @@ static const struct file_operations tracing_pipe_fops = {
 };
 
 static const struct file_operations tracing_entries_fops = {
-	.open		= tracing_open_generic_tc,
+	.open		= tracing_open_generic_tr,
 	.read		= tracing_entries_read,
 	.write		= tracing_entries_write,
 	.llseek		= generic_file_llseek,
-	.release	= tracing_release_generic_tc,
+	.release	= tracing_release_generic_tr,
 };
 
 static const struct file_operations tracing_total_entries_fops = {

@@ -141,6 +141,7 @@ unsigned long global_dirty_limit;
  *
  */
 static struct fprop_global writeout_completions;
+static struct prop_descriptor vm_completions;
 
 static void writeout_period(unsigned long t);
 /* Timer for aging of writeout_completions */
@@ -205,18 +206,6 @@ static unsigned long highmem_dirtyable_memory(unsigned long total)
 		     zone_reclaimable_pages(z) - z->dirty_balance_reserve;
 	}
 	/*
-	 * Unreclaimable memory (kernel memory or anonymous memory
-	 * without swap) can bring down the dirtyable pages below
-	 * the zone's dirty balance reserve and the above calculation
-	 * will underflow.  However we still want to add in nodes
-	 * which are below threshold (negative values) to get a more
-	 * accurate calculation but make sure that the total never
-	 * underflows.
-	 */
-	if ((long)x < 0)
-		x = 0;
-
-	/*
 	 * Make sure that the number of highmem pages is never larger
 	 * than the number of the total dirtyable memory. This can only
 	 * occur in very strange VM situations but we want to make sure
@@ -234,18 +223,15 @@ static unsigned long highmem_dirtyable_memory(unsigned long total)
  * Returns the global number of pages potentially available for dirty
  * page cache.  This is the base value for the global dirty limits.
  */
-static unsigned long global_dirtyable_memory(void)
+unsigned long global_dirtyable_memory(void)
 {
 	unsigned long x;
 
-	x = global_page_state(NR_FREE_PAGES) + global_reclaimable_pages();
-	x -= min(x, dirty_balance_reserve);
+	x = global_page_state(NR_FREE_PAGES) + global_reclaimable_pages() -
+	    dirty_balance_reserve;
 
 	if (!vm_highmem_is_dirtyable)
 		x -= highmem_dirtyable_memory(x);
-
-	/* Subtract min_free_kbytes */
-	x -= min_t(unsigned long, x, min_free_kbytes >> (PAGE_SHIFT - 10));
 
 	return x + 1;	/* Ensure that we never return 0 */
 }
@@ -317,12 +303,9 @@ static unsigned long zone_dirtyable_memory(struct zone *zone)
 	 * highmem zone can hold its share of dirty pages, so we don't
 	 * care about vm_highmem_is_dirtyable here.
 	 */
-	unsigned long nr_pages = zone_page_state(zone, NR_FREE_PAGES) +
-		zone_reclaimable_pages(zone);
-
-	/* don't allow this to underflow */
-	nr_pages -= min(nr_pages, zone->dirty_balance_reserve);
-	return nr_pages;
+	return zone_page_state(zone, NR_FREE_PAGES) +
+	       zone_reclaimable_pages(zone) -
+	       zone->dirty_balance_reserve;
 }
 
 /**
@@ -364,6 +347,34 @@ bool zone_dirty_ok(struct zone *zone)
 	return zone_page_state(zone, NR_FILE_DIRTY) +
 	       zone_page_state(zone, NR_UNSTABLE_NFS) +
 	       zone_page_state(zone, NR_WRITEBACK) <= limit;
+}
+
+/*
+ * couple the period to the dirty_ratio:
+ *
+ *   period/2 ~ roundup_pow_of_two(dirty limit)
+ */
+static int calc_period_shift(void)
+{
+	unsigned long dirty_total;
+
+	if (vm_dirty_bytes)
+		dirty_total = vm_dirty_bytes / PAGE_SIZE;
+	else
+		dirty_total = (vm_dirty_ratio * global_dirtyable_memory()) /
+				100;
+	return 2 + ilog2(dirty_total - 1);
+}
+
+/*
+ * update the period when the dirty threshold changes.
+ */
+static void update_completion_period(void)
+{
+	int shift = calc_period_shift();
+	prop_change_shift(&vm_completions, shift);
+
+	writeback_set_ratelimit();
 }
 
 int dirty_background_ratio_handler(struct ctl_table *table, int write,

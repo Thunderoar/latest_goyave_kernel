@@ -72,7 +72,7 @@ static void tk_set_wall_to_mono(struct timekeeper *tk, struct timespec wtm)
 	tk->wall_to_monotonic = wtm;
 	set_normalized_timespec(&tmp, -wtm.tv_sec, -wtm.tv_nsec);
 	tk->offs_real = timespec_to_ktime(tmp);
-	tk->offs_tai = ktime_add(tk->offs_real, ktime_set(tk->tai_offset, 0));
+	tk->offs_tai = ktime_sub(tk->offs_real, ktime_set(tk->tai_offset, 0));
 }
 
 static void tk_set_sleep_time(struct timekeeper *tk, struct timespec t)
@@ -590,7 +590,7 @@ s32 timekeeping_get_tai_offset(void)
 static void __timekeeping_set_tai_offset(struct timekeeper *tk, s32 tai_offset)
 {
 	tk->tai_offset = tai_offset;
-	tk->offs_tai = ktime_add(tk->offs_real, ktime_set(tai_offset, 0));
+	tk->offs_tai = ktime_sub(tk->offs_real, ktime_set(tai_offset, 0));
 }
 
 /**
@@ -605,7 +605,6 @@ void timekeeping_set_tai_offset(s32 tai_offset)
 	raw_spin_lock_irqsave(&timekeeper_lock, flags);
 	write_seqcount_begin(&timekeeper_seq);
 	__timekeeping_set_tai_offset(tk, tai_offset);
-	timekeeping_update(tk, TK_MIRROR | TK_CLOCK_WAS_SET);
 	write_seqcount_end(&timekeeper_seq);
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
 	clock_was_set();
@@ -1008,8 +1007,6 @@ static int timekeeping_suspend(void)
 		timekeeping_suspend_time =
 			timespec_add(timekeeping_suspend_time, delta_delta);
 	}
-
-	timekeeping_update(tk, TK_MIRROR);
 	write_seqcount_end(&timekeeper_seq);
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
 
@@ -1262,6 +1259,8 @@ static inline void accumulate_nsecs_to_secs(struct timekeeper *tk)
 				timespec_sub(tk->wall_to_monotonic, ts));
 
 			__timekeeping_set_tai_offset(tk, tk->tai_offset - leap);
+
+			clock_was_set_delayed();
 		}
 	}
 }
@@ -1420,19 +1419,6 @@ static void update_wall_time(void)
 	write_seqcount_end(&timekeeper_seq);
 out:
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
-	if (clock_was_set) {
-		/*
-		 * XXX -  I'd rather we just call clock_was_set(), but
-		 * since we're currently holding the jiffies lock, calling
-		 * clock_was_set would trigger an ipi which would then grab
-		 * the jiffies lock and we'd deadlock. :(
-		 * The right solution should probably be droping
-		 * the jiffies lock before calling update_wall_time
-		 * but that requires some rework of the tick sched
-		 * code.
-		 */
-		clock_was_set_delayed();
-	}
 }
 
 /**
@@ -1691,13 +1677,10 @@ int do_adjtimex(struct timex *txc)
 
 	if (tai != orig_tai) {
 		__timekeeping_set_tai_offset(tk, tai);
-		timekeeping_update(tk, TK_MIRROR | TK_CLOCK_WAS_SET);
+		clock_was_set_delayed();
 	}
 	write_seqcount_end(&timekeeper_seq);
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
-
-	if (tai != orig_tai)
-		clock_was_set();
 
 	ntp_notify_cmos_timer();
 
