@@ -71,7 +71,7 @@ u8* m_firmware_data;
 static bool ta_connected =0;
 
 #define ZINITIX_DEBUG				0
-#define TOUCH_BOOSTER			1
+#define TOUCH_BOOSTER			0
 
 #ifdef SUPPORTED_PALM_TOUCH
 #define TOUCH_POINT_MODE			2
@@ -79,7 +79,7 @@ static bool ta_connected =0;
 #define TOUCH_POINT_MODE			0
 #endif
 
-#define MAX_SUPPORTED_FINGER_NUM	5 /* max 10 */
+#define MAX_SUPPORTED_FINGER_NUM	10 /* max 10 */
 
 #ifdef SUPPORTED_TOUCH_KEY
 #ifdef NOT_SUPPORTED_TOUCH_DUMMY_KEY
