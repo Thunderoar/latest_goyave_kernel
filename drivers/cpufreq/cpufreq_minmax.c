@@ -107,14 +107,13 @@ static struct dbs_tuners dbs_tuners_ins = {
 
 static inline unsigned int get_cpu_idle_time(unsigned int cpu)
 {
-	unsigned int j;
 	unsigned int add_nice = 0, ret;
 
 	if (dbs_tuners_ins.ignore_nice)
-		add_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE];
+		add_nice = kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
 
-	ret = kcpustat_cpu(j).cpustat[CPUTIME_IDLE] +
-		kcpustat_cpu(j).cpustat[CPUTIME_IOWAIT] +
+	ret = kcpustat_cpu(cpu).cpustat[CPUTIME_IDLE] +
+		kcpustat_cpu(cpu).cpustat[CPUTIME_IOWAIT] +
 		add_nice;
 
 	return ret;
@@ -311,7 +310,7 @@ static void dbs_check_cpu(int cpu)
 {
 	unsigned int idle_ticks, up_idle_ticks, down_idle_ticks;
 	unsigned int tmp_idle_ticks, total_idle_ticks;
-	unsigned int freq_target;
+	//unsigned int freq_target;
 	unsigned int freq_down_sampling_rate;
 	struct cpu_dbs_info_s *this_dbs_info = &per_cpu(cpu_dbs_info, cpu);
 	struct cpufreq_policy *policy;
