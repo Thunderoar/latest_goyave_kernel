@@ -418,6 +418,11 @@ struct rq {
 #endif
 	int skip_clock_update;
 
+	/* time-based average load */
+	u64 nr_last_stamp;
+	unsigned int ave_nr_running;
+	seqcount_t ave_seqcnt;
+
 	/* capture load from *all* tasks on this cpu: */
 	struct load_weight load;
 	unsigned long nr_load_updates;
@@ -461,6 +466,7 @@ struct rq {
 
 	unsigned long cpu_power;
 
+	unsigned char idle_at_tick;
 	unsigned char idle_balance;
 	/* For active balancing */
 	int post_schedule;
@@ -511,6 +517,7 @@ struct rq {
 	unsigned int yld_count;
 
 	/* schedule() stats */
+	unsigned int sched_switch;
 	unsigned int sched_count;
 	unsigned int sched_goidle;
 

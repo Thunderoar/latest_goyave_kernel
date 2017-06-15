@@ -37,9 +37,9 @@
 
 #define DEF_FREQUENCY_UP_THRESHOLD			(50)
 #define DEF_FREQUENCY_DOWN_THRESHOLD		(15)
-#define FREQ_STEP_DOWN 						(160000)
-#define FREQ_SLEEP_MAX 						(320000)
-#define FREQ_AWAKE_MIN 						(480000)
+#define FREQ_STEP_DOWN 						(254000)
+#define FREQ_SLEEP_MAX 						(386000)
+#define FREQ_AWAKE_MIN 						(565000)
 #define FREQ_STEP_UP_SLEEP_PERCENT 			(20)
 
 /*
@@ -109,14 +109,13 @@ static struct dbs_tuners dbs_tuners_ins = {
 
 static inline unsigned int get_cpu_idle_time(unsigned int cpu)
 {
-	unsigned int j;
 	unsigned int add_nice = 0, ret;
 
 	if (dbs_tuners_ins.ignore_nice)
-		add_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE];
+		add_nice = kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
 
-	ret = kcpustat_cpu(j).cpustat[CPUTIME_IDLE] +
-		kcpustat_cpu(j).cpustat[CPUTIME_IOWAIT] +
+	ret = kcpustat_cpu(cpu).cpustat[CPUTIME_IDLE] +
+		kcpustat_cpu(cpu).cpustat[CPUTIME_IOWAIT] +
 		add_nice;
 
 	return ret;
