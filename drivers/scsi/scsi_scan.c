@@ -402,7 +402,7 @@ static void scsi_target_reap_ref_put(struct scsi_target *starget)
 	kref_put(&starget->reap_ref, scsi_target_reap_ref_release);
 }
 
-+/**
+/**
  * scsi_alloc_target - allocate a new or find an existing target
  * @parent:	parent of the target (need not be a scsi host)
  * @channel:	target channel number (zero if no channels)

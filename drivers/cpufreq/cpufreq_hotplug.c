@@ -170,8 +170,8 @@ static struct dbs_tuners {
     .cpu_down_differential = DEF_CPU_DOWN_DIFFERENTIAL,
     .cpu_up_avg_times = CPU_UP_AVG_TIMES,
     .cpu_down_avg_times = CPU_DOWN_AVG_TIMES,
-    .cpu_num_limit = 1,
-    .cpu_num_base = 1,
+    .cpu_num_limit = 4,
+    .cpu_num_base = 2,
     .cpu_hotplug_disable = 1,
 };
 
