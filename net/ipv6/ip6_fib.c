@@ -1418,13 +1418,14 @@ static int fib6_walk_continue(struct fib6_walker_t *w)
 
 				if (w->skip) {
 					w->skip--;
-					continue;
+					goto skip;
 				}
 
 				err = w->func(w);
 				if (err)
 					return err;
 
+skip:
 				w->count++;
 				continue;
 			}
