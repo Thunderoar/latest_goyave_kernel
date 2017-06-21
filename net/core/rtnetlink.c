@@ -714,7 +714,8 @@ static inline int rtnl_vfinfo_size(const struct net_device *dev,
 		return 0;
 }
 
-static size_t rtnl_port_size(const struct net_device *dev)
+static size_t rtnl_port_size(const struct net_device *dev,
+			     u32 ext_filter_mask)
 {
 	size_t port_size = nla_total_size(4)		/* PORT_VF */
 		+ nla_total_size(PORT_PROFILE_MAX)	/* PORT_PROFILE */
@@ -730,7 +731,8 @@ static size_t rtnl_port_size(const struct net_device *dev)
 	size_t port_self_size = nla_total_size(sizeof(struct nlattr))
 		+ port_size;
 
-	if (!dev->netdev_ops->ndo_get_vf_port || !dev->dev.parent)
+	if (!dev->netdev_ops->ndo_get_vf_port || !dev->dev.parent ||
+	    !(ext_filter_mask & RTEXT_FILTER_VF))
 		return 0;
 	if (dev_num_vf(dev->dev.parent))
 		return port_self_size + vf_ports_size +
@@ -765,19 +767,21 @@ static noinline size_t if_nlmsg_size(const struct net_device *dev,
 	       + nla_total_size(ext_filter_mask
 			        & RTEXT_FILTER_VF ? 4 : 0) /* IFLA_NUM_VF */
 	       + rtnl_vfinfo_size(dev, ext_filter_mask) /* IFLA_VFINFO_LIST */
-	       + rtnl_port_size(dev) /* IFLA_VF_PORTS + IFLA_PORT_SELF */
+	       + rtnl_port_size(dev, ext_filter_mask) /* IFLA_VF_PORTS + IFLA_PORT_SELF */
 	       + rtnl_link_get_size(dev) /* IFLA_LINKINFO */
 	       + rtnl_link_get_af_size(dev); /* IFLA_AF_SPEC */
 }
 
-static int rtnl_vf_ports_fill(struct sk_buff *skb, struct net_device *dev)
+static int rtnl_port_fill(struct sk_buff *skb, struct net_device *dev,
+			  u32 ext_filter_mask)
 {
 	struct nlattr *vf_ports;
 	struct nlattr *vf_port;
 	int vf;
 	int err;
 
-	vf_ports = nla_nest_start(skb, IFLA_VF_PORTS);
+	if (!dev->netdev_ops->ndo_get_vf_port || !dev->dev.parent ||
+	    !(ext_filter_mask & RTEXT_FILTER_VF))
 	if (!vf_ports)
 		return -EMSGSIZE;
 
@@ -985,7 +989,7 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 		nla_nest_end(skb, vfinfo);
 	}
 
-	if (rtnl_port_fill(skb, dev))
+	if (rtnl_port_fill(skb, dev, ext_filter_mask))
 		goto nla_put_failure;
 
 	if (dev->rtnl_link_ops) {
