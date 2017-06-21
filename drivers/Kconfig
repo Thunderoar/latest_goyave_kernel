@@ -1,5 +1,7 @@
 menu "Device Drivers"
 
+source "drivers/mali/Kconfig"
+
 source "drivers/base/Kconfig"
 
 source "drivers/battery/Kconfig"
