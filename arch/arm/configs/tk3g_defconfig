@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm 3.10.42-v3.3tk Kernel Configuration
+# Linux/arm 3.10.41-v3.3tk Kernel Configuration
 #
 CONFIG_ARM=y
 CONFIG_ARM_HAS_SG_CHAIN=y
@@ -1148,17 +1148,6 @@ CONFIG_HAVE_BPF_JIT=y
 #
 # Device Drivers
 #
-CONFIG_MALI400=y
-# CONFIG_MALI450 is not set
-# CONFIG_MALI400_DEBUG is not set
-CONFIG_MALI400_PROFILING=y
-# CONFIG_MALI400_INTERNAL_PROFILING is not set
-# CONFIG_MALI400_UMP is not set
-# CONFIG_MALI400_POWER_PERFORMANCE_POLICY is not set
-CONFIG_MALI_DMA_BUF_MAP_ON_ATTACH=y
-CONFIG_MALI_SHARED_INTERRUPTS=y
-# CONFIG_MALI_PMU_PARALLEL_POWER_UP is not set
-CONFIG_MALI_QUIET=y
 
 #
 # Generic Driver Options
