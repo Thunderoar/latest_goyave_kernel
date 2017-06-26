@@ -149,9 +149,8 @@ static int soc_compr_free(struct snd_compr_stream *cstream)
 					SND_SOC_DAPM_STREAM_STOP);
 		} else {
 			rtd->pop_wait = 1;
-			queue_delayed_work(system_power_efficient_wq,
-					   &rtd->delayed_work,
-					   msecs_to_jiffies(rtd->pmdown_time));
+			schedule_delayed_work(&rtd->delayed_work,
+				msecs_to_jiffies(rtd->pmdown_time));
 		}
 	} else {
 		/* capture streams can be powered down now */
@@ -171,17 +170,6 @@ static int soc_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 	struct snd_soc_platform *platform = rtd->platform;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret = 0;
-
-	/* for partial drain and drain cmd, don't acquire lock while invoking DSP.
-	 * These calls will be blocked till these operation can complete which
-	 * will be a while. And during that time, app can invoke STOP, PAUSE etc
-	 */
-	if (cmd == SND_COMPR_TRIGGER_PARTIAL_DRAIN ||
-				cmd == SND_COMPR_TRIGGER_DRAIN) {
-		if (platform->driver->compr_ops &&
-					platform->driver->compr_ops->trigger)
-			return platform->driver->compr_ops->trigger(cstream, cmd);
-	}
 
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
@@ -440,14 +428,6 @@ int soc_new_compress(struct snd_soc_pcm_runtime *rtd, int num)
 
 	rtd->compr = compr;
 	compr->private_data = rtd;
-
-	if (platform->driver->pcm_new) {
-		ret = platform->driver->pcm_new(rtd);
-		if (ret < 0) {
-			pr_err("asoc: compress pcm constructor failed\n");
-			goto compr_err;
-		}
-	}
 
 	printk(KERN_INFO "compress asoc: %s <-> %s mapping ok\n", codec_dai->name,
 		cpu_dai->name);
