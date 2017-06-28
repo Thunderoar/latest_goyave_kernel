@@ -234,7 +234,12 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 				//Release
 				input_mt_slot(info->input_dev, id);
 				input_mt_report_slot_state(info->input_dev, MT_TOOL_FINGER, false);
-				input_sync(info->input_dev);	
+				input_sync(info->input_dev);
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
+				dev_info(&client->dev, "%s - Touch : ID[%d] X[%d], Y[%d] Release\n", __func__, id, x,y);
+#else
+				dev_info(&client->dev, "%s - Touch : ID[%d] Release\n", __func__, id);
+#endif	
 				if (info->finger_state[id])
 				{
 					info->finger_state[id] = false;
@@ -244,7 +249,9 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 					{
 						cpufreq_limit_put(info->min_handle);
 						info->min_handle = NULL;
+#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 						_store_cpu_num_min_limit(1);
+#endif
 						dev_info(&client->dev, "cpu freq off\n");
 					}
 #endif
@@ -259,6 +266,11 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 			input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 			input_report_abs(info->input_dev, ABS_MT_PRESSURE, pressure);
 			input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, touch_major);
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
+			dev_info(&client->dev, "%s - Touch : ID[%d] X[%d] Y[%d] P[%d] M[%d] \n", __func__, id, x, y, pressure, touch_major);			
+#else
+			dev_info(&client->dev, "%s - Touch : ID[%d] Press\n", __func__, id);
+#endif
 			if (!info->finger_state[id])
 			{	
 				info->finger_state[id] = true;
@@ -272,7 +284,9 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 						info->touch_cpufreq_lock, PTR_ERR(info->min_handle));
 						info->min_handle = NULL;
 					}
+#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 					_store_cpu_num_min_limit(2);
+#endif
 					dev_info(&client->dev,"cpu freq on\n");
 				}
 				info->finger_cnt++;
