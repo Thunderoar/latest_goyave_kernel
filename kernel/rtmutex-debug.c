@@ -132,6 +132,12 @@ void debug_rt_mutex_print_deadlock(struct rt_mutex_waiter *waiter)
 	       "Please report this trace. ]\n\n");
 }
 
+
+static inline void rt_mutex_print_deadlock(struct rt_mutex_waiter *w)
+{
+	debug_rt_mutex_print_deadlock(w);
+}
+
 void debug_rt_mutex_lock(struct rt_mutex *lock)
 {
 }
