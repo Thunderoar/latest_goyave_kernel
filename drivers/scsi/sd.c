@@ -2946,6 +2946,7 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
 		gd->flags |= GENHD_FL_REMOVABLE;
 		gd->events |= DISK_EVENT_MEDIA_CHANGE;
 	}
+	blk_pm_runtime_init(sdp->request_queue, dev);
 #ifdef CONFIG_USB_STORAGE_DETECT
 	if (sdp->host->by_usb)
 		gd->flags |= GENHD_FL_IF_USB;
@@ -2963,7 +2964,6 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
 
 	sd_printk(KERN_NOTICE, sdkp, "Attached SCSI %sdisk\n",
 		  sdp->removable ? "removable " : "");
-	blk_pm_runtime_init(sdp->request_queue, dev);
 	scsi_autopm_put_device(sdp);
 	put_device(&sdkp->dev);
 #ifdef CONFIG_USB_STORAGE_DETECT
