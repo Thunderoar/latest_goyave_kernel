@@ -8,6 +8,8 @@ source "drivers/bus/Kconfig"
 
 source "drivers/connector/Kconfig"
 
+source "drivers/gpu/mali400/Kconfig"
+
 source "drivers/mtd/Kconfig"
 
 source "drivers/of/Kconfig"
