@@ -57,6 +57,7 @@ static DEFINE_SPINLOCK(vnswap_original_bio_lock);
 
 void vnswap_init_disksize(u64 disksize)
 {
+	int i;
 	vnswap_device->disksize = PAGE_ALIGN(disksize);
 	if ((vnswap_device->disksize/PAGE_SIZE > MAX_SWAP_AREA_SIZE_PAGES) ||
 		!vnswap_device->disksize) {
@@ -69,6 +70,16 @@ void vnswap_init_disksize(u64 disksize)
 	set_capacity(vnswap_device->disk,
 		vnswap_device->disksize >> SECTOR_SHIFT);
 
+	vnswap_table = vmalloc((vnswap_device->disksize/PAGE_SIZE) *
+					sizeof(int));
+	if (vnswap_table == NULL) {
+		pr_err("%s %d: alloc vnswap_table is failed.\n",
+				__func__, __LINE__);
+		vnswap_device->init_success = VNSWAP_INIT_DISKSIZE_FAIL;
+		return;
+	}
+	for (i = 0; i < vnswap_device->disksize/PAGE_SIZE; i++)
+		vnswap_table[i] = -1;
 	vnswap_device->init_success = VNSWAP_INIT_DISKSIZE_SUCCESS;
 }
 
@@ -124,18 +135,6 @@ int vnswap_init_backing_storage(void)
 				__func__, __LINE__,
 				ret, vnswap_device->backing_storage_filename);
 	}
-
-	/* initialize vnswap_table */
-	vnswap_table = vmalloc((vnswap_device->disksize / PAGE_SIZE) *
-				sizeof(int));
-	if (vnswap_table == NULL) {
-		pr_err("%s %d: alloc vnswap_table failed\n",
-			__func__, __LINE__);
-		ret = -ENOMEM;
-		goto error;
-	}
-	for (i = 0; i < vnswap_device->disksize / PAGE_SIZE; i++)
-		vnswap_table[i] = -1;
 
 	mapping = backing_storage_file->f_mapping;
 	inode = mapping->host;
@@ -914,7 +913,7 @@ void vnswap_slot_free_notify(struct block_device *bdev, unsigned long index)
 	vnswap = bdev->bd_disk->private_data;
 
 	spin_lock(&vnswap_table_lock);
-	nand_offset = vnswap_table ? vnswap_table[index] : -1;
+	nand_offset = vnswap_table[index];
 
 	/* This index is not mapped to vnswap and is mapped to zswap */
 	if (nand_offset == -1) {

@@ -71,7 +71,15 @@ u8* m_firmware_data;
 static bool ta_connected =0;
 
 #define ZINITIX_DEBUG				0
-#define TOUCH_BOOSTER			0
+#define TOUCH_BOOSTER			1
+
+#if TOUCH_BOOSTER
+#include <linux/cpufreq.h>
+#include <linux/cpufreq_limit.h>
+extern int _store_cpu_num_min_limit(unsigned int input);
+struct cpufreq_limit_handle *min_handle = NULL;
+static const unsigned long touch_cpufreq_lock = 1200000;
+#endif
 
 #ifdef SUPPORTED_PALM_TOUCH
 #define TOUCH_POINT_MODE			2
@@ -79,7 +87,7 @@ static bool ta_connected =0;
 #define TOUCH_POINT_MODE			0
 #endif
 
-#define MAX_SUPPORTED_FINGER_NUM	10 /* max 10 */
+#define MAX_SUPPORTED_FINGER_NUM	5 /* max 10 */
 
 #ifdef SUPPORTED_TOUCH_KEY
 #ifdef NOT_SUPPORTED_TOUCH_DUMMY_KEY
@@ -607,6 +615,9 @@ struct bt532_ts_info {
 	s16							vdiff_min_val;
 #ifdef SUPPORTED_USE_DUAL_FW
 	u8							tsp_type;
+#endif
+#if TOUCH_BOOSTER
+	u8							finger_cnt;
 #endif
 };
 /* Dummy touchkey code */
@@ -2244,6 +2255,20 @@ static irqreturn_t bt532_touch_work(int irq, void *data)
 			info->touch_info.coord[i].y = y;
 			if (zinitix_bit_test(sub_status, SUB_BIT_DOWN))
 			{
+#if TOUCH_BOOSTER
+				if(!min_handle)
+				{
+					min_handle = cpufreq_limit_min_freq(touch_cpufreq_lock, "TSP");
+					if (IS_ERR(min_handle)) {
+						printk(KERN_ERR "[TSP] cannot get cpufreq_min lock %lu(%ld)\n",
+						touch_cpufreq_lock, PTR_ERR(min_handle));
+						min_handle = NULL;
+					}
+					_store_cpu_num_min_limit(2);
+					dev_info(&client->dev,"cpu freq on\n");
+				}
+				info->finger_cnt++;
+#endif
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 				dev_info(&client->dev, "Finger [%02d] x = %d, y = %d,"
 						" w = %d\n", i, x, y, w);
@@ -2294,6 +2319,16 @@ static irqreturn_t bt532_touch_work(int irq, void *data)
 			input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 		} else if (zinitix_bit_test(sub_status, SUB_BIT_UP)||
 			zinitix_bit_test(prev_sub_status, SUB_BIT_EXIST)) {
+#if TOUCH_BOOSTER
+			info->finger_cnt--;
+			if(!info->finger_cnt)
+			{
+				cpufreq_limit_put(min_handle);
+				min_handle = NULL;
+				_store_cpu_num_min_limit(1);
+				dev_info(&client->dev, "cpu freq off\n");
+			}
+#endif
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 			dev_info(&client->dev, "Finger [%02d] up\n", i);
 #else
@@ -2424,6 +2459,20 @@ static void bt532_ts_early_suspend(struct early_suspend *h)
 	}
 #else
 	bt532_power_control(info, POWER_OFF);
+#endif
+#if TOUCH_BOOSTER
+	if(min_handle)
+	{
+		dev_err(&info->client->dev,"[TSP] %s %d:: OOPs, Cpu was not in Normal Freq..\n", __func__, __LINE__);
+
+		if (cpufreq_limit_put(min_handle) < 0) {
+			dev_err(&info->client->dev, "[TSP] Error in scaling down cpu frequency\n");
+		}
+
+		min_handle = NULL;
+		info->finger_cnt = 0;
+		dev_info(&info->client->dev,"cpu freq off\n");
+	}
 #endif
 	zinitix_printk("early suspend--\n");
 	up(&info->work_lock);
@@ -4867,6 +4916,9 @@ static int bt532_ts_probe(struct i2c_client *client,
 		info->irq, pdata->gpio_int);
 
 	info->work_state = NOTHING;
+#if TOUCH_BOOSTER
+	info->finger_cnt = 0;
+#endif
 	sema_init(&info->work_lock, 1);
 
 #if ESD_TIMER_INTERVAL

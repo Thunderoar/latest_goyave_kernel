@@ -8,8 +8,7 @@
 
 
 */
-
-#include "sim_slot.h"
+#include <sim_slot.h>
 
 #ifndef SIM_SLOT_PIN
 	#error SIM_SLOT_PIN should be have a value. but not defined.

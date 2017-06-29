@@ -13,7 +13,6 @@
 #include <linux/if_pppox.h>
 #include <linux/ppp_defs.h>
 #include <net/flow_keys.h>
-#include <net/ip_vs.h>
 
 /* copy saddr & daddr, possibly using 64bit load/store
  * Equivalent to :	flow->src = iph->saddr;
@@ -57,6 +56,8 @@ ip:
 		struct ipv6hdr _iph;
 ipv6:
 		iph = skb_header_pointer(skb, nhoff, sizeof(_iph), &_iph);
+		if (!iph)
+			return false;
 
 		ip_proto = iph->nexthdr;
 		flow->src = (__force __be32)ipv6_addr_hash(&iph->saddr);

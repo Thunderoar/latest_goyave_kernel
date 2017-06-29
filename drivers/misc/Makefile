@@ -63,8 +63,6 @@ obj-y		+= sprd_2351/
 obj-$(CONFIG_CGX)		+= gpsip/
 obj-$(CONFIG_SR2351_FM)		+= fm_2351/
 
-obj-$(CONFIG_BLX)		+= blx.o
-obj-$(CONFIG_UID_CPUTIME) += uid_cputime.o 
 obj-y		+= sprd_otp/
 obj-y		+= sprd_vsp/
 obj-y		+= sprd_jpg/

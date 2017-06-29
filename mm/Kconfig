@@ -330,21 +330,17 @@ config OPTIMIZE_KSM
 	help
 	  Enable Optimize KSM
 
+config ADAPTIVE_KSM
+	bool "Enable Adaptive KSM"
+	depends on KSM
+	help
+	  Enable Adaptive KSM
+
 config KSM_ASSEMBLY_MEMCMP
 	bool "Assembly function used for memcmp in KSM"
 	depends on KSM
 	help
 	  Using memcmp function this uses NEON only for KSM
-
-config KSM_CHECK_PAGE
-	bool "Check page before scanning"
-	depends on KSM
-	default n
-	help
-	  If enabled, this will check and skip if page is already scanned in
-	  same KSM scan cycle.
-	  This is useful in situation where you have parent and
-	  child process marking same area for KSM scanning.
 
 config DEFAULT_MMAP_MIN_ADDR
         int "Low address space to protect from user allocation"

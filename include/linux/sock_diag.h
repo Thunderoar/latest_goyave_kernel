@@ -4,8 +4,6 @@
 #include <linux/user_namespace.h>
 #include <uapi/linux/sock_diag.h>
 
-#define SOCK_DESTROY_BACKPORT 21
-
 struct sk_buff;
 struct nlmsghdr;
 struct sock;
@@ -13,7 +11,6 @@ struct sock;
 struct sock_diag_handler {
 	__u8 family;
 	int (*dump)(struct sk_buff *skb, struct nlmsghdr *nlh);
-	int (*destroy)(struct sk_buff *skb, struct nlmsghdr *nlh);
 };
 
 int sock_diag_register(const struct sock_diag_handler *h);
@@ -26,8 +23,7 @@ int sock_diag_check_cookie(void *sk, __u32 *cookie);
 void sock_diag_save_cookie(void *sk, __u32 *cookie);
 
 int sock_diag_put_meminfo(struct sock *sk, struct sk_buff *skb, int attr);
-int sock_diag_put_filterinfo(struct sock *sk,
+int sock_diag_put_filterinfo(struct user_namespace *user_ns, struct sock *sk,
 			     struct sk_buff *skb, int attrtype);
-int sock_diag_destroy(struct sock *sk, int err);
 
 #endif

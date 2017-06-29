@@ -78,6 +78,7 @@ static unsigned int VSP_GLB_REG_BASE;
 #define SPRD_AONAPB_BASE_DT		SPRD_AONAPB_BASE
 #endif
 
+static unsigned long sprd_vsp_range_size = 0;
 #define VSP_INT_STS_OFF            0x0             //from VSP
 #define VSP_INT_MASK_OFF        0x04
 #define VSP_INT_CLR_OFF           0x08
@@ -397,6 +398,8 @@ static int vsp_parse_dt(struct device *dev)
     SPRD_VSP_BASE_DT = SPRD_VSP_BASE;//res.start;
     VSP_GLB_REG_BASE = SPRD_VSP_BASE_DT + 0x1000;
 
+    sprd_vsp_range_size = resource_size(&res);
+
     vsp_hw_dev.irq = irq_of_parse_and_map(np, 0);
     vsp_hw_dev.dev_np = np;
 
@@ -416,6 +419,10 @@ static int vsp_nocache_mmap(struct file *filp, struct vm_area_struct *vma)
     printk(KERN_INFO "@vsp[%s]\n", __FUNCTION__);
     vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
     vma->vm_pgoff     = (SPRD_VSP_PHYS>>PAGE_SHIFT);
+
+    if ((vma->vm_end - vma->vm_start) > sprd_vsp_range_size )
+	    return -EAGAIN;
+
     if (remap_pfn_range(vma,vma->vm_start, vma->vm_pgoff,
                         vma->vm_end - vma->vm_start, vma->vm_page_prot))
         return -EAGAIN;

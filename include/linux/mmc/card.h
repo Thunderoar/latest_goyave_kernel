@@ -13,7 +13,6 @@
 #include <linux/device.h>
 #include <linux/mmc/core.h>
 #include <linux/mod_devicetable.h>
-#include <linux/notifier.h>
 
 struct mmc_cid {
 	unsigned int		manfid;
@@ -310,8 +309,6 @@ struct mmc_card {
 
 	struct device_attribute	bkops_attr;	/* for enable/disable bkops mode */
 	u8			bkops_enable;	/* bkops mode on/off */
-	struct notifier_block        reboot_notify;
-	bool issue_long_pon;
 	spinlock_t		bkops_lock;	/* lock for bkops_enable filed */
 
 	struct dentry		*debugfs_root;
@@ -535,7 +532,6 @@ struct mmc_driver {
 	void (*remove)(struct mmc_card *);
 	int (*suspend)(struct mmc_card *);
 	int (*resume)(struct mmc_card *);
-	void (*shutdown)(struct mmc_card *);
 };
 
 extern int mmc_register_driver(struct mmc_driver *);
@@ -543,5 +539,5 @@ extern void mmc_unregister_driver(struct mmc_driver *);
 
 extern void mmc_fixup_device(struct mmc_card *card,
 			     const struct mmc_fixup *table);
-extern int mmc_send_long_pon(struct mmc_card *card);
+
 #endif /* LINUX_MMC_CARD_H */

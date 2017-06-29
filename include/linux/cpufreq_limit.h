@@ -57,15 +57,4 @@ struct cpufreq_limit_handle *cpufreq_limit_max_freq(unsigned long max_freq,
 	return NULL;
 }
 #endif
-
-#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-struct cpu_num_min_limit_handle {
-        struct list_head node;
-        unsigned int cpu_num_min_limit;
-        char label[20];
-};
-struct cpu_num_min_limit_handle *_store_cpu_num_min_limit(unsigned int input, char *label);
-int cpu_num_min_limit_put(struct cpu_num_min_limit_handle *handle);
-#endif
-
 #endif /* __LINUX_CPUFREQ_LIMIT_H__ */

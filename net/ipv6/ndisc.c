@@ -1198,6 +1198,8 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		 */
 		if (in6_dev->cnf.hop_limit < ra_msg->icmph.icmp6_hop_limit) {
 			in6_dev->cnf.hop_limit = ra_msg->icmph.icmp6_hop_limit;
+		} else {
+			ND_PRINTK(2, warn, "RA: Got route advertisement with lower hop_limit than current\n");
 		}
 		if (rt)
 			dst_metric_set(&rt->dst, RTAX_HOPLIMIT,

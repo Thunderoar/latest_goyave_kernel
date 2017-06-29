@@ -40,6 +40,3 @@ subdir-$(CONFIG_DTC)         += dtc
 
 # Let clean descend into subdirs
 subdir-	+= basic kconfig package selinux
-
-# generated files need to be cleaned explicitly
-clean-files	:= dtc-lexer.lex.c dtc-parser.tab.c dtc-parser.tab.h

@@ -48,7 +48,7 @@ SCI_CLK_ADD(clk_c_sel_i, 0, REG_PMU_APB_CPLL_REL_CFG, BIT(0),
 SCI_CLK_ADD(clk_wifi_sel_i, 0, REG_PMU_APB_WIFIPLL1_REL_CFG, BIT(0),
 	0, 0, 0, 0, 0);
 
-SCI_CLK_ADD(clk_tdpll, 384000000, REG_PMU_APB_CGM_AP_EN, BIT(3),
+SCI_CLK_ADD(clk_tdpll, 768000000, REG_PMU_APB_CGM_AP_EN, BIT(3),
 	0, 0, 0, 0,
 	1, &clk_td_sel_i);
 

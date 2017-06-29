@@ -250,7 +250,7 @@ static int sub_alloc(struct idr *idp, int *starting_id, struct idr_layer **pa,
 			id = (id | ((1 << (IDR_BITS * l)) - 1)) + 1;
 
 			/* if already at the top layer, we need to grow */
-			if (id > idr_max(idp->layers)) {
+			if (id >= 1 << (idp->layers * IDR_BITS)) {
 				*starting_id = id;
 				return -EAGAIN;
 			}
@@ -738,14 +738,7 @@ int idr_for_each(struct idr *idp,
 				break;
 		}
 
-		/*
-		 * Proceed to the next layer at the current level.  Unlike
-		 * idr_for_each(), @id isn't guaranteed to be aligned to
-		 * layer boundary at this point and adding 1 << n may
-		 * incorrectly skip IDs.  Make sure we jump to the
-		 * beginning of the next layer using round_up().
-		 */
-		id = round_up(id + 1, 1 << n);
+		id += 1 << n;
 		while (n < fls(id)) {
 			n += IDR_BITS;
 			p = *--paa;
@@ -836,10 +829,12 @@ void *idr_replace(struct idr *idp, void *ptr, int id)
 	if (!p)
 		return ERR_PTR(-EINVAL);
 
-	if (id > idr_max(p->layer + 1))
+	n = (p->layer+1) * IDR_BITS;
+
+	if (id >= (1 << n))
 		return ERR_PTR(-EINVAL);
 
-	n = p->layer * IDR_BITS;
+	n -= IDR_BITS;
 	while ((n > 0) && p) {
 		p = p->ary[(id >> n) & IDR_MASK];
 		n -= IDR_BITS;

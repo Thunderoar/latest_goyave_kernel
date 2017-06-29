@@ -209,7 +209,7 @@ extern void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
 extern int sched_group_set_shares(struct task_group *tg, unsigned long shares);
 
 extern void __refill_cfs_bandwidth_runtime(struct cfs_bandwidth *cfs_b);
-extern void __start_cfs_bandwidth(struct cfs_bandwidth *cfs_b, bool force);
+extern void __start_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
 extern void unthrottle_cfs_rq(struct cfs_rq *cfs_rq);
 
 extern void free_rt_sched_group(struct task_group *tg);
@@ -375,9 +375,6 @@ struct root_domain {
 	cpumask_var_t span;
 	cpumask_var_t online;
 
-	/* Indicate more than one runnable task for any CPU */
-	bool overload;
-
 	/*
 	 * The "RT overload" flag: it gets set if a CPU has more than
 	 * one runnable RT task.
@@ -417,11 +414,6 @@ struct rq {
 	unsigned long last_sched_tick;
 #endif
 	int skip_clock_update;
-
-	/* time-based average load */
-	u64 nr_last_stamp;
-	unsigned int ave_nr_running;
-	seqcount_t ave_seqcnt;
 
 	/* capture load from *all* tasks on this cpu: */
 	struct load_weight load;
@@ -466,7 +458,6 @@ struct rq {
 
 	unsigned long cpu_power;
 
-	unsigned char idle_at_tick;
 	unsigned char idle_balance;
 	/* For active balancing */
 	int post_schedule;
@@ -517,7 +508,6 @@ struct rq {
 	unsigned int yld_count;
 
 	/* schedule() stats */
-	unsigned int sched_switch;
 	unsigned int sched_count;
 	unsigned int sched_goidle;
 
@@ -840,10 +830,8 @@ static inline void finish_lock_switch(struct rq *rq, struct task_struct *prev)
 	 * After ->on_cpu is cleared, the task can be moved to a different CPU.
 	 * We must ensure this doesn't happen until the switch is completely
 	 * finished.
-	 *
-	 * Pairs with the control dependency and rmb in try_to_wake_up().
 	 */
-	smp_mb();
+	smp_wmb();
 	prev->on_cpu = 0;
 #endif
 #ifdef CONFIG_DEBUG_SPINLOCK
@@ -1084,31 +1072,24 @@ static inline u64 steal_ticks(u64 steal)
 }
 #endif
 
-static inline void add_nr_running(struct rq *rq, unsigned count)
+static inline void inc_nr_running(struct rq *rq)
 {
-	unsigned prev_nr = rq->nr_running;
-
-	rq->nr_running = prev_nr + count;
-
-	if (prev_nr < 2 && rq->nr_running >= 2) {
-#ifdef CONFIG_SMP
-		if (!rq->rd->overload)
-			rq->rd->overload = true;
-#endif
+	rq->nr_running++;
 
 #ifdef CONFIG_NO_HZ_FULL
+	if (rq->nr_running == 2) {
 		if (tick_nohz_full_cpu(rq->cpu)) {
 			/* Order rq->nr_running write against the IPI */
 			smp_wmb();
 			smp_send_reschedule(rq->cpu);
 		}
+       }
 #endif
-	}
 }
 
-static inline void sub_nr_running(struct rq *rq, unsigned count)
+static inline void dec_nr_running(struct rq *rq)
 {
-	rq->nr_running -= count;
+	rq->nr_running--;
 }
 
 static inline void rq_last_tick_reset(struct rq *rq)

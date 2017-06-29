@@ -34,7 +34,7 @@ static int save_return_addr(struct stackframe *frame, void *d)
 		return 0;
 	}
 }
-z
+
 void *return_address(unsigned int level)
 {
 	struct return_address_data data;

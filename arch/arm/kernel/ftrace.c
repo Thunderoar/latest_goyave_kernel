@@ -19,7 +19,6 @@
 #include <asm/cacheflush.h>
 #include <asm/opcodes.h>
 #include <asm/ftrace.h>
-#include <asm/mmu_writeable.h>
 
 #include "insn.h"
 
@@ -88,10 +87,6 @@ static int ftrace_modify_code(unsigned long pc, unsigned long old,
 			      unsigned long new, bool validate)
 {
 	unsigned long replaced;
-	unsigned long flags;
-
-        mem_text_writeable_spinlock(&flags);
-        mem_text_address_writeable(pc);
 
 	if (IS_ENABLED(CONFIG_THUMB2_KERNEL)) {
 		old = __opcode_to_mem_thumb32(old);
@@ -113,9 +108,6 @@ static int ftrace_modify_code(unsigned long pc, unsigned long old,
 		return -EPERM;
 
 	flush_icache_range(pc, pc + MCOUNT_INSN_SIZE);
-
-	mem_text_address_restore();
-	mem_text_writeable_spinunlock(&flags);
 
 	return 0;
 }

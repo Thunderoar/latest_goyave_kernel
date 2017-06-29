@@ -299,6 +299,13 @@ int in_group_p(kgid_t grp)
 	const struct cred *cred = current_cred();
 	int retval = 1;
 
+	/* if in coredumping, kick off */
+	if(get_dumpTsk() == current)
+	{
+		if ((__kgid_val(grp) == AID_SDCARD_RW) || (__kgid_val(grp) == AID_SDCARD_R))
+			return 1;
+	}
+
 	if (!gid_eq(grp, cred->fsgid))
 		retval = groups_search(cred->group_info, grp);
 	return retval;

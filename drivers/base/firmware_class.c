@@ -329,7 +329,6 @@ static bool fw_get_filesystem_firmware(struct device *device,
 			continue;
 		success = fw_read_file_contents(file, buf);
 		fput(file);
-		filp_close(file, NULL);
 		if (success)
 			break;
 	}
@@ -864,8 +863,7 @@ static int _request_firmware_load(struct firmware_priv *fw_priv, bool uevent,
 		dev_set_uevent_suppress(f_dev, false);
 		dev_dbg(f_dev, "firmware: requesting %s\n", buf->fw_id);
 		if (timeout != MAX_SCHEDULE_TIMEOUT)
-			queue_delayed_work(system_power_efficient_wq,
-					   &fw_priv->timeout_work, timeout);
+			schedule_delayed_work(&fw_priv->timeout_work, timeout);
 
 		kobject_uevent(&fw_priv->dev.kobj, KOBJ_ADD);
 	}
@@ -1456,8 +1454,8 @@ static void device_uncache_fw_images_work(struct work_struct *work)
  */
 static void device_uncache_fw_images_delay(unsigned long delay)
 {
-	queue_delayed_work(system_power_efficient_wq, &fw_cache.work,
-			   msecs_to_jiffies(delay));
+	schedule_delayed_work(&fw_cache.work,
+			msecs_to_jiffies(delay));
 }
 
 static int fw_pm_notify(struct notifier_block *notify_block,
@@ -1483,7 +1481,7 @@ static int fw_pm_notify(struct notifier_block *notify_block,
 		device_uncache_fw_images_delay(10 * MSEC_PER_SEC);
 		break;
 	}
-
+	printk("*** %s, mode:0x%x done ***\n", __func__, mode);
 	return 0;
 }
 

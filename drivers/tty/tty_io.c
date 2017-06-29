@@ -878,8 +878,9 @@ void disassociate_ctty(int on_exit)
 	spin_lock_irq(&current->sighand->siglock);
 	put_pid(current->signal->tty_old_pgrp);
 	current->signal->tty_old_pgrp = NULL;
+	spin_unlock_irq(&current->sighand->siglock);
 
-	tty = tty_kref_get(current->signal->tty);
+	tty = get_current_tty();
 	if (tty) {
 		unsigned long flags;
 		spin_lock_irqsave(&tty->ctrl_lock, flags);
@@ -896,7 +897,6 @@ void disassociate_ctty(int on_exit)
 #endif
 	}
 
-	spin_unlock_irq(&current->sighand->siglock);
 	/* Now clear signal->tty under the lock */
 	read_lock(&tasklist_lock);
 	session_clear_tty(task_session(current));
@@ -1271,13 +1271,12 @@ static void pty_line_name(struct tty_driver *driver, int index, char *p)
  *
  *	Locking: None
  */
-static ssize_t tty_line_name(struct tty_driver *driver, int index, char *p)
+static void tty_line_name(struct tty_driver *driver, int index, char *p)
 {
 	if (driver->flags & TTY_DRIVER_UNNUMBERED_NODE)
-		return sprintf(p, "%s", driver->name);
+		strcpy(p, driver->name);
 	else
-		return sprintf(p, "%s%d", driver->name,
-			       index + driver->name_base);
+		sprintf(p, "%s%d", driver->name, index + driver->name_base);
 }
 
 /**
@@ -1701,7 +1700,6 @@ int tty_release(struct inode *inode, struct file *filp)
 	int	pty_master, tty_closing, o_tty_closing, do_sleep;
 	int	idx;
 	char	buf[64];
-	long	timeout = 0;
 
 	if (tty_paranoia_check(tty, inode, __func__))
 		return 0;
@@ -1786,11 +1784,7 @@ int tty_release(struct inode *inode, struct file *filp)
 				__func__, tty_name(tty, buf));
 		tty_unlock_pair(tty, o_tty);
 		mutex_unlock(&tty_mutex);
-		schedule_timeout_killable(timeout);
-		if (timeout < 120 * HZ)
-			timeout = 2 * timeout + 1;
-		else
-			timeout = MAX_SCHEDULE_TIMEOUT;
+		schedule();
 	}
 
 	/*
@@ -3575,19 +3569,9 @@ static ssize_t show_cons_active(struct device *dev,
 		if (i >= ARRAY_SIZE(cs))
 			break;
 	}
-	while (i--) {
-		int index = cs[i]->index;
-		struct tty_driver *drv = cs[i]->device(cs[i], &index);
-
-		/* don't resolve tty0 as some programs depend on it */
-		if (drv && (cs[i]->index > 0 || drv->major != TTY_MAJOR))
-			count += tty_line_name(drv, index, buf + count);
-		else
-			count += sprintf(buf + count, "%s%d",
-					 cs[i]->name, cs[i]->index);
-
-		count += sprintf(buf + count, "%c", i ? ' ':'\n');
-	}
+	while (i--)
+		count += sprintf(buf + count, "%s%d%c",
+				 cs[i]->name, cs[i]->index, i ? ' ':'\n');
 	console_unlock();
 
 	return count;

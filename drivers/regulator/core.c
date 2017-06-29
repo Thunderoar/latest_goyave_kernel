@@ -54,7 +54,6 @@ static LIST_HEAD(regulator_map_list);
 static LIST_HEAD(regulator_ena_gpio_list);
 static bool has_full_constraints;
 static bool board_wants_dummy_regulator;
-static int suppress_info_printing;
 
 static struct dentry *debugfs_root;
 
@@ -920,8 +919,6 @@ static int machine_constraints_voltage(struct regulator_dev *rdev,
 	return 0;
 }
 
-static int _regulator_do_enable(struct regulator_dev *rdev);
-
 /**
  * set_machine_constraints - sets regulator constraints
  * @rdev: regulator source
@@ -978,9 +975,10 @@ static int set_machine_constraints(struct regulator_dev *rdev,
 	/* If the constraints say the regulator should be on at this point
 	 * and we have control then make sure it is enabled.
 	 */
-	if (rdev->constraints->always_on || rdev->constraints->boot_on) {
-		ret = _regulator_do_enable(rdev);
-		if (ret < 0 && ret != -EINVAL) {
+	if ((rdev->constraints->always_on || rdev->constraints->boot_on) &&
+	    ops->enable) {
+		ret = ops->enable(rdev);
+		if (ret < 0) {
 			rdev_err(rdev, "failed to enable\n");
 			goto out;
 		}
@@ -994,9 +992,7 @@ static int set_machine_constraints(struct regulator_dev *rdev,
 		}
 	}
 
-
-	if (!suppress_info_printing)
-		print_constraints(rdev);
+	print_constraints(rdev);
 	return 0;
 out:
 	kfree(rdev->constraints);
@@ -1018,8 +1014,7 @@ static int set_supply(struct regulator_dev *rdev,
 {
 	int err;
 
-	if (!suppress_info_printing)
-		rdev_info(rdev, "supplied by %s\n", rdev_get_name(supply_rdev));
+	rdev_info(rdev, "supplied by %s\n", rdev_get_name(supply_rdev));
 
 	rdev->supply = create_regulator(supply_rdev, &rdev->dev, "SUPPLY");
 	if (rdev->supply == NULL) {
@@ -1716,6 +1711,8 @@ static int _regulator_do_disable(struct regulator_dev *rdev)
 
 	trace_regulator_disable_complete(rdev_get_name(rdev));
 
+	_notifier_call_chain(rdev, REGULATOR_EVENT_DISABLE,
+			     NULL);
 	return 0;
 }
 
@@ -1739,8 +1736,6 @@ static int _regulator_disable(struct regulator_dev *rdev)
 				rdev_err(rdev, "failed to disable\n");
 				return ret;
 			}
-			_notifier_call_chain(rdev, REGULATOR_EVENT_DISABLE,
-					NULL);
 		}
 
 		rdev->use_count = 0;
@@ -1793,16 +1788,20 @@ static int _regulator_force_disable(struct regulator_dev *rdev)
 {
 	int ret = 0;
 
-	ret = _regulator_do_disable(rdev);
-	if (ret < 0) {
-		rdev_err(rdev, "failed to force disable\n");
-		return ret;
+	/* force disable */
+	if (rdev->desc->ops->disable) {
+		/* ah well, who wants to live forever... */
+		ret = rdev->desc->ops->disable(rdev);
+		if (ret < 0) {
+			rdev_err(rdev, "failed to force disable\n");
+			return ret;
+		}
+		/* notify other consumers that power has been forced off */
+		_notifier_call_chain(rdev, REGULATOR_EVENT_FORCE_DISABLE |
+			REGULATOR_EVENT_DISABLE, NULL);
 	}
 
-	_notifier_call_chain(rdev, REGULATOR_EVENT_FORCE_DISABLE |
-			REGULATOR_EVENT_DISABLE, NULL);
-
-	return 0;
+	return ret;
 }
 
 /**
@@ -1891,9 +1890,8 @@ int regulator_disable_deferred(struct regulator *regulator, int ms)
 	rdev->deferred_disables++;
 	mutex_unlock(&rdev->mutex);
 
-	ret = queue_delayed_work(system_power_efficient_wq,
-				 &rdev->disable_work,
-				 msecs_to_jiffies(ms));
+	ret = schedule_delayed_work(&rdev->disable_work,
+				    msecs_to_jiffies(ms));
 	if (ret < 0)
 		return ret;
 	else
@@ -3789,19 +3787,23 @@ int regulator_suspend_finish(void)
 
 	mutex_lock(&regulator_list_mutex);
 	list_for_each_entry(rdev, &regulator_list, list) {
+		struct regulator_ops *ops = rdev->desc->ops;
 
 		mutex_lock(&rdev->mutex);
-		if (rdev->use_count > 0  || rdev->constraints->always_on) {
-			error = _regulator_do_enable(rdev);
+		if ((rdev->use_count > 0  || rdev->constraints->always_on) &&
+				ops->enable) {
+			error = ops->enable(rdev);
 			if (error)
 				ret = error;
 		} else {
 			if (!has_full_constraints)
 				goto unlock;
+			if (!ops->disable)
+				goto unlock;
 			if (!_regulator_is_enabled(rdev))
 				goto unlock;
 
-			error = _regulator_do_disable(rdev);
+			error = ops->disable(rdev);
 			if (error)
 				ret = error;
 		}
@@ -3845,22 +3847,6 @@ void regulator_use_dummy_regulator(void)
 	board_wants_dummy_regulator = true;
 }
 EXPORT_SYMBOL_GPL(regulator_use_dummy_regulator);
-
-/**
- * regulator_suppress_info_printing - disable printing of info messages
- *
- * The regulator framework calls print_constraints() when a regulator is
- * registered.  It also prints a disable message for each unused regulator in
- * regulator_init_complete().
- *
- * Calling this function ensures that such messages do not end up in the
- * log.
- */
-void regulator_suppress_info_printing(void)
-{
-	suppress_info_printing = 1;
-}
-EXPORT_SYMBOL_GPL(regulator_suppress_info_printing);
 
 /**
  * rdev_get_drvdata - get rdev regulator driver data
@@ -3988,6 +3974,15 @@ static int __init regulator_init_complete(void)
 	struct regulation_constraints *c;
 	int enabled, ret;
 
+	/*
+	 * Since DT doesn't provide an idiomatic mechanism for
+	 * enabling full constraints and since it's much more natural
+	 * with DT to provide them just assume that a DT enabled
+	 * system has full constraints.
+	 */
+	if (of_have_populated_dt())
+		has_full_constraints = true;
+
 	mutex_lock(&regulator_list_mutex);
 
 	/* If we have a full configuration then disable any regulators
@@ -3998,7 +3993,7 @@ static int __init regulator_init_complete(void)
 		ops = rdev->desc->ops;
 		c = rdev->constraints;
 
-		if (c && c->always_on)
+		if (!ops->disable || (c && c->always_on))
 			continue;
 
 		mutex_lock(&rdev->mutex);
@@ -4018,9 +4013,8 @@ static int __init regulator_init_complete(void)
 		if (has_full_constraints) {
 			/* We log since this may kill the system if it
 			 * goes wrong. */
-			if (!suppress_info_printing)
-				rdev_info(rdev, "disabling\n");
-			ret = _regulator_do_disable(rdev);
+			rdev_info(rdev, "disabling\n");
+			ret = ops->disable(rdev);
 			if (ret != 0) {
 				rdev_err(rdev, "couldn't disable: %d\n", ret);
 			}
@@ -4030,9 +4024,7 @@ static int __init regulator_init_complete(void)
 			 * so warn even if we aren't going to do
 			 * anything here.
 			 */
-			if (!suppress_info_printing)
-				rdev_warn(rdev, "incomplete constraints, "
-						"leaving on\n");
+			rdev_warn(rdev, "incomplete constraints, leaving on\n");
 		}
 
 unlock:

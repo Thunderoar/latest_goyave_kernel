@@ -40,8 +40,6 @@ struct evdev {
 	struct device dev;
 	struct cdev cdev;
 	bool exist;
-	int hw_ts_sec;
-	int hw_ts_nsec;
 };
 
 struct evdev_client {
@@ -1043,8 +1041,6 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
 	mutex_init(&evdev->mutex);
 	init_waitqueue_head(&evdev->wait);
 	evdev->exist = true;
-	evdev->hw_ts_sec = -1;
-	evdev->hw_ts_nsec = -1;
 
 	dev_no = minor;
 	/* Normalize device number if it falls into legacy range */

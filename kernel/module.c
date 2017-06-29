@@ -3825,7 +3825,7 @@ void print_modules(void)
 	list_for_each_entry_rcu(mod, &modules, list) {
 		if (mod->state == MODULE_STATE_UNFORMED)
 			continue;
-		printk(" %s%s", mod->name, module_flags(mod, buf));
+		printk(" %s%s[start=0x%lx,size=%d]", mod->name, module_flags(mod, buf), mod->module_core, mod->core_size);
 	}
 	preempt_enable();
 	if (last_unloaded_module[0])

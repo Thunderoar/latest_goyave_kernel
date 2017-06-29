@@ -22,7 +22,6 @@
 #include <linux/sysrq.h>
 #include <linux/init.h>
 #include <linux/nmi.h>
-#include <linux/console.h>
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -130,9 +129,6 @@ void panic(const char *fmt, ...)
 	 */
 	crash_kexec(NULL);
 
-	if (is_console_locked())
-		console_unlock();
-
 	/*
 	 * Note smp_send_stop is the usual smp shutdown function, which
 	 * unfortunately means it may not be hardened to work in a panic
@@ -141,10 +137,6 @@ void panic(const char *fmt, ...)
 	smp_send_stop();
 
 	kmsg_dump(KMSG_DUMP_PANIC);
-
-	/* print last_kmsg even after console suspend */
-	if (is_console_suspended())
-		resume_console();
 
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 

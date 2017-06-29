@@ -75,6 +75,7 @@ typedef int __bitwise snd_device_cmd_t;
 #define	SNDRV_DEV_CMD_POST	((__force snd_device_cmd_t) 2)
 
 struct snd_device;
+
 struct snd_device_ops {
 	int (*dev_free)(struct snd_device *dev);
 	int (*dev_register)(struct snd_device *dev);

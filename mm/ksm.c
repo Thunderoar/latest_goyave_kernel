@@ -58,6 +58,7 @@
 #endif
 
 #ifdef CONFIG_ADAPTIVE_KSM
+#define __AKSM_DEBUG__ 0
 
 #define AKSM_FULL_SCAN_NONE		0
 #define AKSM_FULL_SCAN_START		1
@@ -90,6 +91,12 @@ static unsigned int AKSM_full_scan_staus=0;
 static unsigned int AKSM_early_suspended = 0;
 static unsigned int AKSM_arm_stable_tree_onboot=1;
 static unsigned int AKSM_sleep_time_per_scan=1;
+
+#if __AKSM_DEBUG__
+static char AKSM_Klog_enabled=1;
+#else
+static char AKSM_Klog_enabled=0;
+#endif
 
 static unsigned int aksm_minfree_warn = 30720; //120MB
 static unsigned int aksm_minfree_critical = 10240; //40MB
@@ -194,6 +201,9 @@ struct stable_node {
 #ifdef CONFIG_NUMA
 	int nid;
 #endif
+#if __AKSM_DEBUG__
+	unsigned int num_linked;
+#endif
 };
 
 /**
@@ -272,9 +282,6 @@ static unsigned int ksm_thread_pages_to_scan = 100;
 
 /* Milliseconds ksmd should sleep between batches */
 static unsigned int ksm_thread_sleep_millisecs = 20;
-
-/* Boolean to indicate whether to use deferred timer or not */
-static bool use_deferred_timer = true;
 
 #ifdef CONFIG_NUMA
 /* Zeroed when merging across nodes is not allowed */
@@ -393,11 +400,6 @@ static void insert_to_mm_slots_hash(struct mm_struct *mm,
 	hash_add(mm_slots_hash, &mm_slot->link, (unsigned long)mm);
 }
 
-static inline int in_stable_tree(struct rmap_item *rmap_item)
-{
-	return rmap_item->address & STABLE_FLAG;
-}
-
 /*
  * ksmd, and unmerge_and_remove_all_rmap_items(), must not touch an mm's
  * page tables after it has passed through ksm_exit() - which, if necessary,
@@ -506,7 +508,7 @@ static void break_cow(struct rmap_item *rmap_item)
 static struct page *page_trans_compound_anon(struct page *page)
 {
 	if (PageTransCompound(page)) {
-		struct page *head = compound_head(page);
+		struct page *head = compound_trans_head(page);
 		/*
 		 * head may actually be splitted and freed from under
 		 * us but it's ok here.
@@ -560,7 +562,14 @@ static void remove_node_from_stable_tree(struct stable_node *stable_node)
 
 	hlist_for_each_entry(rmap_item, &stable_node->hlist, hlist) {
 		if (rmap_item->hlist.next)
+#if __AKSM_DEBUG__
+		{
 			ksm_pages_sharing--;
+			stable_node->num_linked --;
+		}
+#else
+			ksm_pages_sharing--;
+#endif
 		else
 			ksm_pages_shared--;
 		put_anon_vma(rmap_item->anon_vma);
@@ -688,7 +697,14 @@ static void remove_rmap_item_from_tree(struct rmap_item *rmap_item)
 		put_page(page);
 
 		if (stable_node->hlist.first)
+#if __AKSM_DEBUG__
+		{
 			ksm_pages_sharing--;
+			stable_node->num_linked --;
+		}
+#else
+			ksm_pages_sharing--;
+#endif
 		else
 			ksm_pages_shared--;
 
@@ -705,9 +721,7 @@ static void remove_rmap_item_from_tree(struct rmap_item *rmap_item)
 		 * than left over from before.
 		 */
 		age = (unsigned char)(ksm_scan.seqnr - rmap_item->address);
-#ifndef CONFIG_KSM_CHECK_PAGE
 		BUG_ON(age > 1);
-#endif
 		if (!age)
 			rb_erase(&rmap_item->node,
 				 root_unstable_tree + NUMA(rmap_item->nid));
@@ -1377,6 +1391,10 @@ static struct stable_node *stable_tree_insert(struct page *kpage)
 	DO_NUMA(stable_node->nid = nid);
 	rb_link_node(&stable_node->node, parent, new);
 	rb_insert_color(&stable_node->node, root);
+
+#if __AKSM_DEBUG__
+	stable_node->num_linked=0;
+#endif
 	return stable_node;
 }
 
@@ -1486,7 +1504,14 @@ static void stable_tree_append(struct rmap_item *rmap_item,
 	hlist_add_head(&rmap_item->hlist, &stable_node->hlist);
 
 	if (rmap_item->hlist.next)
+#if __AKSM_DEBUG__
+	{
 		ksm_pages_sharing++;
+		stable_node->num_linked++;
+	}
+#else
+		ksm_pages_sharing++;
+#endif
 	else
 		ksm_pages_shared++;
 }
@@ -1801,6 +1826,44 @@ static struct early_suspend ksm_early_suspend_desc = {
 	.resume = ksm_late_resume,
 };
 
+#if __AKSM_DEBUG__
+static inline void  print_pages(struct stable_node *node)
+{
+	int count;
+	struct page *page;
+	unsigned int *data;
+	page=get_ksm_page(node,false);
+	data = (int *)kmap_atomic(page);
+	for(count=0;count<1024;count=count+4)
+		print_aksm("KSM###[%.3d] %.8x %.8x %.8x %.8x\n", count, *(data+count), *(data+count+1),*(data+count+2),*(data+count+3) );
+	kunmap_atomic(data);
+	return;
+}
+
+static void AKSM_show_stable_pages(void)
+{
+	struct stable_node *stable_node;
+	struct rb_node *node;
+	int nid;
+
+	print_aksm("ksm### show hot nodes\n");
+	for (nid = 0; nid < ksm_nr_node_ids; nid++) {
+		node = rb_first(root_stable_tree + nid);
+		while (node) {
+			stable_node = rb_entry(node, struct stable_node, node);
+			print_aksm("ksm### stable node %p linked %d pages\n",stable_node, stable_node->num_linked);
+			if(stable_node->num_linked > 256)
+				print_pages(stable_node);
+			node = rb_next(node);
+			cond_resched();
+		}
+	}
+
+}
+#else
+static void AKSM_show_stable_pages(void) {}
+#endif
+
 void set_AKSM_level(void)
 {
 	aksm_minfree_critical = get_minfree_high_value() + global_page_state(NR_SHMEM) + total_swapcache_pages();
@@ -1861,30 +1924,7 @@ unsigned int  check_mem_status(void)
 
 #endif
 
-static inline int is_page_scanned(struct page *page)
-{
-#ifdef CONFIG_KSM_CHECK_PAGE
-	/* page is already marked as ksm, so this will be simple merge */
-	if (PageKsm(page))
-		return 0;
 
-	if (ksm_scan.seqnr & 0x1) {
-		/* odd cycle */
-		/* clear even cycle bit */
-		ClearPageKsmScan0(page);
-		/* get old value and mark it scanned */
-		return TestSetPageKsmScan1(page);
-	} else {
-		/* even cycle */
-		/* clear odd cycle bit */
-		ClearPageKsmScan1(page);
-		/* get old value and mark it scanned */
-		return TestSetPageKsmScan0(page);
-	}
-#else
-	return 0;
-#endif
-}
 
 /**
  * ksm_do_scan  - the ksm scanner main worker function.
@@ -1900,46 +1940,9 @@ static void ksm_do_scan(unsigned int scan_npages)
 		rmap_item = scan_get_next_rmap_item(&page);
 		if (!rmap_item)
 			return;
-		if (!is_page_scanned(page) || !PageKsm(page)
-				|| !in_stable_tree(rmap_item))
 		cmp_and_merge_page(page, rmap_item);
 		put_page(page);
 	}
-}
-
-static void process_timeout(unsigned long __data)
-{
-	wake_up_process((struct task_struct *)__data);
-}
-
-static signed long __sched deferred_schedule_timeout(signed long timeout)
-{
-	struct timer_list timer;
-	unsigned long expire;
-
-	__set_current_state(TASK_INTERRUPTIBLE);
-	if (timeout < 0) {
-		pr_err("schedule_timeout: wrong timeout value %lx\n",
-							timeout);
-		__set_current_state(TASK_RUNNING);
-		goto out;
-	}
-
-	expire = timeout + jiffies;
-
-	setup_deferrable_timer_on_stack(&timer, process_timeout,
-			(unsigned long)current);
-	mod_timer(&timer, expire);
-	schedule();
-	del_singleshot_timer_sync(&timer);
-
-	/* Remove the timer from the object tracker */
-	destroy_timer_on_stack(&timer);
-
-	timeout = expire - jiffies;
-
-out:
-	return timeout < 0 ? 0 : timeout;
 }
 
 static int ksmd_should_run(void)
@@ -1998,11 +2001,7 @@ static int ksm_scan_thread(void *nothing)
 		try_to_freeze();
 
 		if (ksmd_should_run()) {
-			if (use_deferred_timer)
-				deferred_schedule_timeout(
-				msecs_to_jiffies(ksm_thread_sleep_millisecs));
-			else
-				schedule_timeout_interruptible(
+			schedule_timeout_interruptible(
 				msecs_to_jiffies(ksm_thread_sleep_millisecs));
 		} else {
 			wait_event_freezable(ksm_thread_wait,
@@ -2556,26 +2555,6 @@ static ssize_t run_store(struct kobject *kobj, struct kobj_attribute *attr,
 }
 KSM_ATTR(run);
 
-static ssize_t deferred_timer_show(struct kobject *kobj,
-				    struct kobj_attribute *attr, char *buf)
-{
-	return snprintf(buf, 8, "%d\n", use_deferred_timer);
-}
-
-static ssize_t deferred_timer_store(struct kobject *kobj,
-				     struct kobj_attribute *attr,
-				     const char *buf, size_t count)
-{
-	unsigned long enable;
-	int err;
-
-	err = kstrtoul(buf, 10, &enable);
-	use_deferred_timer = enable;
-
-	return count;
-}
-KSM_ATTR(deferred_timer);
-
 #ifdef CONFIG_NUMA
 static ssize_t merge_across_nodes_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *buf)
@@ -2761,7 +2740,6 @@ static struct attribute *ksm_attrs[] = {
 	&pages_unshared_attr.attr,
 	&pages_volatile_attr.attr,
 	&full_scans_attr.attr,
-	&deferred_timer_attr.attr,
 #ifdef CONFIG_NUMA
 	&merge_across_nodes_attr.attr,
 #endif

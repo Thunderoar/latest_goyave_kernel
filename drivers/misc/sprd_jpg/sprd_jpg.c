@@ -65,6 +65,7 @@ static unsigned int SPRD_JPG_BASE_DT;
 #define SPRD_MMAHB_BASE_DT		SCI_IOMAP(0x340000)
 #endif
 
+static unsigned long sprd_jpg_size;
 #define GLB_CTRL_OFFSET		0x00
 #define MB_CFG_OFFSET		0x04
 
@@ -445,6 +446,7 @@ static void jpg_parse_dt(struct device *dev)
         return;
     }
     SPRD_JPG_BASE_DT = SPRD_JPG_BASE;//res.start;
+    sprd_jpg_size = res.end - res.start;
 
     jpg_hw_dev.irq = irq_of_parse_and_map(np, 0);
     jpg_hw_dev.dev_np = np;
@@ -465,6 +467,10 @@ static int jpg_nocache_mmap(struct file *filp, struct vm_area_struct *vma)
     printk(KERN_INFO "@jpg[%s]\n", __FUNCTION__);
     vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
     vma->vm_pgoff     = (SPRD_JPG_PHYS>>PAGE_SHIFT);
+
+    if((vma->vm_end - vma->vm_start) > sprd_jpg_size)
+	return -EAGAIN;
+
     if (remap_pfn_range(vma,vma->vm_start, vma->vm_pgoff,
                         vma->vm_end - vma->vm_start, vma->vm_page_prot))
         return -EAGAIN;

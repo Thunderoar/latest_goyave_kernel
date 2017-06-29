@@ -308,7 +308,7 @@ static void watchdog_overflow_callback(struct perf_event *event,
 	 * then this is a good indication the cpu is stuck
 	 */
 	if (is_hardlockup()) {
-	int this_cpu = raw_smp_processor_id();
+		int this_cpu = smp_processor_id();
 
 		/* only print hardlockups once */
 		if (__this_cpu_read(hard_watchdog_warn) == true)

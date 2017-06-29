@@ -102,10 +102,7 @@ static unsigned long lowmem_deathpending_timeout;
 			pr_info(x);			\
 	} while (0)
 
-#if defined(CONFIG_ZSWAP)
-extern u64 zswap_pool_total_size;
-extern atomic_t zswap_stored_pages;
-#endif
+
 
 #ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
 static int lowmem_oom_adj_to_oom_score_adj(int oom_adj);
@@ -260,9 +257,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 #ifdef CONFIG_SEC_DEBUG_LMK_MEMINFO
 	static DEFINE_RATELIMIT_STATE(lmk_rs, DEFAULT_RATELIMIT_INTERVAL, 1);
 #endif
-#if defined(CONFIG_ZSWAP)
-	int stored_pages = atomic_read(&zswap_stored_pages);
-#endif
 
 	if (nr_to_scan > 0) {
 		if (mutex_lock_interruptible(&scan_mutex) < 0)
@@ -405,15 +399,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		tasksize = get_mm_rss(p->mm) + get_mm_counter(p->mm, MM_SWAPENTS);
 #else
 		tasksize = get_mm_rss(p->mm);
-#endif
-#if defined(CONFIG_ZSWAP)
-		if (stored_pages) {
-			lowmem_print(3, "shown tasksize : %d\n", tasksize);
-			tasksize += ((int)zswap_pool_total_size / PAGE_SIZE)
-					* get_mm_counter(p->mm, MM_SWAPENTS)
-					/ stored_pages;
-			lowmem_print(3, "real tasksize : %d\n", tasksize);
-		}
 #endif
 		task_unlock(p);
 		if (tasksize <= 0)
