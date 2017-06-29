@@ -1091,7 +1091,8 @@ extern unsigned long move_page_tables(struct vm_area_struct *vma,
 		bool need_rmap_locks);
 extern unsigned long change_protection(struct vm_area_struct *vma, unsigned long start,
 			      unsigned long end, pgprot_t newprot,
-			      int dirty_accountable, int prot_numa);
+			      int dirty_accountable,
+			      int *prot_numa_pte_skipped);
 extern int mprotect_fixup(struct vm_area_struct *vma,
 			  struct vm_area_struct **pprev, unsigned long start,
 			  unsigned long end, unsigned long newflags);

@@ -130,12 +130,14 @@ static inline void change_pmd_protnuma(struct mm_struct *mm, unsigned long addr,
 
 static inline unsigned long change_pmd_range(struct vm_area_struct *vma,
 		pud_t *pud, unsigned long addr, unsigned long end,
-		pgprot_t newprot, int dirty_accountable, int prot_numa)
+		pgprot_t newprot, int dirty_accountable,
+		int *prot_numa_pte_skipped)
 {
 	pmd_t *pmd;
 	unsigned long next;
 	unsigned long pages = 0;
 	bool all_same_node;
+	bool prot_numa = (prot_numa_pte_skipped != NULL);
 
 	pmd = pmd_offset(pud, addr);
 	do {
@@ -146,6 +148,8 @@ static inline unsigned long change_pmd_range(struct vm_area_struct *vma,
 			else if (change_huge_pmd(vma, pmd, addr, newprot,
 						 prot_numa)) {
 				pages += HPAGE_PMD_NR;
+				if (prot_numa_pte_skipped)
+					(*prot_numa_pte_skipped) += (HPAGE_PMD_NR - 1);
 				continue;
 			}
 			/* fall through */
@@ -170,7 +174,8 @@ static inline unsigned long change_pmd_range(struct vm_area_struct *vma,
 
 static inline unsigned long change_pud_range(struct vm_area_struct *vma,
 		pgd_t *pgd, unsigned long addr, unsigned long end,
-		pgprot_t newprot, int dirty_accountable, int prot_numa)
+		pgprot_t newprot, int dirty_accountable,
+		int *prot_numa_pte_skipped)
 {
 	pud_t *pud;
 	unsigned long next;
@@ -182,7 +187,7 @@ static inline unsigned long change_pud_range(struct vm_area_struct *vma,
 		if (pud_none_or_clear_bad(pud))
 			continue;
 		pages += change_pmd_range(vma, pud, addr, next, newprot,
-				 dirty_accountable, prot_numa);
+				 dirty_accountable, prot_numa_pte_skipped);
 	} while (pud++, addr = next, addr != end);
 
 	return pages;
@@ -190,7 +195,7 @@ static inline unsigned long change_pud_range(struct vm_area_struct *vma,
 
 static unsigned long change_protection_range(struct vm_area_struct *vma,
 		unsigned long addr, unsigned long end, pgprot_t newprot,
-		int dirty_accountable, int prot_numa)
+		int dirty_accountable, int *prot_numa_pte_skipped)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	pgd_t *pgd;
@@ -206,7 +211,7 @@ static unsigned long change_protection_range(struct vm_area_struct *vma,
 		if (pgd_none_or_clear_bad(pgd))
 			continue;
 		pages += change_pud_range(vma, pgd, addr, next, newprot,
-				 dirty_accountable, prot_numa);
+				 dirty_accountable, prot_numa_pte_skipped);
 	} while (pgd++, addr = next, addr != end);
 
 	/* Only flush the TLB if we actually modified any entries: */
@@ -216,9 +221,15 @@ static unsigned long change_protection_range(struct vm_area_struct *vma,
 	return pages;
 }
 
+/*
+ * Returns the number of base pages affected by the protection change. Huge
+ * pages are accounted as pages << huge_order. The number of THP pages updated
+ * is returned (prot_numa_pte_skipped) for NUMA hinting faults updates to
+ * account for the number of PTEs updated in vmstat.
+ */
 unsigned long change_protection(struct vm_area_struct *vma, unsigned long start,
 		       unsigned long end, pgprot_t newprot,
-		       int dirty_accountable, int prot_numa)
+		       int dirty_accountable, int *prot_numa_pte_skipped)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long pages;
@@ -227,7 +238,8 @@ unsigned long change_protection(struct vm_area_struct *vma, unsigned long start,
 	if (is_vm_hugetlb_page(vma))
 		pages = hugetlb_change_protection(vma, start, end, newprot);
 	else
-		pages = change_protection_range(vma, start, end, newprot, dirty_accountable, prot_numa);
+		pages = change_protection_range(vma, start, end, newprot,
+				dirty_accountable, prot_numa_pte_skipped);
 	mmu_notifier_invalidate_range_end(mm, start, end);
 
 	return pages;
@@ -307,7 +319,7 @@ success:
 	}
 
 	change_protection(vma, start, end, vma->vm_page_prot,
-			  dirty_accountable, 0);
+			  dirty_accountable, NULL);
 
 	vm_stat_account(mm, oldflags, vma->vm_file, -nrpages);
 	vm_stat_account(mm, newflags, vma->vm_file, nrpages);

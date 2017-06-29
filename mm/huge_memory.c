@@ -1464,7 +1464,7 @@ out:
 }
 
 int change_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
-		unsigned long addr, pgprot_t newprot, int prot_numa)
+		unsigned long addr, pgprot_t newprot, bool prot_numa)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	int ret = 0;

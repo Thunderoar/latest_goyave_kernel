@@ -587,11 +587,14 @@ unsigned long change_prot_numa(struct vm_area_struct *vma,
 			unsigned long addr, unsigned long end)
 {
 	int nr_updated;
+	int nr_pte_skipped = 0;
 	BUILD_BUG_ON(_PAGE_NUMA != _PAGE_PROTNONE);
 
-	nr_updated = change_protection(vma, addr, end, vma->vm_page_prot, 0, 1);
+	nr_updated = change_protection(vma, addr, end, vma->vm_page_prot,
+			0, &nr_pte_skipped);
 	if (nr_updated)
-		count_vm_numa_events(NUMA_PTE_UPDATES, nr_updated);
+		count_vm_numa_events(NUMA_PTE_UPDATES,
+					nr_updated - nr_pte_skipped);
 
 	return nr_updated;
 }
