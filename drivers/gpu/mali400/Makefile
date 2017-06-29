@@ -1,0 +1,1 @@
+obj-$(CONFIG_MALI_VER_R0P5) += r0p5/
