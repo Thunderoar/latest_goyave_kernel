@@ -91,8 +91,7 @@ int verify_compat_iovec(struct msghdr *kern_msg, struct iovec *kern_iov,
 			if (err < 0)
 				return err;
 		}
-		if (kern_msg->msg_name)
-			kern_msg->msg_name = kern_address;
+		kern_msg->msg_name = kern_address;
 	} else
 		kern_msg->msg_name = NULL;
 

@@ -117,6 +117,7 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 {
 	struct sk_buff		*skb;
 	struct sock		*sk = sock->sk;
+	struct sockaddr_mISDN	*maddr;
 
 	int		copied, err;
 
@@ -134,9 +135,9 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	if (!skb)
 		return err;
 
-	if (msg->msg_name) {
-		struct sockaddr_mISDN *maddr = msg->msg_name;
-
+	if (msg->msg_namelen >= sizeof(struct sockaddr_mISDN)) {
+		msg->msg_namelen = sizeof(struct sockaddr_mISDN);
+		maddr = (struct sockaddr_mISDN *)msg->msg_name;
 		maddr->family = AF_ISDN;
 		maddr->dev = _pms(sk)->dev->id;
 		if ((sk->sk_protocol == ISDN_P_LAPD_TE) ||
