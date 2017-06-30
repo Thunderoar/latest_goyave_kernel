@@ -48,7 +48,7 @@
 #define GR_GEN1			(REG_GLB_GEN1)
 #endif
 
-#define FREQ_TABLE_SIZE 	12
+#define FREQ_TABLE_SIZE 	10
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
 #define TRANSITION_LATENCY	(100 * 1000) /* ns */
@@ -241,9 +241,7 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		{6, 765000},
 		{7, 565000},
 		{8, 254000},
-		{9, 154000},
-		{10, 54000},
-		{11, CPUFREQ_TABLE_END},
+		{9, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
 		1200000,
@@ -256,8 +254,6 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		900000,
 		850000,
 		850000,
-		800000,
-		800000,
 	},
 };
 #endif
