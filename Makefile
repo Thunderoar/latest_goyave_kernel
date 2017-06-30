@@ -1,6 +1,6 @@
 VERSION = 3
 PATCHLEVEL = 10
-SUBLEVEL = 22
+SUBLEVEL = 23
 EXTRAVERSION = -revived_version_v4.0tk
 NAME = TOSSUG Baby Fish
 
