@@ -504,6 +504,7 @@ out:
 static inline int l2tp_verify_udp_checksum(struct sock *sk,
 					   struct sk_buff *skb)
 {
+	struct l2tp_tunnel *tunnel = (struct l2tp_tunnel *)sk->sk_user_data;
 	struct udphdr *uh = udp_hdr(skb);
 	u16 ulen = ntohs(uh->len);
 	__wsum psum;
@@ -1650,6 +1651,24 @@ int l2tp_tunnel_create(struct net *net, int fd, int version, u32 tunnel_id, u32 
 
 	if (cfg != NULL)
 		tunnel->debug = cfg->debug;
+
+#if IS_ENABLED(CONFIG_IPV6)
+	if (sk->sk_family == PF_INET6) {
+		struct ipv6_pinfo *np = inet6_sk(sk);
+
+		if (ipv6_addr_v4mapped(&np->saddr) &&
+		    ipv6_addr_v4mapped(&np->daddr)) {
+			struct inet_sock *inet = inet_sk(sk);
+
+			tunnel->v4mapped = true;
+			inet->inet_saddr = np->saddr.s6_addr32[3];
+			inet->inet_rcv_saddr = np->rcv_saddr.s6_addr32[3];
+			inet->inet_daddr = np->daddr.s6_addr32[3];
+		} else {
+			tunnel->v4mapped = false;
+		}
+	}
+#endif
 
 #if IS_ENABLED(CONFIG_IPV6)
 	if (sk->sk_family == PF_INET6) {

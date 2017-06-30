@@ -659,7 +659,6 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 
 	switch (msg_type) {
 	case AUDIT_GET:
-		status_set.mask		 = 0;
 		status_set.enabled	 = audit_enabled;
 		status_set.failure	 = audit_failure;
 		status_set.pid		 = audit_pid;
@@ -1535,26 +1534,6 @@ void audit_log_name(struct audit_context *context, struct audit_names *n,
 			audit_log_format(ab, " obj=%s", ctx);
 			security_release_secctx(ctx, len);
 		}
-	}
-
-	/* log the audit_names record type */
-	audit_log_format(ab, " nametype=");
-	switch(n->type) {
-	case AUDIT_TYPE_NORMAL:
-		audit_log_format(ab, "NORMAL");
-		break;
-	case AUDIT_TYPE_PARENT:
-		audit_log_format(ab, "PARENT");
-		break;
-	case AUDIT_TYPE_CHILD_DELETE:
-		audit_log_format(ab, "DELETE");
-		break;
-	case AUDIT_TYPE_CHILD_CREATE:
-		audit_log_format(ab, "CREATE");
-		break;
-	default:
-		audit_log_format(ab, "UNKNOWN");
-		break;
 	}
 
 	audit_log_fcaps(ab, n);

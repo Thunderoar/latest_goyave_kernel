@@ -92,14 +92,6 @@ static DEFINE_MUTEX(cgroup_mutex);
 static DEFINE_MUTEX(cgroup_root_mutex);
 
 /*
- * cgroup destruction makes heavy use of work items and there can be a lot
- * of concurrent destructions.  Use a separate workqueue so that cgroup
- * destruction work items don't end up filling up max_active of system_wq
- * which may lead to deadlock.
- */
-static struct workqueue_struct *cgroup_destroy_wq;
-
-/*
  * Generate an array of cgroup subsystem pointers. At boot time, this is
  * populated with the built in subsystems, and modular subsystems are
  * registered after that. The mutable section of this array is protected by
@@ -881,7 +873,7 @@ static void cgroup_free_rcu(struct rcu_head *head)
 {
 	struct cgroup *cgrp = container_of(head, struct cgroup, rcu_head);
 
-	queue_work(cgroup_destroy_wq, &cgrp->destroy_work);
+	schedule_work(&cgrp->free_work);
 }
 
 static void cgroup_diput(struct dentry *dentry, struct inode *inode)
@@ -3787,23 +3779,6 @@ static void cgroup_dput(struct cgroup *cgrp)
 }
 
 /*
- * When dput() is called asynchronously, if umount has been done and
- * then deactivate_super() in cgroup_free_fn() kills the superblock,
- * there's a small window that vfs will see the root dentry with non-zero
- * refcnt and trigger BUG().
- *
- * That's why we hold a reference before dput() and drop it right after.
- */
-static void cgroup_dput(struct cgroup *cgrp)
-{
-	struct super_block *sb = cgrp->root->sb;
-
-	atomic_inc(&sb->s_active);
-	dput(cgrp->dentry);
-	deactivate_super(sb);
-}
-
-/*
  * Unregister event and free resources.
  *
  * Gets called from workqueue.
@@ -4132,7 +4107,6 @@ static void init_cgroup_css(struct cgroup_subsys_state *css,
 	 * dput() asynchronously from css_put().
 	 */
 	INIT_WORK(&css->dput_work, css_dput_fn);
-	queue_work(cgroup_destroy_wq, &css->destroy_work);
 }
 
 /* invoke ->post_create() on a new CSS and mark it online if successful */
@@ -4739,22 +4713,6 @@ out:
 
 	return err;
 }
-
-static int __init cgroup_wq_init(void)
-{
-	/*
-	 * There isn't much point in executing destruction path in
-	 * parallel.  Good chunk is serialized with cgroup_mutex anyway.
-	 * Use 1 for @max_active.
-	 *
-	 * We would prefer to do this in cgroup_init() above, but that
-	 * is called before init_workqueues(): so leave this until after.
-	 */
-	cgroup_destroy_wq = alloc_workqueue("cgroup_destroy", 0, 1);
-	BUG_ON(!cgroup_destroy_wq);
-	return 0;
-}
-core_initcall(cgroup_wq_init);
 
 /*
  * proc_cgroup_show()
