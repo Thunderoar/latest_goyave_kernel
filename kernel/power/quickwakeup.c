@@ -1,6 +1,6 @@
 /* kernel/power/quickwakeup.c
  *
- * Copyright (C) 2014 Motorola Mobility LLC.
+ * Copyright (C) 2009 Motorola.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -13,98 +13,52 @@
  *
  */
 
-#include <linux/kernel.h>
-#include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/slab.h>
 #include <linux/quickwakeup.h>
-
-#ifdef CONFIG_POWERSUSPEND
-#include <linux/powersuspend.h>
-#endif
-
-#include "power.h"
+#include <linux/module.h>
 
 static LIST_HEAD(qw_head);
-static DEFINE_MUTEX(list_lock);
 
 int quickwakeup_register(struct quickwakeup_ops *ops)
 {
-	mutex_lock(&list_lock);
 	list_add(&ops->list, &qw_head);
-	mutex_unlock(&list_lock);
-
 	return 0;
 }
+EXPORT_SYMBOL_GPL(quickwakeup_register);
 
 void quickwakeup_unregister(struct quickwakeup_ops *ops)
 {
-	mutex_lock(&list_lock);
 	list_del(&ops->list);
-	mutex_unlock(&list_lock);
 }
-
-static int quickwakeup_check(void)
-{
-	int check = 0;
-	struct quickwakeup_ops *index;
-
-	mutex_lock(&list_lock);
-
-	list_for_each_entry(index, &qw_head, list) {
-		int ret = index->qw_check(index->data);
-		index->execute = ret;
-		check |= ret;
-		pr_debug("%s: %s votes for %s\n", __func__, index->name,
-			ret ? "execute" : "dont care");
-	}
-
-	mutex_unlock(&list_lock);
-
-	return check;
-}
-
-/* return 1 => suspend again
-   return 0 => continue wakeup
- */
-static int quickwakeup_execute(void)
-{
-	int suspend_again = 0;
-	int final_vote = 1;
-	struct quickwakeup_ops *index;
-
-	mutex_lock(&list_lock);
-
-	list_for_each_entry(index, &qw_head, list) {
-		if (index->execute) {
-			int ret = index->qw_execute(index->data);
-			index->execute = 0;
-			final_vote &= ret;
-			suspend_again = final_vote;
-			pr_debug("%s: %s votes for %s\n", __func__, index->name,
-				ret ? "suspend again" : "wakeup");
-		}
-	}
-
-	mutex_unlock(&list_lock);
-
-	pr_debug("%s: %s\n", __func__,
-		suspend_again ? "suspend again" : "wakeup");
-
-	return suspend_again;
-}
-
-/* return 1 => suspend again
-   return 0 => continue wakeup
- */
-bool quickwakeup_suspend_again(void)
+EXPORT_SYMBOL_GPL(quickwakeup_unregister);
+int quickwakeup_check(void)
 {
 	int ret = 0;
+	struct quickwakeup_ops *index;
 
-	if (quickwakeup_check())
-		ret = quickwakeup_execute();
-
-	pr_debug("%s- returning %d %s\n", __func__, ret,
-		ret ? "suspend again" : "wakeup");
-
+	list_for_each_entry(index, &qw_head, list) {
+		index->checked = index->qw_check();
+		ret |= index->checked;
+	}
 	return ret;
+}
+
+int quickwakeup_execute(void)
+{
+	int ret = 0;
+	int count = 0;
+	struct quickwakeup_ops *index;
+
+	list_for_each_entry(index, &qw_head, list) {
+		if (index->checked) {
+			ret = index->qw_callback();
+			index->checked = 0;
+			if (ret != 0)
+				return ret;
+			count++;
+		}
+	}
+	if (!count)
+		return -1;
+	return 0;
 }

@@ -18,6 +18,13 @@ config SUSPEND_FREEZER
 
 	  Turning OFF this setting is NOT recommended! If in doubt, say Y.
 
+config POWERSUSPEND
+	bool "Power suspend"
+	default y
+	---help---
+	  Call early suspend handlers when the user requested sleep state
+	  changes.
+
 config HAS_WAKELOCK
 	bool
 
@@ -269,6 +276,14 @@ config PM_TRACE_RTC
 
 	CAUTION: this option will cause your machine's real-time clock to be
 	set to an invalid time after a resume.
+
+config QUICK_WAKEUP
+	bool "Quick wakeup"
+	depends on SUSPEND
+	default n
+	---help---
+	  Allow kernel driver to do periodic jobs without resuming the full system
+	  This option can increase battery life on android powered smartphone.
 
 config APM_EMULATION
 	tristate "Advanced Power Management Emulation"

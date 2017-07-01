@@ -10,6 +10,10 @@
 #include <linux/mutex.h>
 #include <linux/pm_wakeup.h>
 
+#ifdef CONFIG_POWERSUSPEND
+#include <linux/powersuspend.h>
+#endif
+
 #include "power.h"
 
 static suspend_state_t autosleep_state;
@@ -26,14 +30,11 @@ static struct wakeup_source *autosleep_ws;
 static void try_to_suspend(struct work_struct *work)
 {
 	unsigned int initial_count, final_count;
-
-	if (!pm_get_wakeup_count(&initial_count, true))
-		goto out;
+	int error = 0;
 
 	mutex_lock(&autosleep_lock);
 
-	if (!pm_save_wakeup_count(initial_count) ||
-		system_state != SYSTEM_RUNNING) {
+	if (!pm_save_wakeup_count(initial_count)) {
 		mutex_unlock(&autosleep_lock);
 		goto out;
 	}
@@ -45,12 +46,14 @@ static void try_to_suspend(struct work_struct *work)
 	if (autosleep_state >= PM_SUSPEND_MAX)
 		hibernate();
 	else
-		pm_suspend(autosleep_state);
+		error = pm_suspend(autosleep_state);
 
 	mutex_unlock(&autosleep_lock);
 
-	if (!pm_get_wakeup_count(&final_count, false))
+#ifdef CONFIG_SEC_PM
+	if (error)
 		goto out;
+#endif
 
 	/*
 	 * If the wakeup occured for an unknown reason, wait to prevent the
@@ -60,6 +63,13 @@ static void try_to_suspend(struct work_struct *work)
 		schedule_timeout_uninterruptible(HZ / 2);
 
  out:
+#ifdef CONFIG_SEC_PM
+	if (error) {
+		pr_info("PM: suspend returned(%d)\n", error);
+		schedule_timeout_uninterruptible(HZ / 2);
+	}
+#endif
+
 	queue_up_suspend_work();
 }
 
@@ -67,7 +77,7 @@ static DECLARE_WORK(suspend_work, try_to_suspend);
 
 void queue_up_suspend_work(void)
 {
-	if (autosleep_state > PM_SUSPEND_ON)
+	if (!work_pending(&suspend_work) && autosleep_state > PM_SUSPEND_ON)
 		queue_work(autosleep_wq, &suspend_work);
 }
 
@@ -102,11 +112,21 @@ int pm_autosleep_set_state(suspend_state_t state)
 
 	__pm_relax(autosleep_ws);
 
+#ifdef CONFIG_SEC_PM_DEBUG
+	wakeup_sources_stats_active();
+#endif
+
 	if (state > PM_SUSPEND_ON) {
-		pm_wakep_autosleep_enabled(true);
+		//pm_wakep_autosleep_enabled(true);
 		queue_up_suspend_work();
+#ifdef CONFIG_POWERSUSPEND
+		set_power_suspend_state_hook(POWER_SUSPEND_ACTIVE); // Yank555.lu : add hook to handle powersuspend tasks
+#endif
 	} else {
-		pm_wakep_autosleep_enabled(false);
+		//pm_wakep_autosleep_enabled(false);
+#ifdef CONFIG_POWERSUSPEND
+		set_power_suspend_state_hook(POWER_SUSPEND_INACTIVE); // Yank555.lu : add hook to handle powersuspend tasks
+#endif
 	}
 
 	mutex_unlock(&autosleep_lock);

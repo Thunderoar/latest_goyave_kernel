@@ -15,6 +15,7 @@
 #include <linux/reboot.h>
 #include <linux/writeback.h>
 #include <linux/dyn_sync_cntrl.h>
+#include <linux/lcd_notify.h>
 
 // fsync_mutex protects dyn_fsync_active during suspend / late resume transitions
 static DEFINE_MUTEX(fsync_mutex);
@@ -24,6 +25,8 @@ static DEFINE_MUTEX(fsync_mutex);
 
 bool suspend_active __read_mostly = false;
 bool dyn_fsync_active __read_mostly = DYN_FSYNC_ACTIVE_DEFAULT;
+
+static struct notifier_block lcd_notif;
 
 extern void sync_filesystems(int wait);
 
@@ -110,6 +113,37 @@ static int dyn_fsync_notify_sys(struct notifier_block *this, unsigned long code,
 	return NOTIFY_DONE;
 }
 
+static int lcd_notifier_callback(struct notifier_block *this,
+								unsigned long event, void *data)
+{
+	switch (event) 
+	{
+		case LCD_EVENT_OFF_START:
+			mutex_lock(&fsync_mutex);
+			
+			suspend_active = false;
+
+			if (dyn_fsync_active) 
+			{
+				dyn_fsync_force_flush();
+			}
+			
+			mutex_unlock(&fsync_mutex);
+			break;
+			
+		case LCD_EVENT_ON_END:
+			mutex_lock(&fsync_mutex);
+			suspend_active = true;
+			mutex_unlock(&fsync_mutex);
+			break;
+			
+		default:
+			break;
+	}
+
+	return 0;
+}
+
 // Module structures
 
 static struct notifier_block dyn_fsync_notifier = 
@@ -118,7 +152,7 @@ static struct notifier_block dyn_fsync_notifier =
 };
 
 static struct kobj_attribute dyn_fsync_active_attribute = 
-	__ATTR(Dyn_fsync_active, 0666,
+	__ATTR(Dyn_fsync_active, 0664,
 		dyn_fsync_active_show,
 		dyn_fsync_active_store);
 
@@ -178,6 +212,22 @@ static int dyn_fsync_init(void)
 		kobject_put(dyn_fsync_kobj);
 	}
 
+	lcd_notif.notifier_call = lcd_notifier_callback;
+	if (lcd_register_client(&lcd_notif) != 0) 
+	{
+		pr_err("%s: Failed to register lcd callback\n", __func__);
+
+		unregister_reboot_notifier(&dyn_fsync_notifier);
+
+		atomic_notifier_chain_unregister(&panic_notifier_list,
+			&dyn_fsync_panic_block);
+
+		if (dyn_fsync_kobj != NULL)
+			kobject_put(dyn_fsync_kobj);
+
+		return -EFAULT;
+	}
+
 	pr_info("%s dynamic fsync initialisation complete\n", __FUNCTION__);
 
 	return sysfs_result;
@@ -193,6 +243,8 @@ static void dyn_fsync_exit(void)
 
 	if (dyn_fsync_kobj != NULL)
 		kobject_put(dyn_fsync_kobj);
+	
+	lcd_unregister_client(&lcd_notif);
 		
 	pr_info("%s dynamic fsync unregistration complete\n", __FUNCTION__);
 }
@@ -201,5 +253,5 @@ module_init(dyn_fsync_init);
 module_exit(dyn_fsync_exit);
 
 MODULE_AUTHOR("andip71");
-MODULE_DESCRIPTION("dynamic fsync - automatic fs sync optimization");
+MODULE_DESCRIPTION("dynamic fsync - automatic fs sync optimization for msm8974");
 MODULE_LICENSE("GPL v2");

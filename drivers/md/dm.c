@@ -186,6 +186,7 @@ struct mapped_device {
 
 	/* kobject and completion */
 	struct dm_kobject_holder kobj_holder;
+	struct kobject kobj;
 
 	/* zero-length flush that will be cloned and submitted to targets */
 	struct bio flush_bio;
