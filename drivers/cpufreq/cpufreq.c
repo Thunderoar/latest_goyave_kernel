@@ -764,6 +764,29 @@ static int cpufreq_add_dev_interface(unsigned int cpu,
 	if (ret)
 		return ret;
 
+	write_lock_irqsave(&cpufreq_driver_lock, flags);
+	for_each_cpu(j, policy->cpus) {
+		per_cpu(cpufreq_cpu_data, j) = policy;
+		per_cpu(cpufreq_policy_cpu, j) = policy->cpu;
+	}
+	write_unlock_irqrestore(&cpufreq_driver_lock, flags);
+
+	memcpy(&new_policy, policy, sizeof(struct cpufreq_policy));
+	/* assure that the starting sequence is run in __cpufreq_set_policy */
+	policy->governor = NULL;
+
+	/* set default policy */
+	ret = __cpufreq_set_policy(policy, &new_policy);
+	policy->user_policy.policy = policy->policy;
+	policy->user_policy.governor = policy->governor;
+
+	if (ret) {
+		pr_debug("setting policy failed\n");
+		if (cpufreq_driver->exit)
+			cpufreq_driver->exit(policy);
+		return ret;
+	}
+
 	/* set up files for this cpu device */
 	drv_attr = cpufreq_driver->attr;
 	while ((drv_attr) && (*drv_attr)) {
@@ -788,31 +811,10 @@ static int cpufreq_add_dev_interface(unsigned int cpu,
 			goto err_out_kobj_put;
 	}
 
-	write_lock_irqsave(&cpufreq_driver_lock, flags);
-	for_each_cpu(j, policy->cpus) {
-		per_cpu(cpufreq_cpu_data, j) = policy;
-		per_cpu(cpufreq_policy_cpu, j) = policy->cpu;
-	}
-	write_unlock_irqrestore(&cpufreq_driver_lock, flags);
-
 	ret = cpufreq_add_dev_symlink(cpu, policy);
 	if (ret)
 		goto err_out_kobj_put;
 
-	memcpy(&new_policy, policy, sizeof(struct cpufreq_policy));
-	/* assure that the starting sequence is run in __cpufreq_set_policy */
-	policy->governor = NULL;
-
-	/* set default policy */
-	ret = __cpufreq_set_policy(policy, &new_policy);
-	policy->user_policy.policy = policy->policy;
-	policy->user_policy.governor = policy->governor;
-
-	if (ret) {
-		pr_debug("setting policy failed\n");
-		if (cpufreq_driver->exit)
-			cpufreq_driver->exit(policy);
-	}
 	return ret;
 
 err_out_kobj_put:
