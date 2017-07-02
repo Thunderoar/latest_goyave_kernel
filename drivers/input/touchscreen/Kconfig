@@ -1,6 +1,7 @@
 #
 # Touchscreen driver configuration
 #
+
 menuconfig INPUT_TOUCHSCREEN
 	bool "Touchscreens"
 	help

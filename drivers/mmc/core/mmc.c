@@ -56,24 +56,15 @@ static const unsigned int tacc_mant[] = {
 		__res & __mask;						\
 	})
 
-#ifdef CONFIG_ASYNC_FSYNC
-static unsigned int perf_degr;
-int emmc_perf_degr(void)
-{
-	return perf_degr;
-}
-#endif
-
 static const struct mmc_fixup mmc_fixups[] = {
 
-	/* Disable HPI feature for Kingstone card */
+	/* avoid HPI for specific cards */
 	MMC_FIXUP_EXT_CSD_REV("MMC16G", CID_MANFID_KINGSTON, CID_OEMID_ANY,
-			add_quirk, MMC_QUIRK_BROKEN_HPI, 5),
+		add_quirk, MMC_QUIRK_BROKEN_HPI),
 
-	MMC_FIXUP(CID_NAME_ANY, CID_MANFID_NUMONYX_MICRON, CID_OEMID_ANY,
+	/* Disable cache for specific cards */
+	MMC_FIXUP("MMC16G", CID_MANFID_KINGSTON, CID_OEMID_ANY,
 		add_quirk_mmc, MMC_QUIRK_CACHE_DISABLE),
-	MMC_FIXUP("MMC16G", CID_MANFID_KINGSTON, CID_OEMID_ANY, add_quirk_mmc,
-		  MMC_QUIRK_CACHE_DISABLE),
 
 	END_FIXUP
 };

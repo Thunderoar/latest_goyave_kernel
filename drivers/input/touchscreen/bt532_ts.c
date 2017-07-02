@@ -71,7 +71,7 @@ u8* m_firmware_data;
 static bool ta_connected =0;
 
 #define ZINITIX_DEBUG				0
-#define TOUCH_BOOSTER			1
+#define TOUCH_BOOSTER			0
 
 #if TOUCH_BOOSTER
 #include <linux/cpufreq.h>

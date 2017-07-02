@@ -50,6 +50,12 @@ config CPU_FREQ_LIMIT
 	help
 	  This driver supports API to limit CPU frequency.
 
+config CPU_INPUT_BOOST
+	bool "CPU Input Boost"
+	help
+	  Boosts the CPU on touchscreen and touchpad input. Boost frequencies and
+	  durations are calculated automatically.
+
 choice
 	prompt "Default CPUFreq governor"
 	default CPU_FREQ_DEFAULT_GOV_USERSPACE if ARM_SA1100_CPUFREQ || ARM_SA1110_CPUFREQ
@@ -256,6 +262,15 @@ config CPU_FREQ_DEFAULT_GOV_BADASS
 	  Be aware that not all cpufreq drivers support the badass
 	  governor. If unsure have a look at the help section of the
 	  driver. Fallback governor will be the performance governor.
+
+config CPU_FREQ_DEFAULT_GOV_IMPULSE
+	bool "impulse"
+	select CPU_FREQ_GOV_IMPULSE
+	help
+	  Use the CPUFreq governor 'impulse' as default. This allows
+	  you to get a full dynamic cpu frequency capable system by simply
+	  loading your cpufreq low-level hardware driver, using the
+	  'impulse' governor for latency-sensitive workloads.
 
 endchoice
 
@@ -613,6 +628,14 @@ config CPU_FREQ_GOV_BADASS_ALLOW_BYPASS
 	depends on CPU_FREQ_GOV_BADASS_2_PHASE
 	help
 		'allow_bypass' - This driver adds a bypass to the phases
+
+config CPU_FREQ_GOV_IMPULSE
+	tristate "'impulse' cpufreq policy governor"
+	help
+	  'impulse' - This driver adds a dynamic cpufreq policy governor
+	  designed for latency-sensitive workloads.
+
+	  If in doubt, say N.
 
 config SCX35_1300MHZ
 	bool "SCX35 1300MHZ"

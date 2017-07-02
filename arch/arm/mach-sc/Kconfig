@@ -1,5 +1,20 @@
 if ARCH_SC
 
+config AUTOSMP
+	bool "AutoSMP Hotplug"
+	depends on SMP && HOTPLUG_CPU
+	help
+	  Automatically hotplugs the multiple CPU cores based on
+	  CPU load and suspend state.
+
+config FORCE_FAST_CHARGE
+	bool "Force Fast Charge"
+	default n
+	help
+	  A simple sysfs interface to force adapters detected
+	  as USB to charge as AC. It also has options to set custom
+	  charging voltages at will.
+
 menu "Spreadtrum SoC Type"
 
 config  ARCH_SCX35
