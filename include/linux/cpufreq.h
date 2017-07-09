@@ -114,6 +114,7 @@ struct cpufreq_policy {
 	struct cpufreq_real_policy	user_policy;
 
 	struct kobject		kobj;
+	unsigned int            util;
 	struct completion	kobj_unregister;
 };
 
@@ -355,6 +356,7 @@ static inline unsigned int cpufreq_get(unsigned int cpu)
 /* query the last known CPU freq (in kHz). If zero, cpufreq couldn't detect it */
 #ifdef CONFIG_CPU_FREQ
 unsigned int cpufreq_quick_get(unsigned int cpu);
+unsigned int cpufreq_quick_get_util(unsigned int cpu);
 unsigned int cpufreq_quick_get_max(unsigned int cpu);
 #else
 static inline unsigned int cpufreq_quick_get(unsigned int cpu)

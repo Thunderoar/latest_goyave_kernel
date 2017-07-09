@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 10
 SUBLEVEL = 32
-EXTRAVERSION = -revived_version_v4.1tk
+EXTRAVERSION = -revived_version_v4.1.2tk
 NAME = TOSSUG Baby Fish
 
 # *DOCUMENTATION*
@@ -243,8 +243,8 @@ GRAPHITE = -fgraphite -fgraphite-identity -floop-interchange -ftree-loop-distrib
 
 HOSTCC       = gcc
 HOSTCXX      = g++
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fgcse-las -flto -fomit-frame-pointer -pthread $(GRAPHITE)
-HOSTCXXFLAGS = -DNDEBUG -pipe -O3 -flto=4 -Wno-unused $(GRAPHITE)
+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fgcse-las -flto -fomit-frame-pointer -pthread $(GRAPHITE)
+HOSTCXXFLAGS = -DNDEBUG -pipe -O2 -flto=4 -Wno-unused $(GRAPHITE)
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -376,8 +376,8 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -fno-delete-null-pointer-checks
-KBUILD_AFLAGS_KERNEL :=-O3 -mtune=cortex-a7 -mfpu=vfpv4-d16
-KBUILD_CFLAGS_KERNEL :=-O3 -mtune=cortex-a7 -mfpu=vfpv4-d16
+KBUILD_AFLAGS_KERNEL :=-O2 -mtune=cortex-a7 -mfpu=vfpv4-d16
+KBUILD_CFLAGS_KERNEL :=-O2 -mtune=cortex-a7 -mfpu=vfpv4-d16
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE

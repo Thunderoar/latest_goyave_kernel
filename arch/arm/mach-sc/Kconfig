@@ -7,6 +7,56 @@ config AUTOSMP
 	  Automatically hotplugs the multiple CPU cores based on
 	  CPU load and suspend state.
 
+config FAST_HOTPLUG
+	bool "Enable fast hotplug"
+ 	default y
+	help
+	  Kernel based core control.
+
+config BLU_PLUG
+	bool "Dynamic hotplug driver"
+	depends on HOTPLUG_CPU
+	default y
+	help
+	  The Dynamic hotplug driver automatically online/offline CPUs proportional to system load.
+
+config INTELLI_PLUG
+	        bool "Enable intelli-plug cpu hotplug driver"
+	        default n
+
+config MAKO_HOTPLUG
+        bool "Mako Hotplug"
+        default n
+        help
+          Mako Hotplug: A custom hotplug by fransico franco
+
+config MSM_SLEEPER
+ 	bool "CPU hotplug driver"
+ 	default y
+ 	help
+ 	  CPU hotplug driver
+
+config BRICKED_HOTPLUG
+	bool "Enable kernel based mpdecision"
+	depends on MSM_RUN_QUEUE_STATS
+	default y
+	help
+	  This enables kernel based multi core control.
+	  (up/down hotplug based on load)
+
+config THUNDERPLUG_CONTROL
+	bool "Enable plugging down/up of cores using powersuspend"
+	default y
+
+config STATE_HELPER
+        bool "State Helper"
+ 	depends on STATE_NOTIFIER
+        default y
+
+config STATE_NOTIFIER
+        bool "State Notifier"
+	default y
+
 config FORCE_FAST_CHARGE
 	bool "Force Fast Charge"
 	default n

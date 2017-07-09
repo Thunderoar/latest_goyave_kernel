@@ -70,7 +70,7 @@ struct cpufreq_conf {
 
 struct cpufreq_table_data {
 	struct cpufreq_frequency_table 		freq_tbl[FREQ_TABLE_SIZE];
-	unsigned int				vddarm_mv[FREQ_TABLE_SIZE];
+	unsigned long				vddarm_mv[FREQ_TABLE_SIZE];
 };
 
 struct cpufreq_conf *sprd_cpufreq_conf = NULL;
@@ -214,58 +214,62 @@ static struct cpufreq_table_data sc8830_cpufreq_table_data_es = {
 	},
 };
 
+enum clocking_levels {
+	OC1, NOC, UC0=NOC,	/* no under clock */
+	UC1, UC2, UC3,	/* under clock */
+	UC4, UC5, UC6,
+	MAX_UC=UC6,
+	EC,
+};
+
 #if !defined (CONFIG_SCX35_1300MHZ)
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 	.freq_tbl = {
-		{0, 1600000},
-		{1, 1500000},
-		{2, 1400000},
-		{3, 1300000},
-		{4, 1200000},
-		{5, 1000000},
-		{6, 765000},
-		{7, 565000},
-		{8, 254000},
-		{9, CPUFREQ_TABLE_END},
+		{OC1,  1540000},
+		{NOC, 1500000},
+		{UC1, 1300000},
+    {UC2, 1200000},
+		{UC3, 900000},
+		{UC4, 765000},
+		{UC5, 565000},
+		{UC6, 254000},
+		{EC, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1150000,
-		1100000,
-		1100000,
-		1050000,
-		1000000,
-		900000,
-		900000,
-		900000,
-		900000,
-		900000,
+		[OC1] = 1200000,
+		[NOC] = 1100000,
+		[UC1] = 1000000,
+		[UC2] = 1000000,
+		[UC3] = 900000,
+		[UC4] = 900000,
+		[UC5] = 900000,
+		[UC6] = 900000,
+		[EC] = 900000,
 	},
 };
 #else
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 	.freq_tbl = {
-		{0, 1600000},
-		{1, 1500000},
-		{2, 1400000},
-		{3, 1300000},
-		{4, 1200000},
-		{5, 1000000},
-		{6, 765000},
-		{7, 565000},
-		{8, 254000},
-		{9, CPUFREQ_TABLE_END},
+		{OC1,  1540000},
+		{NOC, 1500000},
+		{UC1, 1300000},
+    {UC2, 1200000},
+		{UC3, 900000},
+		{UC4, 765000},
+		{UC5, 565000},
+		{UC6, 254000},
+		{EC, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1150000,
-		1100000,
-		1100000,
-		1050000,
-		1000000,
-		900000,
-		875000,
-		850000,
-		825000,
-		800000,
+		[OC1] = 1200000,
+		[NOC] = 1100000,
+		[UC1] = 1000000,
+		[UC2] = 1000000,
+		[UC3] = 900000,
+		[UC4] = 900000,
+		[UC5] = 900000,
+		[UC6] = 900000,
+		[EC] = 900000,
 	},
 };
 #endif
