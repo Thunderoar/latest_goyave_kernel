@@ -45,6 +45,7 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 #include <linux/sched/rt.h>
+#include <linux/zcache.h>
 
 #include <linux/ratelimit.h>
 
@@ -269,8 +270,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		other_free -= global_page_state(NR_FREE_CMA_PAGES);
 		
 	if (global_page_state(NR_SHMEM) + total_swapcache_pages() <
-		global_page_state(NR_FILE_PAGES))
-		other_file = global_page_state(NR_FILE_PAGES) -
+		global_page_state(NR_FILE_PAGES) + zcache_pages())
+		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
 						global_page_state(NR_SHMEM) -
 						total_swapcache_pages();
 	else
@@ -463,6 +464,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 					"   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n" \
 					"   Free memory is %ldkB above reserved\n"	\
 					"   min adj %hd zram: adj %hd free %d%% usage %dkB\n",
+					"   Total zcache is %ldkB\n" \
 					selected[i]->comm, selected[i]->pid,
 					OOM_SCORE_ADJ_TO_OOM_ADJ(selected_oom_score_adj[i]),
 					selected_tasksize[i] * (long)(PAGE_SIZE / 1024),
@@ -475,6 +477,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 					OOM_SCORE_ADJ_TO_OOM_ADJ(lmk_info.zram_score_adj),
 					lmk_info.zram_free_percent,
 					lmk_info.zram_mem_usage*PAGE_SIZE /1024);
+					(long)zcache_pages() * (long)(PAGE_SIZE / 1024),
 			lowmem_deathpending_timeout = jiffies + HZ;
 
 			//Improve the priority of killed process can accelerate the process to die,

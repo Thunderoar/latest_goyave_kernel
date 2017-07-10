@@ -36,7 +36,7 @@
 #define INTELLI_PLUG_MAJOR_VERSION	3
 #define INTELLI_PLUG_MINOR_VERSION	8
 
-#define DEF_SAMPLING_MS			(268)
+#define DEF_SAMPLING_MS			(400)
 
 #define DUAL_PERSISTENCE		(2500 / DEF_SAMPLING_MS)
 #define TRI_PERSISTENCE			(1700 / DEF_SAMPLING_MS)
@@ -55,7 +55,7 @@ static struct workqueue_struct *intelliplug_boost_wq;
 static unsigned int intelli_plug_active = 0;
 module_param(intelli_plug_active, uint, 0644);
 
-static unsigned int touch_boost_active = 1;
+static unsigned int touch_boost_active = 0;
 module_param(touch_boost_active, uint, 0644);
 
 static unsigned int nr_run_profile_sel = 0;
@@ -583,3 +583,4 @@ MODULE_DESCRIPTION("'intell_plug' - An intelligent cpu hotplug driver for "
 MODULE_LICENSE("GPL");
 
 late_initcall(intelli_plug_init);
+

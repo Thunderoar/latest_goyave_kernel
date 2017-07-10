@@ -528,8 +528,7 @@ static ssize_t r2nm_cluster_attr_idle_timeout_ms_write(
 			     r2net_num_connected_peers());
 			ret = -EINVAL;
 		} else if (val <= cluster->cl_keepalive_delay_ms) {
-			mlog(ML_NOTICE,
-			     "r2net: idle timeout must be larger "
+			mlog(ML_NOTICE, "r2net: idle timeout must be larger "
 			     "than keepalive delay\n");
 			ret = -EINVAL;
 		} else {
@@ -564,8 +563,7 @@ static ssize_t r2nm_cluster_attr_keepalive_delay_ms_write(
 			     r2net_num_connected_peers());
 			ret = -EINVAL;
 		} else if (val >= cluster->cl_idle_timeout_ms) {
-			mlog(ML_NOTICE,
-			     "r2net: keepalive delay must be "
+			mlog(ML_NOTICE, "r2net: keepalive delay must be "
 			     "smaller than idle timeout\n");
 			ret = -EINVAL;
 		} else {
@@ -614,7 +612,7 @@ static ssize_t r2nm_cluster_attr_fence_method_write(
 		if (strncasecmp(page, r2nm_fence_method_desc[i], count - 1))
 			continue;
 		if (cluster->cl_fence_method != i) {
-			pr_info("ramster: Changing fence method to %s\n",
+			printk(KERN_INFO "ramster: Changing fence method to %s\n",
 			       r2nm_fence_method_desc[i]);
 			cluster->cl_fence_method = i;
 		}
@@ -949,7 +947,7 @@ static void __exit exit_r2nm(void)
 	r2hb_exit();
 }
 
-int r2nm_init(void)
+static int __init init_r2nm(void)
 {
 	int ret = -1;
 
@@ -969,7 +967,7 @@ int r2nm_init(void)
 	mutex_init(&r2nm_cluster_group.cs_subsys.su_mutex);
 	ret = configfs_register_subsystem(&r2nm_cluster_group.cs_subsys);
 	if (ret) {
-		pr_err("nodemanager: Registration returned %d\n", ret);
+		printk(KERN_ERR "nodemanager: Registration returned %d\n", ret);
 		goto out_callbacks;
 	}
 
@@ -986,11 +984,9 @@ out_r2hb:
 out:
 	return ret;
 }
-EXPORT_SYMBOL_GPL(r2nm_init);
 
 MODULE_AUTHOR("Oracle");
 MODULE_LICENSE("GPL");
 
-#ifndef CONFIG_RAMSTER_MODULE
-late_initcall(r2nm_init);
-#endif
+module_init(init_r2nm)
+module_exit(exit_r2nm)

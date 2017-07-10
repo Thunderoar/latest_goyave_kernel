@@ -1,6 +1,25 @@
 if ARCH_SC
 
-config AUTOSMP
+config CPU_VOLTAGE_CONTROL
+	bool "Enable CPU Voltage Table via sysfs for adjustements"
+	default y
+	help
+	  DTS based kernel User Votlage Control
+
+config ALUCARD_HOTPLUG
+	bool "Enable alucard-hotplug cpu hotplug driver"
+	default n
+ 	help
+	  Generic Alucard-hotplug cpu hotplug driver for ARM SOCs
+
+config MSM_HOTPLUG
+	bool "MSM hotplug driver"
+	depends on HOTPLUG_CPU
+	default n
+	help
+	  The MSM hotplug driver controls on-/offlining of additional cores based on current cpu load.
+
+config ASMP
 	bool "AutoSMP Hotplug"
 	depends on SMP && HOTPLUG_CPU
 	help
@@ -56,6 +75,15 @@ config STATE_HELPER
 config STATE_NOTIFIER
         bool "State Notifier"
 	default y
+
+config MSM_RUN_QUEUE_STATS
+	bool "Enable collection and exporting of MSM Run Queue stats to userspace"
+	default n
+	help
+	This option enables the driver to periodically collecting the statistics
+	of kernel run queue information and calculate the load of the system.
+	This information is exported to usespace via sysfs entries and userspace
+	algorithms uses info and decide when to turn on/off the cpu cores.
 
 config FORCE_FAST_CHARGE
 	bool "Force Fast Charge"

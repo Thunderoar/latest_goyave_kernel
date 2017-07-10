@@ -23,23 +23,25 @@
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/device.h>
-#ifdef CONFIG_STATE_NOTIFIER
-#include <linux/state_notifier.h>
+#ifdef CONFIG_POWERSUSPEND
+#include <linux/powersuspend.h>
+#else
+#include <linux/fb.h>
 #endif
 
 #define DEBUG 0
 
 #define MPDEC_TAG			"bricked_hotplug"
-#define HOTPLUG_ENABLED			0
-#define MSM_MPDEC_STARTDELAY		20000
-#define MSM_MPDEC_DELAY			130
-#define DEFAULT_MIN_CPUS_ONLINE		2
-#define DEFAULT_MAX_CPUS_ONLINE		4
-#define DEFAULT_MAX_CPUS_ONLINE_SUSP	2
-#define DEFAULT_SUSPEND_DEFER_TIME	10
-#define DEFAULT_DOWN_LOCK_DUR		500
+#define HOTPLUG_ENABLED			      0
+#define MSM_MPDEC_STARTDELAY		  100
+#define MSM_MPDEC_DELAY			      130
+#define DEFAULT_MIN_CPUS_ONLINE		  1
+#define DEFAULT_MAX_CPUS_ONLINE		  NR_CPUS
+#define DEFAULT_MAX_CPUS_ONLINE_SUSP  1
+#define DEFAULT_SUSPEND_DEFER_TIME	  10
+#define DEFAULT_DOWN_LOCK_DUR		  500
 
-#define MSM_MPDEC_IDLE_FREQ		960000
+#define MSM_MPDEC_IDLE_FREQ		      500000
 
 enum {
 	MSM_MPDEC_DISABLED = 0,
@@ -48,9 +50,14 @@ enum {
 	MSM_MPDEC_UP,
 };
 
+#ifndef CONFIG_POWERSUSPEND
 static struct notifier_block notif;
+#endif
 static struct delayed_work hotplug_work;
+static struct delayed_work suspend_work;
+static struct work_struct resume_work;
 static struct workqueue_struct *hotplug_wq;
+static struct workqueue_struct *susp_wq;
 
 static struct cpu_hotplug {
 	unsigned int startdelay;
@@ -65,6 +72,7 @@ static struct cpu_hotplug {
 	unsigned int max_cpus_online;
 	unsigned int min_cpus_online;
 	unsigned int bricked_enabled;
+	unsigned int hotplug_suspend;
 	struct mutex bricked_hotplug_mutex;
 	struct mutex bricked_cpu_mutex;
 } hotplug = {
@@ -80,6 +88,7 @@ static struct cpu_hotplug {
 	.max_cpus_online = DEFAULT_MAX_CPUS_ONLINE,
 	.min_cpus_online = DEFAULT_MIN_CPUS_ONLINE,
 	.bricked_enabled = HOTPLUG_ENABLED,
+	.hotplug_suspend = 1,
 };
 
 static unsigned int NwNs_Threshold[8] = {12, 0, 25, 7, 30, 10, 0, 18};
@@ -115,7 +124,7 @@ static int check_down_lock(unsigned int cpu)
 
 extern unsigned int get_rq_info(void);
 
-unsigned int state = MSM_MPDEC_DISABLED;
+static unsigned int state = MSM_MPDEC_DISABLED;
 
 static int get_slowest_cpu(void) {
 	unsigned int cpu, slow_cpu = 0, rate, slow_rate = 0;
@@ -246,9 +255,15 @@ out:
 	return;
 }
 
-static void bricked_hotplug_suspend(void)
+static void bricked_hotplug_suspend(struct work_struct *work)
 {
 	int cpu;
+
+	if (!hotplug.bricked_enabled || hotplug.suspended)
+		return;
+
+	if (!hotplug.hotplug_suspend)
+		return;
 
 	mutex_lock(&hotplug.bricked_hotplug_mutex);
 	hotplug.suspended = 1;
@@ -275,9 +290,15 @@ static void bricked_hotplug_suspend(void)
 			cpu_online(0), cpu_online(1), cpu_online(2), cpu_online(3));
 }
 
-static void __ref bricked_hotplug_resume(void)
+static void __ref bricked_hotplug_resume(struct work_struct *work)
 {
 	int cpu, required_reschedule = 0, required_wakeup = 0;
+
+	if (!hotplug.bricked_enabled)
+		return;
+
+	if (!hotplug.hotplug_suspend)
+		return;
 
 	if (hotplug.suspended) {
 		mutex_lock(&hotplug.bricked_hotplug_mutex);
@@ -311,22 +332,59 @@ static void __ref bricked_hotplug_resume(void)
 	}
 }
 
-#ifdef CONFIG_STATE_NOTIFIER
-static int state_notifier_callback(struct notifier_block *this,
+#ifdef CONFIG_POWERSUSPEND
+static void __bricked_hotplug_suspend(struct power_suspend *handler)
+{
+	INIT_DELAYED_WORK(&suspend_work, bricked_hotplug_suspend);
+	mod_delayed_work_on(0, susp_wq, &suspend_work,
+			msecs_to_jiffies(hotplug.suspend_defer_time * 1000));
+}
+
+static void __ref __bricked_hotplug_resume(struct power_suspend *handler)
+{
+	flush_workqueue(susp_wq);
+	cancel_delayed_work_sync(&suspend_work);
+	queue_work_on(0, susp_wq, &resume_work);
+}
+
+static struct power_suspend bricked_hotplug_power_suspend_driver = {
+	.suspend = __bricked_hotplug_suspend,
+	.resume = __bricked_hotplug_resume,
+};
+#else
+static int prev_fb = FB_BLANK_UNBLANK;
+
+static int fb_notifier_callback(struct notifier_block *self,
 				unsigned long event, void *data)
 {
-	if (!hotplug.bricked_enabled)
+	struct fb_event *evdata = data;
+	int *blank;
+
+	if (!hotplug.hotplug_suspend)
 		return NOTIFY_OK;
 
-	switch (event) {
-		case STATE_NOTIFIER_ACTIVE:
-			bricked_hotplug_resume();
-			break;
-		case STATE_NOTIFIER_SUSPEND:
-			bricked_hotplug_suspend();
-			break;
-		default:
-			break;
+	if (evdata && evdata->data && event == FB_EVENT_BLANK) {
+		blank = evdata->data;
+		switch (*blank) {
+			case FB_BLANK_UNBLANK:
+				if (prev_fb == FB_BLANK_POWERDOWN) {
+					/* display on */
+					flush_workqueue(susp_wq);
+					cancel_delayed_work_sync(&suspend_work);
+					queue_work_on(0, susp_wq, &resume_work);
+					prev_fb = FB_BLANK_UNBLANK;
+				}
+				break;
+			case FB_BLANK_POWERDOWN:
+				if (prev_fb == FB_BLANK_UNBLANK) {
+					/* display off */
+					INIT_DELAYED_WORK(&suspend_work, bricked_hotplug_suspend);
+					mod_delayed_work_on(0, susp_wq, &suspend_work,
+						msecs_to_jiffies(hotplug.suspend_defer_time * 1000));
+					prev_fb = FB_BLANK_POWERDOWN;
+				}
+				break;
+		}
 	}
 
 	return NOTIFY_OK;
@@ -344,12 +402,23 @@ static int bricked_hotplug_start(void)
 		goto err_out;
 	}
 
-#ifdef CONFIG_STATE_NOTIFIER
-	notif.notifier_call = state_notifier_callback;
-	if (state_register_client(&notif)) {
-		pr_err("%s: Failed to register State notifier callback\n",
-			MPDEC_TAG);
+	susp_wq =
+	    alloc_workqueue("susp_wq", WQ_FREEZABLE, 0);
+	if (!susp_wq) {
+		pr_err("%s: Failed to allocate suspend workqueue\n",
+		       MPDEC_TAG);
+		ret = -ENOMEM;
 		goto err_dev;
+	}
+
+#ifdef CONFIG_POWERSUSPEND
+	register_power_suspend(&bricked_hotplug_power_suspend_driver);
+#else
+	notif.notifier_call = fb_notifier_callback;
+	if (fb_register_client(&notif)) {
+		pr_err("%s: Failed to register FB notifier callback\n",
+			MPDEC_TAG);
+		goto err_susp;
 	}
 #endif
 
@@ -357,6 +426,8 @@ static int bricked_hotplug_start(void)
 	mutex_init(&hotplug.bricked_hotplug_mutex);
 
 	INIT_DELAYED_WORK(&hotplug_work, bricked_hotplug_work);
+	INIT_DELAYED_WORK(&suspend_work, bricked_hotplug_suspend);
+	INIT_WORK(&resume_work, bricked_hotplug_resume);
 
 	for_each_possible_cpu(cpu) {
 		dl = &per_cpu(lock_info, cpu);
@@ -368,6 +439,10 @@ static int bricked_hotplug_start(void)
 					msecs_to_jiffies(hotplug.startdelay));
 
 	return ret;
+#ifndef CONFIG_POWERSUSPEND
+err_susp:
+	destroy_workqueue(susp_wq);
+#endif
 err_dev:
 	destroy_workqueue(hotplug_wq);
 err_out:
@@ -385,13 +460,19 @@ static void bricked_hotplug_stop(void)
 		cancel_delayed_work_sync(&dl->lock_rem);
 	}
 
+	flush_workqueue(susp_wq);
+	cancel_work_sync(&resume_work);
+	cancel_delayed_work_sync(&suspend_work);
 	cancel_delayed_work_sync(&hotplug_work);
 	mutex_destroy(&hotplug.bricked_hotplug_mutex);
 	mutex_destroy(&hotplug.bricked_cpu_mutex);
-#ifdef CONFIG_STATE_NOTIFIER
-	state_unregister_client(&notif);
-#endif
+#ifdef CONFIG_POWERSUSPEND
+	unregister_power_suspend(&bricked_hotplug_power_suspend_driver);
+#else
+	fb_unregister_client(&notif);
 	notif.notifier_call = NULL;
+#endif
+	destroy_workqueue(susp_wq);
 	destroy_workqueue(hotplug_wq);
 
 	/* Put all sibling cores to sleep */
@@ -420,6 +501,7 @@ show_one(max_cpus_online, max_cpus_online);
 show_one(max_cpus_online_susp, max_cpus_online_susp);
 show_one(suspend_defer_time, suspend_defer_time);
 show_one(bricked_enabled, bricked_enabled);
+show_one(hotplug_suspend, hotplug_suspend);
 
 #define define_one_twts(file_name, arraypos)				\
 static ssize_t show_##file_name						\
@@ -648,6 +730,7 @@ static ssize_t store_bricked_enabled(struct device *dev,
 {
 	unsigned int input;
 	int ret;
+
 	ret = sscanf(buf, "%u", &input);
 	if (ret != 1)
 		return -EINVAL;
@@ -673,6 +756,28 @@ static ssize_t store_bricked_enabled(struct device *dev,
 	return count;
 }
 
+static ssize_t store_hotplug_suspend(struct device *dev,
+				struct device_attribute *bricked_hotplug_attrs,
+				const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (input > 1)
+		input = 1;
+
+	if (input == hotplug.hotplug_suspend)
+		return count;
+
+	hotplug.hotplug_suspend = input;
+
+	return count;
+}
+
 static DEVICE_ATTR(startdelay, 644, show_startdelay, store_startdelay);
 static DEVICE_ATTR(delay, 644, show_delay, store_delay);
 static DEVICE_ATTR(down_lock_duration, 644, show_down_lock_duration, store_down_lock_duration);
@@ -684,6 +789,7 @@ static DEVICE_ATTR(max_cpus_online, 644, show_max_cpus_online, store_max_cpus_on
 static DEVICE_ATTR(max_cpus_online_susp, 644, show_max_cpus_online_susp, store_max_cpus_online_susp);
 static DEVICE_ATTR(suspend_defer_time, 644, show_suspend_defer_time, store_suspend_defer_time);
 static DEVICE_ATTR(enabled, 644, show_bricked_enabled, store_bricked_enabled);
+static DEVICE_ATTR(hotplug_suspend, 644, show_hotplug_suspend, store_hotplug_suspend);
 
 static struct attribute *bricked_hotplug_attrs[] = {
 	&dev_attr_startdelay.attr,
@@ -697,6 +803,7 @@ static struct attribute *bricked_hotplug_attrs[] = {
 	&dev_attr_max_cpus_online_susp.attr,
 	&dev_attr_suspend_defer_time.attr,
 	&dev_attr_enabled.attr,
+	&dev_attr_hotplug_suspend.attr,
 	&dev_attr_twts_threshold_0.attr,
 	&dev_attr_twts_threshold_1.attr,
 	&dev_attr_twts_threshold_2.attr,

@@ -184,8 +184,7 @@ struct mapped_device {
 	/* forced geometry settings */
 	struct hd_geometry geometry;
 
-	/* kobject and completion */
-	struct dm_kobject_holder kobj_holder;
+	/* sysfs handle */
 	struct kobject kobj;
 
 	/* zero-length flush that will be cloned and submitted to targets */
@@ -1905,7 +1904,6 @@ static struct mapped_device *alloc_dev(int minor)
 	init_waitqueue_head(&md->wait);
 	INIT_WORK(&md->work, dm_wq_work);
 	init_waitqueue_head(&md->eventq);
-	init_completion(&md->kobj_holder.completion);
 
 	md->disk->major = _major;
 	md->disk->first_minor = minor;

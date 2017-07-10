@@ -30,16 +30,17 @@
 
 #define MAKO_HOTPLUG "mako_hotplug"
 
-#define DEFAULT_HOTPLUG_ENABLED          0
-#define DEFAULT_LOAD_THRESHOLD           80
-#define DEFAULT_HIGH_LOAD_COUNTER        10
-#define DEFAULT_MAX_LOAD_COUNTER         20
-#define DEFAULT_CPUFREQ_UNPLUG_LIMIT     1800000
-#define DEFAULT_MIN_TIME_CPU_ONLINE      1
-#define DEFAULT_TIMER                    1
-#define MIN_CPU_UP_US                    (200 * USEC_PER_MSEC)
-#define NUM_POSSIBLE_CPUS                num_possible_cpus()
-#define HIGH_LOAD                        (95)
+#define DEFAULT_HOTPLUG_ENABLED 0
+#define DEFAULT_LOAD_THRESHOLD 80
+#define DEFAULT_HIGH_LOAD_COUNTER 10
+#define DEFAULT_MAX_LOAD_COUNTER 20
+#define DEFAULT_CPUFREQ_UNPLUG_LIMIT 900000
+#define DEFAULT_MIN_TIME_CPU_ONLINE 1
+#define DEFAULT_TIMER 1
+
+#define MIN_CPU_UP_US (200 * USEC_PER_MSEC)
+#define NUM_POSSIBLE_CPUS num_possible_cpus()
+#define HIGH_LOAD (95)
 
 struct cpu_stats {
 	unsigned int counter;
@@ -563,3 +564,4 @@ static void __exit mako_hotplug_exit(void)
 
 late_initcall(mako_hotplug_init);
 module_exit(mako_hotplug_exit);
+

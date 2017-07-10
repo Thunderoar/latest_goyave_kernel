@@ -172,7 +172,8 @@ static void r2hb_hb_group_drop_item(struct config_group *group,
 					   struct config_item *item)
 {
 	if (r2hb_global_heartbeat_active()) {
-		pr_notice("ramster: Heartbeat %s on region %s (%s)\n",
+		printk(KERN_NOTICE "ramster: Heartbeat %s "
+			"on region %s (%s)\n",
 			"stopped/aborted", config_item_name(item),
 			"no region");
 	}
@@ -264,7 +265,8 @@ ssize_t r2hb_hb_group_mode_store(struct r2hb_hb_group *group,
 
 		ret = r2hb_global_hearbeat_mode_set(i);
 		if (!ret)
-			pr_notice("ramster: Heartbeat mode set to %s\n",
+			printk(KERN_NOTICE "ramster: Heartbeat mode "
+						"set to %s\n",
 			       r2hb_heartbeat_mode_desc[i]);
 		return count;
 	}
