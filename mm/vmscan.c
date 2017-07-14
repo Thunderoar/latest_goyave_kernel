@@ -1338,7 +1338,7 @@ putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
 
 		VM_BUG_ON(PageLRU(page));
 		list_del(&page->lru);
-		if (unlikely(!page_evictable(page, NULL))) {
+		if (unlikely(!page_evictable(page))) {
 			spin_unlock_irq(&zone->lru_lock);
 			putback_lru_page(page);
 			spin_lock_irq(&zone->lru_lock);

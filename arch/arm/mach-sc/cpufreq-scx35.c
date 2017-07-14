@@ -236,7 +236,7 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 		{EC, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		[OC1] = 1200000,
+		[OC1] = 1175000,
 		[NOC] = 1100000,
 		[UC1] = 1000000,
 		[UC2] = 1000000,
@@ -261,7 +261,7 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		{EC, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		[OC1] = 1200000,
+		[OC1] = 1185000,
 		[NOC] = 1100000,
 		[UC1] = 1000000,
 		[UC2] = 1000000,
@@ -461,7 +461,7 @@ static int sprd_cpufreq_verify_speed(struct cpufreq_policy *policy)
 }
 
 unsigned int cpufreq_min_limit = 254000;
-unsigned int cpufreq_max_limit = 1600000;
+unsigned int cpufreq_max_limit = 1540000;
 unsigned int dvfs_score_select = 5;
 unsigned int dvfs_unplug_select = 2;
 unsigned int dvfs_plug_select = 0;
