@@ -1,4 +1,4 @@
-obj-$(CONFIG_BATTERY_SAMSUNG)	+= sec_battery.o
+obj-$(CONFIG_BATTERY_SAMSUNG)	+= sec_battery.o sec_control.o
 obj-$(CONFIG_STBC_SAMSUNG)      += stbc_charger.o\
 				   stbc_fuelgauge.o
 obj-$(CONFIG_OF)		+= sec_adc.o \
