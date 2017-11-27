@@ -298,6 +298,9 @@ static int ksm_nr_node_ids = 1;
 #define KSM_RUN_OFFLINE	4
 #ifndef CONFIG_ADAPTIVE_KSM
 static unsigned long ksm_run = KSM_RUN_STOP;
+#else
+static unsigned long ksm_run = KSM_RUN_MERGE;
+#endif
 static void wait_while_offlining(void);
 
 static DECLARE_WAIT_QUEUE_HEAD(ksm_thread_wait);
@@ -2785,7 +2788,7 @@ static int __init ksm_init(void)
 		goto out_free;
 	}
 #else
-	ksm_run = KSM_RUN_STOP;	/* no way for user to start it */
+	ksm_run = KSM_RUN_MERGE;	/* no way for user to start it */
 
 #endif /* CONFIG_SYSFS */
 

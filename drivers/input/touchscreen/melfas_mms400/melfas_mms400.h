@@ -6,7 +6,7 @@
  */
 
 //Config debug msg : Must be disabled for production builds
-#if 0	// 0 : disable, 1 : enable
+#if 1	// 0 : disable, 1 : enable
 #define DEBUG	
 #endif
 
@@ -52,7 +52,7 @@
 //Include register map
 #include "melfas_mms400_reg.h"
 
-#define TOUCH_BOOSTER			0
+#define TOUCH_BOOSTER			1
 #if TOUCH_BOOSTER
 #include <linux/cpufreq.h>
 #include <linux/cpufreq_limit.h>

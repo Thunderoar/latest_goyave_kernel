@@ -51,7 +51,7 @@
 #define FREQ_TABLE_SIZE 	10
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
-#define TRANSITION_LATENCY	(100 * 1000) /* ns */
+#define TRANSITION_LATENCY	(50 * 1000) /* ns */
 
 static DEFINE_MUTEX(freq_lock);
 struct cpufreq_freqs global_freqs;
@@ -70,7 +70,7 @@ struct cpufreq_conf {
 
 struct cpufreq_table_data {
 	struct cpufreq_frequency_table 		freq_tbl[FREQ_TABLE_SIZE];
-	unsigned long				vddarm_mv[FREQ_TABLE_SIZE];
+	unsigned int				vddarm_mv[FREQ_TABLE_SIZE];
 };
 
 struct cpufreq_conf *sprd_cpufreq_conf = NULL;
@@ -214,62 +214,46 @@ static struct cpufreq_table_data sc8830_cpufreq_table_data_es = {
 	},
 };
 
-enum clocking_levels {
-	OC1, NOC, UC0=NOC,	/* no under clock */
-	UC1, UC2, UC3,	/* under clock */
-	UC4, UC5, UC6,
-	MAX_UC=UC6,
-	EC,
-};
-
 #if !defined (CONFIG_SCX35_1300MHZ)
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 	.freq_tbl = {
-		{OC1,  1540000},
-		{NOC, 1500000},
-		{UC1, 1300000},
-    {UC2, 1200000},
-		{UC3, 900000},
-		{UC4, 765000},
-		{UC5, 565000},
-		{UC6, 254000},
-		{EC, CPUFREQ_TABLE_END},
+		{0, 1200000},
+		{1, 1000000},
+		{2, SHARK_TDPLL_FREQUENCY},
+		{3, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		[OC1] = 1175000,
-		[NOC] = 1100000,
-		[UC1] = 1000000,
-		[UC2] = 1000000,
-		[UC3] = 900000,
-		[UC4] = 900000,
-		[UC5] = 900000,
-		[UC6] = 900000,
-		[EC] = 900000,
+		1000000,
+		900000,
+		900000,
+		900000,
 	},
 };
 #else
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 	.freq_tbl = {
-		{OC1,  1540000},
-		{NOC, 1500000},
-		{UC1, 1300000},
-    {UC2, 1200000},
-		{UC3, 900000},
-		{UC4, 765000},
-		{UC5, 565000},
-		{UC6, 254000},
-		{EC, CPUFREQ_TABLE_END},
-	},
+		{0, 1536000},
+		{1, 1363200},
+		{2, 1300000},
+		{3, 1190400},
+		{4, 1036800},
+		{5, 960000},
+		{6, 800000},
+		{7, SHARK_TDPLL_FREQUENCY},
+		{8, 729600},
+		{9,  CPUFREQ_TABLE_END},
+         },
 	.vddarm_mv = {
-		[OC1] = 1185000,
-		[NOC] = 1100000,
-		[UC1] = 1000000,
-		[UC2] = 1000000,
-		[UC3] = 900000,
-		[UC4] = 900000,
-		[UC5] = 900000,
-		[UC6] = 900000,
-		[EC] = 900000,
+		1150000,
+		1100000,
+		1050000,
+		985000,
+		965000,
+		945000,
+		925000,
+		905000,
+		895000,
+		895000,
 	},
 };
 #endif
@@ -368,7 +352,7 @@ static void sprd_raw_set_cpufreq(int cpu, struct cpufreq_freqs *freq, int index)
 		CPUFREQ_SET_VOLTAGE();
 	}
 
-	pr_info("%u --> %u, real=%u, index=%d\n",
+	pr_debug("%u --> %u, real=%u, index=%d\n",
 		freq->old, freq->new, sprd_raw_get_cpufreq(), index);
 
 #undef CPUFREQ_SET_VOLTAGE
@@ -390,7 +374,7 @@ static void sprd_real_set_cpufreq(struct cpufreq_policy *policy, unsigned int ne
 		mutex_unlock(&freq_lock);
 		return;
 	}
-	pr_info("--xing-- set %u khz for cpu%u\n",
+	pr_debug("--xing-- set %u khz for cpu%u\n",
 		new_speed, policy->cpu);
 	global_freqs.cpu = policy->cpu;
 	global_freqs.new = new_speed;
@@ -460,8 +444,8 @@ static int sprd_cpufreq_verify_speed(struct cpufreq_policy *policy)
 	return cpufreq_frequency_table_verify(policy, sprd_cpufreq_conf->freq_tbl);
 }
 
-unsigned int cpufreq_min_limit = 254000;
-unsigned int cpufreq_max_limit = 1540000;
+unsigned int cpufreq_min_limit = 729600;
+unsigned int cpufreq_max_limit = 1536000;
 unsigned int dvfs_score_select = 5;
 unsigned int dvfs_unplug_select = 2;
 unsigned int dvfs_plug_select = 0;
@@ -534,7 +518,7 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 	return sprd_raw_get_cpufreq();
 }
 
-static void sprd_set_cpureq_limit(void)
+static void sprd_set_cpufreq_limit(void)
 {
 	int i;
 	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
@@ -573,7 +557,7 @@ static int sprd_freq_table_init(void)
 		pr_err("%s error chip id\n", __func__);
 		return -EINVAL;
 	}
-	sprd_set_cpureq_limit();
+	sprd_set_cpufreq_limit();
 	return 0;
 }
 
@@ -908,36 +892,6 @@ static int __init sprd_cpufreq_modinit(void)
 	*/
 	clk_set_parent(sprd_cpufreq_conf->clk, sprd_cpufreq_conf->mpllclk);
 	global_freqs.old = sprd_raw_get_cpufreq();
-
-#ifdef CONFIG_CPU_VOLTAGE_CONTROL
-    dts_freq_table =
-    devm_kzalloc(dev, (nf + 1) *
-                 sizeof(struct cpufreq_frequency_table),
-                 GFP_KERNEL);
-    
-    if (!dts_freq_table)
-        return -ENOMEM;
-    
-    for (i = 0, j = 0; i < nf; i++, j += 3)
-        dts_freq_table[i].frequency = data[j];
-    dts_freq_table[i].frequency = CPUFREQ_TABLE_END;
-#endif
-
-#ifdef CONFIG_CPU_VOLTAGE_CONTROL
-bool is_used_by_scaling(unsigned int freq)
-{
-    unsigned int i, cpu_freq;
-    
-    for (i = 0; dts_freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
-        cpu_freq = dts_freq_table[i].frequency;
-        if (cpu_freq == CPUFREQ_ENTRY_INVALID)
-            continue;
-        if (freq == cpu_freq)
-            return true;
-    }
-    return -EINVAL;
-}
-#endif
 
 #endif
 

@@ -58,7 +58,7 @@ extern void __pgd_error(const char *file, int line, pgd_t);
  * mapping to be mapped at.  This is particularly important for
  * non-high vector CPUs.
  */
-#define FIRST_USER_ADDRESS	(PAGE_SIZE * 2)
+#define FIRST_USER_ADDRESS	PAGE_SIZE
 
 /*
  * Use TASK_SIZE as the ceiling argument for free_pgtables() and

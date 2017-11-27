@@ -324,33 +324,6 @@ config KSM
 	  until a program has madvised that an area is MADV_MERGEABLE, and
 	  root has set /sys/kernel/mm/ksm/run to 1 (if CONFIG_SYSFS is set).
 
-choice
-	prompt "Choose UKSM/KSM strategy"
-	default UKSM
-	depends on KSM
-	help
-	  This option allows to select a UKSM/KSM stragety.
-
-config UKSM
-	bool "Ultra-KSM for page merging"
-	depends on KSM
-	help
-	UKSM is inspired by the Linux kernel project \u2014 KSM(Kernel Same
-	page Merging), but with a fundamentally rewritten core algorithm. With
-	an advanced algorithm, UKSM now can transparently scans all anonymously
-	mapped user space applications with an significantly improved scan speed
-	and CPU efficiency. Since KVM is friendly to KSM, KVM can also benefit from
-	UKSM. Now UKSM has its first stable release and first real world enterprise user.
-	For more information, please goto its project page.
-	(www.kerneldedup.org)
-
-config KSM_LEGACY
-	bool "Legacy KSM implementation"
-	depends on KSM
-	help
-	The legacy KSM implementation from Redhat.
-endchoice
-
 config OPTIMIZE_KSM
 	bool "Enable Optimize KSM"
 	depends on KSM
@@ -541,21 +514,11 @@ config ZBUD
 	  deterministic reclaim properties that make it preferable to a higher
 	  density approach when reclaim will be used.
 
-config Z3FOLD
-	tristate "Up to 3x density storage for compressed pages"
-	depends on ZPOOL
-	default n
-	help
-	  A special purpose allocator for storing compressed pages.
-	  It is designed to store up to three compressed pages per physical
-	  page. It is a ZBUD derivative so the simplicity and determinism are
-	  still there.
-
 config ZSWAP
 	bool "Compressed cache for swap pages (EXPERIMENTAL)"
 	depends on FRONTSWAP && CRYPTO=y
-	select CRYPTO_LZ4
-	select ZBUD
+	select CRYPTO_LZO
+	select ZPOOL
 	default n
 	help
 	  A lightweight compressed cache for swap pages.  It takes
@@ -570,24 +533,6 @@ config ZSWAP
 	  interactions don't cause any known issues on simple memory setups,
 	  they have not be fully explored on the large set of potential
 	  configurations and workloads that exist.
-
-choice
-	prompt "zswap compression"
-	depends on ZSWAP
-	default ZSWAP_LZO
-
-config ZSWAP_LZO
-	bool "lz0"
-
-config ZSWAP_LZ4HC
-	depends on CRYPTO_LZ4HC
-	bool "lz4hc"
-
-config ZSWAP_LZ4
-	depends on CRYPTO_LZ4
-	bool "lz4"
-
-endchoice
 
 config ZPOOL
 	tristate "Common API for compressed memory storage"
@@ -608,16 +553,6 @@ config ZSMALLOC
 	  returned by an alloc().  This handle must be mapped in order to
 	  access the allocated space.
 
-config ZSMALLOC_STAT
-	bool "Export zsmalloc statistics"
-	depends on ZSMALLOC
-	select DEBUG_FS
-	help
-	  This option enables code in the zsmalloc to collect various
-	  statistics about whats happening in zsmalloc and exports that
-	  information to userspace via debugfs.
-	  If unsure, say N.
-
 config PGTABLE_MAPPING
 	bool "Use page table mapping to access object in zsmalloc"
 	depends on ZSMALLOC
@@ -630,6 +565,26 @@ config PGTABLE_MAPPING
 
 	  You can check speed with zsmalloc benchmark[1].
 	  [1] https://github.com/spartacus06/zsmalloc
+
+config DIRECT_RECLAIM_FILE_PAGES_ONLY
+	bool "Reclaim file pages only on direct reclaim path"
+	depends on ZSWAP
+	default n
+
+config INCREASE_MAXIMUM_SWAPPINESS
+	bool "Allow swappiness to be set up to 200"
+	depends on ZSWAP
+	default n
+
+config FIX_INACTIVE_RATIO
+	bool "Fix active:inactive anon ratio to 1:1"
+	depends on ZSWAP
+	default n
+
+config TIGHT_PGDAT_BALANCE
+	bool "Set more tight balanced condition to kswapd"
+	depends on ZSWAP
+	default n
 
 config SWAP_ENABLE_READAHEAD
 	bool "Enable readahead on page swap in"
@@ -651,14 +606,3 @@ config MIN_DIRTY_THRESH_PAGES
 	  disables this option.)
 	  Do not use it if you unsure.
 
-config IDLE_PAGE_TRACKING
-	bool "Enable idle page tracking"
-	depends on SYSFS && MMU
-	select PAGE_EXTENSION if !64BIT
-	help
-	  This feature allows to estimate the amount of user pages that have
-	  not been touched during a given period of time. This information can
-	  be useful to tune memory cgroup limits and/or for job placement
-	  within a compute cluster.
-
-	  See Documentation/vm/idle_page_tracking.txt for more details.

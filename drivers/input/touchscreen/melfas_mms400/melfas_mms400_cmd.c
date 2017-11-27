@@ -1125,17 +1125,7 @@ static ssize_t mms_sys_threshold_key(struct device *dev, struct device_attribute
 
 	//need to match threshold value with firmware
 	int threshold = 25;
-
-#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
-    dev_dbg(&info->client->dev, "[USE_DUAL_FW] %s [TSP_TYPE] %d\n", __func__, info->tsp_type);
-
-    if (info->tsp_type == TSP_HW_ID_INDEX_1) {
-        threshold = 40;
-    } else {
-        threshold = 25;
-    }
-#endif
-
+	
 	dev_dbg(&info->client->dev, "%s - threshold [%d]\n", __func__, threshold);
 
 	return snprintf(buf, PAGE_SIZE, "%d %d %d %d", threshold, threshold, threshold, threshold);

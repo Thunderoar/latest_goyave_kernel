@@ -1425,11 +1425,8 @@ struct vfsmount *collect_mounts(struct path *path)
 {
 	struct mount *tree;
 	namespace_lock();
-	if (!check_mnt(real_mount(path->mnt)))
-		tree = ERR_PTR(-EINVAL);
-	else
-		tree = copy_tree(real_mount(path->mnt), path->dentry,
-				CL_COPY_ALL | CL_PRIVATE);
+	tree = copy_tree(real_mount(path->mnt), path->dentry,
+			 CL_COPY_ALL | CL_PRIVATE);
 	namespace_unlock();
 	if (IS_ERR(tree))
 		return ERR_CAST(tree);
@@ -2010,13 +2007,6 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 	err = do_add_mount(real_mount(mnt), path, mnt_flags);
 	if (err)
 		mntput(mnt);
-#ifdef CONFIG_ASYNC_FSYNC
-	if (!err && ((!strcmp(type, "ext4") &&
-	    !strcmp(path->dentry->d_name.name, "data")) ||
-	    (!strcmp(type, "fuse") &&
-	    !strcmp(path->dentry->d_name.name, "emulated"))))
-                mnt->mnt_sb->fsync_flags |= FLAG_ASYNC_FSYNC;
-#endif
 	return err;
 }
 
@@ -2658,9 +2648,6 @@ SYSCALL_DEFINE2(pivot_root, const char __user *, new_root,
 		goto out4; /* not attached */
 	/* make sure we can reach put_old from new_root */
 	if (!is_path_reachable(old_mnt, old.dentry, &new))
-		goto out4;
-	/* make certain new is below the root */
-	if (!is_path_reachable(new_mnt, new.dentry, &root))
 		goto out4;
 	root_mp->m_count++; /* pin it so it won't go away */
 	br_write_lock(&vfsmount_lock);

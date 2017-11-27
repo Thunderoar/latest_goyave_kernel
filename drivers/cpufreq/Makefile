@@ -2,8 +2,6 @@
 obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o
 # CPUfreq stats
 obj-$(CONFIG_CPU_FREQ_STAT)             += cpufreq_stats.o
-# CPU Input Boost
-obj-$(CONFIG_CPU_INPUT_BOOST)		+= cpu_input_boost.o
 # CPUfreq limit API
 obj-$(CONFIG_CPU_FREQ_LIMIT)             += cpufreq_limit.o
 # CPUfreq governors 
@@ -14,22 +12,6 @@ obj-$(CONFIG_CPU_FREQ_GOV_ONDEMAND)	+= cpufreq_ondemand.o
 obj-$(CONFIG_CPU_FREQ_GOV_CONSERVATIVE)	+= cpufreq_conservative.o
 obj-$(CONFIG_CPU_FREQ_GOV_INTERACTIVE)	+= cpufreq_interactive.o
 obj-$(CONFIG_CPU_FREQ_GOV_SPRDEMAND)	+= cpufreq_sprdemand.o
-obj-$(CONFIG_CPU_FREQ_GOV_DARKNESS)	+= cpufreq_darkness.o
-obj-$(CONFIG_CPU_FREQ_GOV_HOTPLUG)	+= cpufreq_hotplug.o
-obj-$(CONFIG_CPU_FREQ_GOV_HYPER)	+= cpufreq_hyper.o
-obj-$(CONFIG_CPU_FREQ_GOV_INTELLIACTIVE)	+= cpufreq_intelliactive.o
-obj-$(CONFIG_CPU_FREQ_GOV_LAGFREE)	+= cpufreq_lagfree.o
-obj-$(CONFIG_CPU_FREQ_GOV_LIONHEART)	+= cpufreq_lionheart.o
-obj-$(CONFIG_CPU_FREQ_GOV_MINMAX)	+= cpufreq_minmax.o
-obj-$(CONFIG_CPU_FREQ_GOV_NIGHTMARE)	+= cpufreq_nightmare.o
-obj-$(CONFIG_CPU_FREQ_GOV_ONDEMANDPLUS)	+= cpufreq_ondemandplus.o
-obj-$(CONFIG_CPU_FREQ_GOV_ONDEMANDX)	+= cpufreq_ondemandx.o
-obj-$(CONFIG_CPU_FREQ_GOV_SCARY)	+= cpufreq_scary.o
-obj-$(CONFIG_CPU_FREQ_GOV_SLEEPY)	+= cpufreq_sleepy.o
-obj-$(CONFIG_CPU_FREQ_GOV_WHEATLEY)	+= cpufreq_wheatley.o
-obj-$(CONFIG_CPU_FREQ_GOV_ZZMOOVE)	+= cpufreq_zzmoove.o
-obj-$(CONFIG_CPU_FREQ_GOV_BADASS)	+= cpufreq_badass.o
-obj-$(CONFIG_CPU_FREQ_GOV_IMPULSE)	+= cpufreq_impulse.o
 obj-$(CONFIG_CPU_FREQ_GOV_COMMON)		+= cpufreq_governor.o
 
 # CPUfreq cross-arch helpers

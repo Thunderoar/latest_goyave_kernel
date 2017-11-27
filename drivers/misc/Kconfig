@@ -596,12 +596,6 @@ config CHECK_SIMSLOT_COUNT_GPIO
 	help
 		Provides Number of SS/DS detect GPIO value.
 
-config BLX
-	bool "Support for Battery Life eXtender"
-	default y
-	help
-	  Say Y here to enable Battery Life eXtender
-
 source "drivers/misc/sprd_otp/Kconfig"
 source "drivers/misc/sprd_vsp/Kconfig"
 source "drivers/misc/sprd_jpg/Kconfig"

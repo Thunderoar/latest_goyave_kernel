@@ -6,7 +6,7 @@
 #include <linux/battery/sec_charger.h>
 #include <linux/battery/sec_fuelgauge.h>
 //#include <linux/sprd_battery_common.h>
-#include "../../../../drivers/battery/sprd_2713_fgu.h"
+#include <../../../../drivers/battery/sprd_2713_fgu.h>
 
 struct battery_data_t {
     struct sprd_battery_platform_data *pdata;

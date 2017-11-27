@@ -230,7 +230,6 @@ struct cg_proto;
   *	@sk_wmem_queued: persistent queue size
   *	@sk_forward_alloc: space allocated forward
   *	@sk_allocation: allocation mode
-  *	@sk_pacing_rate: Pacing rate (if supported by transport/packet scheduler)
   *	@sk_sndbuf: size of send buffer in bytes
   *	@sk_flags: %SO_LINGER (l_onoff), %SO_BROADCAST, %SO_KEEPALIVE,
   *		   %SO_OOBINLINE settings, %SO_TIMESTAMPING settings
@@ -352,12 +351,10 @@ struct sock {
 				sk_no_check  : 2,
 				sk_userlocks : 4,
 				sk_protocol  : 8,
-#define SK_PROTOCOL_MAX U8_MAX
 				sk_type      : 16;
 	kmemcheck_bitfield_end(flags);
 	int			sk_wmem_queued;
 	gfp_t			sk_allocation;
-	u32			sk_pacing_rate; /* bytes per second */
 	netdev_features_t	sk_route_caps;
 	netdev_features_t	sk_route_nocaps;
 	int			sk_gso_type;

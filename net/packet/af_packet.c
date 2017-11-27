@@ -237,30 +237,6 @@ struct packet_skb_cb {
 static void __fanout_unlink(struct sock *sk, struct packet_sock *po);
 static void __fanout_link(struct sock *sk, struct packet_sock *po);
 
-static struct net_device *packet_cached_dev_get(struct packet_sock *po)
-{
-	struct net_device *dev;
-
-	rcu_read_lock();
-	dev = rcu_dereference(po->cached_dev);
-	if (likely(dev))
-		dev_hold(dev);
-	rcu_read_unlock();
-
-	return dev;
-}
-
-static void packet_cached_dev_assign(struct packet_sock *po,
-				     struct net_device *dev)
-{
-	rcu_assign_pointer(po->cached_dev, dev);
-}
-
-static void packet_cached_dev_reset(struct packet_sock *po)
-{
-	RCU_INIT_POINTER(po->cached_dev, NULL);
-}
-
 /* register_prot_hook must be invoked with the po->bind_lock held,
  * or from a context in which asynchronous accesses to the packet
  * socket is not possible (packet_create()).
@@ -268,13 +244,11 @@ static void packet_cached_dev_reset(struct packet_sock *po)
 static void register_prot_hook(struct sock *sk)
 {
 	struct packet_sock *po = pkt_sk(sk);
-
 	if (!po->running) {
 		if (po->fanout)
 			__fanout_link(sk, po);
 		else
 			dev_add_pack(&po->prot_hook);
-
 		sock_hold(sk);
 		po->running = 1;
 	}
@@ -292,12 +266,10 @@ static void __unregister_prot_hook(struct sock *sk, bool sync)
 	struct packet_sock *po = pkt_sk(sk);
 
 	po->running = 0;
-
 	if (po->fanout)
 		__fanout_unlink(sk, po);
 	else
 		__dev_remove_pack(&po->prot_hook);
-
 	__sock_put(sk);
 
 	if (sync) {
@@ -460,9 +432,9 @@ static void prb_shutdown_retire_blk_timer(struct packet_sock *po,
 
 	pkc = tx_ring ? &po->tx_ring.prb_bdqc : &po->rx_ring.prb_bdqc;
 
-	spin_lock_bh(&rb_queue->lock);
+	spin_lock(&rb_queue->lock);
 	pkc->delete_blk_timer = 1;
-	spin_unlock_bh(&rb_queue->lock);
+	spin_unlock(&rb_queue->lock);
 
 	prb_del_retire_blk_timer(pkc);
 }
@@ -2074,6 +2046,7 @@ static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 	struct sk_buff *skb;
 	struct net_device *dev;
 	__be16 proto;
+	bool need_rls_dev = false;
 	int err, reserve = 0;
 	void *ph;
 	struct sockaddr_ll *saddr = (struct sockaddr_ll *)msg->msg_name;
@@ -2085,8 +2058,8 @@ static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 
 	mutex_lock(&po->pg_vec_lock);
 
-	if (likely(saddr == NULL)) {
-		dev	= packet_cached_dev_get(po);
+	if (saddr == NULL) {
+		dev = po->prot_hook.dev;
 		proto	= po->num;
 		addr	= NULL;
 	} else {
@@ -2100,16 +2073,18 @@ static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 		proto	= saddr->sll_protocol;
 		addr	= saddr->sll_addr;
 		dev = dev_get_by_index(sock_net(&po->sk), saddr->sll_ifindex);
+		need_rls_dev = true;
 	}
 
 	err = -ENXIO;
 	if (unlikely(dev == NULL))
 		goto out;
+
+	reserve = dev->hard_header_len;
+
 	err = -ENETDOWN;
 	if (unlikely(!(dev->flags & IFF_UP)))
 		goto out_put;
-
-	reserve = dev->hard_header_len;
 
 	size_max = po->tx_ring.frame_size
 		- (po->tp_hdrlen - sizeof(struct sockaddr_ll));
@@ -2187,7 +2162,8 @@ out_status:
 	__packet_set_status(po, ph, status);
 	kfree_skb(skb);
 out_put:
-	dev_put(dev);
+	if (need_rls_dev)
+		dev_put(dev);
 out:
 	mutex_unlock(&po->pg_vec_lock);
 	return err;
@@ -2225,6 +2201,7 @@ static int packet_snd(struct socket *sock,
 	struct sk_buff *skb;
 	struct net_device *dev;
 	__be16 proto;
+	bool need_rls_dev = false;
 	unsigned char *addr;
 	int err, reserve = 0;
 	struct virtio_net_hdr vnet_hdr = { 0 };
@@ -2239,8 +2216,8 @@ static int packet_snd(struct socket *sock,
 	 *	Get and verify the address.
 	 */
 
-	if (likely(saddr == NULL)) {
-		dev	= packet_cached_dev_get(po);
+	if (saddr == NULL) {
+		dev = po->prot_hook.dev;
 		proto	= po->num;
 		addr	= NULL;
 	} else {
@@ -2252,17 +2229,19 @@ static int packet_snd(struct socket *sock,
 		proto	= saddr->sll_protocol;
 		addr	= saddr->sll_addr;
 		dev = dev_get_by_index(sock_net(sk), saddr->sll_ifindex);
+		need_rls_dev = true;
 	}
 
 	err = -ENXIO;
-	if (unlikely(dev == NULL))
+	if (dev == NULL)
 		goto out_unlock;
-	err = -ENETDOWN;
-	if (unlikely(!(dev->flags & IFF_UP)))
-		goto out_unlock;
-
 	if (sock->type == SOCK_RAW)
 		reserve = dev->hard_header_len;
+
+	err = -ENETDOWN;
+	if (!(dev->flags & IFF_UP))
+		goto out_unlock;
+
 	if (po->has_vnet_hdr) {
 		vnet_hdr_len = sizeof(vnet_hdr);
 
@@ -2396,14 +2375,15 @@ static int packet_snd(struct socket *sock,
 	if (err > 0 && (err = net_xmit_errno(err)) != 0)
 		goto out_unlock;
 
-	dev_put(dev);
+	if (need_rls_dev)
+		dev_put(dev);
 
 	return len;
 
 out_free:
 	kfree_skb(skb);
 out_unlock:
-	if (dev)
+	if (dev && need_rls_dev)
 		dev_put(dev);
 out:
 	return err;
@@ -2448,8 +2428,6 @@ static int packet_release(struct socket *sock)
 
 	spin_lock(&po->bind_lock);
 	unregister_prot_hook(sk, false);
-	packet_cached_dev_reset(po);
-
 	if (po->prot_hook.dev) {
 		dev_put(po->prot_hook.dev);
 		po->prot_hook.dev = NULL;
@@ -2505,16 +2483,13 @@ static int packet_do_bind(struct sock *sk, struct net_device *dev, __be16 protoc
 
 	spin_lock(&po->bind_lock);
 	unregister_prot_hook(sk, true);
-
 	po->num = protocol;
 	po->prot_hook.type = protocol;
 	if (po->prot_hook.dev)
 		dev_put(po->prot_hook.dev);
-
 	po->prot_hook.dev = dev;
-	po->ifindex = dev ? dev->ifindex : 0;
 
-	packet_cached_dev_assign(po, dev);
+	po->ifindex = dev ? dev->ifindex : 0;
 
 	if (protocol == 0)
 		goto out_unlock;
@@ -2628,8 +2603,6 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 	po = pkt_sk(sk);
 	sk->sk_family = PF_PACKET;
 	po->num = proto;
-
-	packet_cached_dev_reset(po);
 
 	sk->sk_destruct = packet_sock_destruct;
 	sk_refcnt_debug_inc(sk);
@@ -3385,7 +3358,6 @@ static int packet_notifier(struct notifier_block *this, unsigned long msg, void 
 						sk->sk_error_report(sk);
 				}
 				if (msg == NETDEV_UNREGISTER) {
-					packet_cached_dev_reset(po);
 					po->ifindex = -1;
 					if (po->prot_hook.dev)
 						dev_put(po->prot_hook.dev);

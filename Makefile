@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 10
-SUBLEVEL = 32
-EXTRAVERSION = -revived_version_v4.1.2tk
+SUBLEVEL = 17
+EXTRAVERSION =
 NAME = TOSSUG Baby Fish
 
 # *DOCUMENTATION*
@@ -193,7 +193,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/x86/ -e s/x86_64/x86/ \
 # Default value for CROSS_COMPILE is not to prefix executables
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 ARCH		=arm
-CROSS_COMPILE	=/home/thunderoar/u/bin/arm-eabi-
+CROSS_COMPILE	=/home/thn-dev/Uber4.9/bin/arm-eabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -239,12 +239,10 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
-GRAPHITE = -fgraphite -fgraphite-identity -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -ftree-loop-linear -floop-nest-optimize
-
 HOSTCC       = gcc
 HOSTCXX      = g++
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fgcse-las -flto -fomit-frame-pointer -pthread $(GRAPHITE)
-HOSTCXXFLAGS = -DNDEBUG -pipe -O2 -flto=4 -Wno-unused $(GRAPHITE)
+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
+HOSTCXXFLAGS = -O2
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -376,8 +374,8 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -fno-delete-null-pointer-checks
-KBUILD_AFLAGS_KERNEL :=-O2 -mtune=cortex-a7 -mfpu=vfpv4-d16
-KBUILD_CFLAGS_KERNEL :=-O2 -mtune=cortex-a7 -mfpu=vfpv4-d16
+KBUILD_AFLAGS_KERNEL :=
+KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE

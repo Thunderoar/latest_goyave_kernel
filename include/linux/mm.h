@@ -324,8 +324,6 @@ static inline int is_vmalloc_or_module_addr(const void *x)
 }
 #endif
 
-extern void kvfree(const void *addr);
-
 static inline void compound_lock(struct page *page)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -373,11 +371,6 @@ static inline struct page *compound_head(struct page *page)
  * both from it and to it can be tracked, using atomic_inc_and_test
  * and atomic_add_negative(-1).
  */
-static inline void reset_page_mapcount(struct page *page)
-{
-	atomic_set(&(page)->_mapcount, -1);
-}
-
 static inline void page_mapcount_reset(struct page *page)
 {
 	atomic_set(&(page)->_mapcount, -1);
@@ -773,14 +766,11 @@ static __always_inline void *lowmem_page_address(const struct page *page)
 #endif
 
 #if defined(WANT_PAGE_VIRTUAL)
-static inline void *page_address(const struct page *page)
-{
-	return page->virtual;
-}
-static inline void set_page_address(struct page *page, void *address)
-{
-	page->virtual = address;
-}
+#define page_address(page) ((page)->virtual)
+#define set_page_address(page, address)			\
+	do {						\
+		(page)->virtual = (address);		\
+	} while(0)
 #define page_address_init()  do { } while(0)
 #endif
 
@@ -1101,8 +1091,7 @@ extern unsigned long move_page_tables(struct vm_area_struct *vma,
 		bool need_rmap_locks);
 extern unsigned long change_protection(struct vm_area_struct *vma, unsigned long start,
 			      unsigned long end, pgprot_t newprot,
-			      int dirty_accountable,
-			      int *prot_numa_pte_skipped);
+			      int dirty_accountable, int prot_numa);
 extern int mprotect_fixup(struct vm_area_struct *vma,
 			  struct vm_area_struct **pprev, unsigned long start,
 			  unsigned long end, unsigned long newflags);

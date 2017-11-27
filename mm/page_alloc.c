@@ -6349,6 +6349,8 @@ static void dump_page_flags(unsigned long flags)
 	unsigned long mask;
 	int i;
 
+	BUILD_BUG_ON(ARRAY_SIZE(pageflag_names) != __NR_PAGEFLAGS);
+
 	printk(KERN_ALERT "page flags: %#lx(", flags);
 
 	/* remove zone id */

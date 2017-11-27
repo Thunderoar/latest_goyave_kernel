@@ -1710,13 +1710,12 @@ int migrate_misplaced_transhuge_page(struct mm_struct *mm,
 		unlock_page(new_page);
 		put_page(new_page);		/* Free it */
 
-		/* Retake the callers reference and putback on LRU */
-		get_page(page);
+		unlock_page(page);
 		putback_lru_page(page);
 
-		mod_zone_page_state(page_zone(page),
-			 NR_ISOLATED_ANON + page_lru, -HPAGE_PMD_NR);
-		goto out_fail;
+		count_vm_events(PGMIGRATE_FAIL, HPAGE_PMD_NR);
+		isolated = 0;
+		goto out;
 	}
 
 	/*

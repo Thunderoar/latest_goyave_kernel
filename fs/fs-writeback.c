@@ -518,16 +518,13 @@ writeback_single_inode(struct inode *inode, struct bdi_writeback *wb,
 	}
 	WARN_ON(inode->i_state & I_SYNC);
 	/*
-	 * Skip inode if it is clean and we have no outstanding writeback in
-	 * WB_SYNC_ALL mode. We don't want to mess with writeback lists in this
-	 * function since flusher thread may be doing for example sync in
-	 * parallel and if we move the inode, it could get skipped. So here we
-	 * make sure inode is on some writeback list and leave it there unless
-	 * we have completely cleaned the inode.
+	 * Skip inode if it is clean. We don't want to mess with writeback
+	 * lists in this function since flusher thread may be doing for example
+	 * sync in parallel and if we move the inode, it could get skipped. So
+	 * here we make sure inode is on some writeback list and leave it there
+	 * unless we have completely cleaned the inode.
 	 */
-	if (!(inode->i_state & I_DIRTY) &&
-	    (wbc->sync_mode != WB_SYNC_ALL ||
-	     !mapping_tagged(inode->i_mapping, PAGECACHE_TAG_WRITEBACK)))
+	if (!(inode->i_state & I_DIRTY))
 		goto out;
 	inode->i_state |= I_SYNC;
 	spin_unlock(&inode->i_lock);
@@ -759,6 +756,10 @@ static bool over_bground_thresh(struct backing_dev_info *bdi)
 	unsigned long background_thresh, dirty_thresh;
 
 	global_dirty_limits(&background_thresh, &dirty_thresh);
+
+	if (global_page_state(NR_FILE_DIRTY) +
+	    global_page_state(NR_UNSTABLE_NFS) > background_thresh)
+		return true;
 
 	if (bdi_stat(bdi, BDI_RECLAIMABLE) >
 				bdi_dirty_limit(bdi, background_thresh))
@@ -1063,8 +1064,10 @@ void wakeup_flusher_threads(long nr_pages, enum wb_reason reason)
 {
 	struct backing_dev_info *bdi;
 
-	if (!nr_pages)
-		nr_pages = get_nr_dirty_pages();
+	if (!nr_pages) {
+		nr_pages = global_page_state(NR_FILE_DIRTY) +
+				global_page_state(NR_UNSTABLE_NFS);
+	}
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(bdi, &bdi_list, bdi_list) {

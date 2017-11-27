@@ -40,7 +40,6 @@
 #include <asm/thread_notify.h>
 #include <asm/stacktrace.h>
 #include <asm/mach/time.h>
-#include <asm/tls.h>
 
 #ifdef CONFIG_CC_STACKPROTECTOR
 #include <linux/stackprotector.h>
@@ -178,9 +177,6 @@ static void default_idle(void)
 		cpu_do_idle();
 	local_irq_enable();
 }
-
-void (*pm_idle)(void) = default_idle;		
-EXPORT_SYMBOL(pm_idle);
 
 void arch_cpu_idle_prepare(void)
 {
@@ -507,8 +503,7 @@ copy_thread(unsigned long clone_flags, unsigned long stack_start,
 	clear_ptrace_hw_breakpoint(p);
 
 	if (clone_flags & CLONE_SETTLS)
-		thread->tp_value[0] = childregs->ARM_r3;
-	thread->tp_value[1] = get_tpuser();
+		thread->tp_value = childregs->ARM_r3;
 
 	thread_notify(THREAD_NOTIFY_COPY, thread);
 
@@ -542,7 +537,6 @@ EXPORT_SYMBOL(dump_fpu);
 unsigned long get_wchan(struct task_struct *p)
 {
 	struct stackframe frame;
-	unsigned long stack_page;
 	int count = 0;
 	if (!p || p == current || p->state == TASK_RUNNING)
 		return 0;
@@ -551,11 +545,9 @@ unsigned long get_wchan(struct task_struct *p)
 	frame.sp = thread_saved_sp(p);
 	frame.lr = 0;			/* recovered from the stack */
 	frame.pc = thread_saved_pc(p);
-	stack_page = (unsigned long)task_stack_page(p);
 	do {
-		if (frame.sp < stack_page ||
-		    frame.sp >= stack_page + THREAD_SIZE ||
-		    unwind_frame(&frame) < 0)
+		int ret = unwind_frame(&frame);
+		if (ret < 0)
 			return 0;
 		if (!in_sched_functions(frame.pc))
 			return frame.pc;

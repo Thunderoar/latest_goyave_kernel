@@ -392,14 +392,11 @@
 	};
 };
 
-/* CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW */
 &i2c1 { /* TSP */
 	mms_ts@48 {
 		compatible = "melfas,mms_ts";
 		reg = <0x48>;
 		gpios = <&d_gpio_gpio 82 0>;
-		tsp_vendor_1 = <&d_gpio_gpio 81 0>;
-		tsp_vendor_2 = <&d_gpio_gpio 83 0>;
 		mms_ts,max_x = /bits/ 16 <1024>;
 		mms_ts,max_y = /bits/ 16 <600>;
 	};

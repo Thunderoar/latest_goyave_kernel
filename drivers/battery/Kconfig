@@ -400,9 +400,3 @@ config CHARGER_SPRD4SAMSUNG27X3
 	 for Summit sprd27X3 charger driver.
 	 This driver source code implemented
 	 all functions for sprd27X3 charger.
-
-config STORE_MODE
-       bool "enable store mode"
-       default n
-       help
-	 Say Y to enable CONFIG_STORE_MODE

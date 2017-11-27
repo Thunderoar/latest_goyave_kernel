@@ -220,7 +220,7 @@ static inline int pmd_same(pmd_t pmd_a, pmd_t pmd_b)
 #endif
 
 #ifndef pte_accessible
-# define pte_accessible(mm, pte)	((void)(pte), 1)
+# define pte_accessible(pte)		((void)(pte),1)
 #endif
 
 #ifndef flush_tlb_fix_spurious_fault
@@ -453,25 +453,12 @@ extern void untrack_pfn(struct vm_area_struct *vma, unsigned long pfn,
 			unsigned long size);
 #endif
 
-#ifdef CONFIG_UKSM
-static inline int is_uksm_zero_pfn(unsigned long pfn)
-{
-	extern unsigned long uksm_zero_pfn;
-        return pfn == uksm_zero_pfn;
-}
-#else
-static inline int is_uksm_zero_pfn(unsigned long pfn)
-{
-        return 0;
-}
-#endif
-
 #ifdef __HAVE_COLOR_ZERO_PAGE
 static inline int is_zero_pfn(unsigned long pfn)
 {
 	extern unsigned long zero_pfn;
 	unsigned long offset_from_zero_pfn = pfn - zero_pfn;
-	return offset_from_zero_pfn <= (zero_page_mask >> PAGE_SHIFT) || is_uksm_zero_pfn(pfn);
+	return offset_from_zero_pfn <= (zero_page_mask >> PAGE_SHIFT);
 }
 
 #define my_zero_pfn(addr)	page_to_pfn(ZERO_PAGE(addr))
@@ -480,7 +467,7 @@ static inline int is_zero_pfn(unsigned long pfn)
 static inline int is_zero_pfn(unsigned long pfn)
 {
 	extern unsigned long zero_pfn;
-	return (pfn == zero_pfn) || (is_uksm_zero_pfn(pfn));
+	return pfn == zero_pfn;
 }
 
 static inline unsigned long my_zero_pfn(unsigned long addr)
@@ -563,10 +550,11 @@ static inline int pmd_none_or_trans_huge_or_clear_bad(pmd_t *pmd)
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	barrier();
 #endif
-	if (pmd_none(pmdval) || pmd_trans_huge(pmdval))
+	if (pmd_none(pmdval))
 		return 1;
 	if (unlikely(pmd_bad(pmdval))) {
-		pmd_clear_bad(pmd);
+		if (!pmd_trans_huge(pmdval))
+			pmd_clear_bad(pmd);
 		return 1;
 	}
 	return 0;

@@ -3237,18 +3237,10 @@ int ext4_calculate_overhead(struct super_block *sb)
 }
 
 
-static ext4_fsblk_t ext4_calculate_resv_clusters(struct super_block *sb)
+static ext4_fsblk_t ext4_calculate_resv_clusters(struct ext4_sb_info *sbi)
 {
 	ext4_fsblk_t resv_clusters;
 
-	/*
-	 * There's no need to reserve anything when we aren't using extents.
-	 * The space estimates are exact, there are no unwritten extents,
-	 * hole punching doesn't need new metadata... This is needed especially
-	 * to keep ext2/3 backward compatibility.
-	 */
-	if (!EXT4_HAS_INCOMPAT_FEATURE(sb, EXT4_FEATURE_INCOMPAT_EXTENTS))
-		return 0;
 	/*
 	 * By default we reserve 2% or 4096 clusters, whichever is smaller.
 	 * This should cover the situations where we can not afford to run
@@ -3257,8 +3249,7 @@ static ext4_fsblk_t ext4_calculate_resv_clusters(struct super_block *sb)
 	 * allocation would require 1, or 2 blocks, higher numbers are
 	 * very rare.
 	 */
-	resv_clusters = ext4_blocks_count(EXT4_SB(sb)->s_es) >>
-			EXT4_SB(sb)->s_cluster_bits;
+	resv_clusters = ext4_blocks_count(sbi->s_es) >> sbi->s_cluster_bits;
 
 	do_div(resv_clusters, 50);
 	resv_clusters = min_t(ext4_fsblk_t, resv_clusters, 4096);
@@ -4003,10 +3994,10 @@ no_journal:
 	}
 
 	atomic64_set(&sbi->s_r_blocks_count, ext4_r_blocks_count(es));
-	err = ext4_reserve_clusters(sbi, ext4_calculate_resv_clusters(sb));
+	err = ext4_reserve_clusters(sbi, ext4_calculate_resv_clusters(sbi));
 	if (err) {
 		ext4_msg(sb, KERN_ERR, "failed to reserve %llu clusters for "
-			 "reserved pool", ext4_calculate_resv_clusters(sb));
+			 "reserved pool", ext4_calculate_resv_clusters(sbi));
 		goto failed_mount4a;
 	}
 

@@ -145,7 +145,7 @@ struct scan_control {
 /*
  * From 0 .. 100.  Higher means more swappy.
  */
-int vm_swappiness = 40;
+int vm_swappiness = 60;
 unsigned long vm_total_pages;	/* The total number of pages which the VM controls */
 
 #ifdef CONFIG_RUNTIME_COMPCACHE
@@ -174,7 +174,7 @@ static bool global_reclaim(struct scan_control *sc)
 }
 #endif
 
-static unsigned long zone_reclaimable_pages(struct zone *zone)
+unsigned long zone_reclaimable_pages(struct zone *zone)
 {
 	int nr;
 
@@ -1334,7 +1334,7 @@ putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
 	 */
 	while (!list_empty(page_list)) {
 		struct page *page = lru_to_page(page_list);
-		int file, lru;
+		int lru;
 
 		VM_BUG_ON(PageLRU(page));
 		list_del(&page->lru);
@@ -1350,13 +1350,9 @@ putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
 		SetPageLRU(page);
 		lru = page_lru(page);
 		add_page_to_lru_list(page, lruvec, lru);
-		file = is_file_lru(lru);
-#ifdef CONFIG_ZCACHE
-		if (IS_ENABLED(CONFIG_ZCACHE))
-			if (file)
-				SetPageWasActive(page);
-#endif
+
 		if (is_active_lru(lru)) {
+			int file = is_file_lru(lru);
 			int numpages = hpage_nr_pages(page);
 			reclaim_stat->recent_rotated[file] += numpages;
 		}
@@ -1641,14 +1637,6 @@ static void shrink_active_list(unsigned long nr_to_scan,
 		}
 
 		ClearPageActive(page);	/* we are de-activating */
-#ifdef CONFIG_ZCACHE
-		if (IS_ENABLED(CONFIG_ZCACHE))
-			/*
-			 * For zcache to know whether the page is from active
-			 * file list
-			 */
-			SetPageWasActive(page);
-#endif
 		list_add(&page->lru, &l_inactive);
 	}
 
@@ -3290,6 +3278,29 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
 
 	trace_mm_vmscan_wakeup_kswapd(pgdat->node_id, zone_idx(zone), order);
 	wake_up_interruptible(&pgdat->kswapd_wait);
+}
+
+/*
+ * The reclaimable count would be mostly accurate.
+ * The less reclaimable pages may be
+ * - mlocked pages, which will be moved to unevictable list when encountered
+ * - mapped pages, which may require several travels to be reclaimed
+ * - dirty pages, which is not "instantly" reclaimable
+ */
+unsigned long global_reclaimable_pages(void)
+{
+	int nr;
+
+	nr = global_page_state(NR_ACTIVE_FILE) +
+	     global_page_state(NR_INACTIVE_FILE);
+
+#ifndef CONFIG_KSWAPD_NOSWAP
+	if (get_nr_swap_pages() > 0)
+		nr += global_page_state(NR_ACTIVE_ANON) +
+		      global_page_state(NR_INACTIVE_ANON);
+#endif /* CONFIG_KSWAPD_NOSWAP */
+
+	return nr;
 }
 
 #ifdef CONFIG_RUNTIME_COMPCACHE

@@ -587,14 +587,11 @@ unsigned long change_prot_numa(struct vm_area_struct *vma,
 			unsigned long addr, unsigned long end)
 {
 	int nr_updated;
-	int nr_pte_skipped = 0;
 	BUILD_BUG_ON(_PAGE_NUMA != _PAGE_PROTNONE);
 
-	nr_updated = change_protection(vma, addr, end, vma->vm_page_prot,
-			0, &nr_pte_skipped);
+	nr_updated = change_protection(vma, addr, end, vma->vm_page_prot, 0, 1);
 	if (nr_updated)
-		count_vm_numa_events(NUMA_PTE_UPDATES,
-					nr_updated - nr_pte_skipped);
+		count_vm_numa_events(NUMA_PTE_UPDATES, nr_updated);
 
 	return nr_updated;
 }
@@ -2804,7 +2801,7 @@ int mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol)
 	 */
 	VM_BUG_ON(maxlen < strlen("interleave") + strlen("relative") + 16);
 
-	if (!pol || pol == &default_policy || (pol->flags & MPOL_F_MORON))
+	if (!pol || pol == &default_policy)
 		mode = MPOL_DEFAULT;
 	else
 		mode = pol->mode;
