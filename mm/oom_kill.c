@@ -47,18 +47,17 @@ static DEFINE_SPINLOCK(zone_scan_lock);
 #ifdef CONFIG_NUMA
 /**
  * has_intersects_mems_allowed() - check task eligiblity for kill
- * @start: task struct of which task to consider
+ * @tsk: task struct of which task to consider
  * @mask: nodemask passed to page allocator for mempolicy ooms
  *
  * Task eligibility is determined by whether or not a candidate task, @tsk,
  * shares the same mempolicy nodes as current if it is bound by such a policy
  * and whether or not it has the same set of allowed cpuset nodes.
  */
-static bool has_intersects_mems_allowed(struct task_struct *start,
+static bool has_intersects_mems_allowed(struct task_struct *tsk,
 					const nodemask_t *mask)
 {
-	struct task_struct *tsk;
-	bool ret = false;
+	struct task_struct *start = tsk;
 
 	do {
 		if (mask) {
@@ -68,17 +67,19 @@ static bool has_intersects_mems_allowed(struct task_struct *start,
 			 * mempolicy intersects current, otherwise it may be
 			 * needlessly killed.
 			 */
-			ret = mempolicy_nodemask_intersects(tsk, mask);
+			if (mempolicy_nodemask_intersects(tsk, mask))
+				return true;
 		} else {
 			/*
 			 * This is not a mempolicy constrained oom, so only
 			 * check the mems of tsk's cpuset.
 			 */
-			ret = cpuset_mems_allowed_intersects(current, tsk);
+			if (cpuset_mems_allowed_intersects(current, tsk))
+				return true;
 		}
 	} while_each_thread(start, tsk);
 
-	return ret;
+	return false;
 }
 #else
 static bool has_intersects_mems_allowed(struct task_struct *tsk,
