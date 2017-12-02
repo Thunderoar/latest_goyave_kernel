@@ -102,11 +102,11 @@ struct task_struct *find_lock_task_mm(struct task_struct *p)
 	do {
 		task_lock(t);
 		if (likely(t->mm))
-			goto found;
+			return t;
 		task_unlock(t);
 	} while_each_thread(p, t);
 
-	return t;
+	return NULL;
 }
 
 /* return true if the task is not adequate as candidate victim task. */
@@ -486,8 +486,10 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 	} while_each_thread(p, t);
 	read_unlock(&tasklist_lock);
 
+	rcu_read_lock();
 	p = find_lock_task_mm(victim);
 	if (!p) {
+		rcu_read_unlock();
 		put_task_struct(victim);
 		return;
 	} else if (victim != p) {
@@ -513,7 +515,6 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 	 * That thread will now get access to memory reserves since it has a
 	 * pending fatal signal.
 	 */
-	rcu_read_lock();
 	for_each_process(p)
 		if (p->mm == mm && !same_thread_group(p, victim) &&
 		    !(p->flags & PF_KTHREAD)) {
