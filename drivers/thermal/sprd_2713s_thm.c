@@ -24,7 +24,7 @@
 #include <linux/sprd_thm.h>
 #include <mach/arch_misc.h>
 
-#define SPRD_THM_DEBUG
+#define SPRD_THM_DEBUG 0
 #ifdef SPRD_THM_DEBUG
 #define THM_DEBUG(format, arg...) printk("sprd thm: " "@@@" format, ## arg)
 #else
