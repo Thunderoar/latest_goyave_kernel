@@ -250,10 +250,10 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		{15, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1100000,
-		1100000,
 		1050000,
 		1050000,
+		1025000,
+		1025000,
 		1000000,
 		1000000,
 		1000000,
@@ -599,7 +599,7 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 	pr_debug("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
 		__func__, policy->cpu, policy->cur, ret);
 
-       //cpumask_setall(policy->cpus);
+       cpumask_setall(policy->cpus);
 
 	return ret;
 }
