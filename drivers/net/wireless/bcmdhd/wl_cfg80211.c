@@ -122,7 +122,6 @@ u32 wl_dbg_level = WL_DBG_ERR;
 #endif
 
 #define MAX_WAIT_TIME 1500
-#define LONG_LISTEN_TIME 2000
 
 #ifdef VSDB
 /* sleep time to keep STA's connecting or connection for continuous af tx or finding a peer */
@@ -5030,24 +5029,20 @@ wl_cfg80211_remain_on_channel(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 		struct timer_list *_timer;
 		WL_DBG(("scan is running. go to fake listen state\n"));
 
-		if (duration > LONG_LISTEN_TIME) {
-		    wl_cfg80211_scan_abort(cfg);
-		} else {
-		    wl_set_drv_status(cfg, FAKE_REMAINING_ON_CHANNEL, ndev);
+		wl_set_drv_status(cfg, FAKE_REMAINING_ON_CHANNEL, ndev);
 
-		    if (timer_pending(&cfg->p2p->listen_timer)) {
-			    WL_DBG(("cancel current listen timer \n"));
-			    del_timer_sync(&cfg->p2p->listen_timer);
-		    }
-
-		    _timer = &cfg->p2p->listen_timer;
-		    wl_clr_p2p_status(cfg, LISTEN_EXPIRED);
-
-		    INIT_TIMER(_timer, wl_cfgp2p_listen_expired, duration, 0);
-
-		    err = BCME_OK;
-		    goto exit;
+		if (timer_pending(&cfg->p2p->listen_timer)) {
+			WL_DBG(("cancel current listen timer \n"));
+			del_timer_sync(&cfg->p2p->listen_timer);
 		}
+
+		_timer = &cfg->p2p->listen_timer;
+		wl_clr_p2p_status(cfg, LISTEN_EXPIRED);
+
+		INIT_TIMER(_timer, wl_cfgp2p_listen_expired, duration, 0);
+
+		err = BCME_OK;
+		goto exit;
 	}
 #endif /* WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST */
 

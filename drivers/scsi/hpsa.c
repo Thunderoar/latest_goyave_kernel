@@ -538,7 +538,6 @@ static struct scsi_host_template hpsa_driver_template = {
 	.sdev_attrs = hpsa_sdev_attrs,
 	.shost_attrs = hpsa_shost_attrs,
 	.max_sectors = 8192,
-	.no_write_same = 1,
 };
 
 
@@ -1206,8 +1205,8 @@ static void complete_scsi_command(struct CommandList *cp)
 	scsi_set_resid(cmd, ei->ResidualCnt);
 
 	if (ei->CommandStatus == 0) {
-		cmd_free(h, cp);
 		cmd->scsi_done(cmd);
+		cmd_free(h, cp);
 		return;
 	}
 
@@ -1266,7 +1265,7 @@ static void complete_scsi_command(struct CommandList *cp)
 					"has check condition: aborted command: "
 					"ASC: 0x%x, ASCQ: 0x%x\n",
 					cp, asc, ascq);
-				cmd->result |= DID_SOFT_ERROR << 16;
+				cmd->result = DID_SOFT_ERROR << 16;
 				break;
 			}
 			/* Must be some other type of check condition */
@@ -1380,8 +1379,8 @@ static void complete_scsi_command(struct CommandList *cp)
 		dev_warn(&h->pdev->dev, "cp %p returned unknown status %x\n",
 				cp, ei->CommandStatus);
 	}
-	cmd_free(h, cp);
 	cmd->scsi_done(cmd);
+	cmd_free(h, cp);
 }
 
 static void hpsa_pci_unmap(struct pci_dev *pdev,
@@ -3118,7 +3117,7 @@ static int hpsa_big_passthru_ioctl(struct ctlr_info *h, void __user *argp)
 		}
 		if (ioc->Request.Type.Direction == XFER_WRITE) {
 			if (copy_from_user(buff[sg_used], data_ptr, sz)) {
-				status = -EFAULT;
+				status = -ENOMEM;
 				goto cleanup1;
 			}
 		} else
@@ -4905,7 +4904,7 @@ reinit_after_soft_reset:
 	hpsa_hba_inquiry(h);
 	hpsa_register_scsi(h);	/* hook ourselves into SCSI subsystem */
 	start_controller_lockup_detector(h);
-	return 0;
+	return 1;
 
 clean4:
 	hpsa_free_sg_chain_blocks(h);

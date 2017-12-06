@@ -213,13 +213,11 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 			}
 
 			input_report_key(info->input_dev, key_code, key_state);
-#if 0
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP			
 			dev_info(&client->dev, "%s - Key : ID[%d] Code[%d] State[%d]\n", __func__, key, key_code, key_state);			
 #else
 			dev_info(&client->dev, "%s - Key : State[%d]\n", __func__, key_state);
-#endif
-#endif	
+#endif				
 			//
 			/////////////////////////////////			
 		}
@@ -237,13 +235,11 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 				input_mt_slot(info->input_dev, id);
 				input_mt_report_slot_state(info->input_dev, MT_TOOL_FINGER, false);
 				input_sync(info->input_dev);
-#if 0
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 				dev_info(&client->dev, "%s - Touch : ID[%d] X[%d], Y[%d] Release\n", __func__, id, x,y);
 #else
 				dev_info(&client->dev, "%s - Touch : ID[%d] Release\n", __func__, id);
-#endif
-#endif
+#endif	
 				if (info->finger_state[id])
 				{
 					info->finger_state[id] = false;
@@ -270,12 +266,10 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 			input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 			input_report_abs(info->input_dev, ABS_MT_PRESSURE, pressure);
 			input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, touch_major);
-#if 0
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 			dev_info(&client->dev, "%s - Touch : ID[%d] X[%d] Y[%d] P[%d] M[%d] \n", __func__, id, x, y, pressure, touch_major);			
 #else
 			dev_info(&client->dev, "%s - Touch : ID[%d] Press\n", __func__, id);
-#endif
 #endif
 			if (!info->finger_state[id])
 			{	
@@ -379,50 +373,6 @@ int mms_parse_devicetree(struct device *dev, struct mms_ts_info *info)
 	else{
 		info->pdata->gpio_intr = ret;
 	}
-
-#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
-  ret = of_get_named_gpio(np, "tsp_vendor_1", 0);
-  dev_dbg(dev, "[USE_DUAL_FW] %s of_get_named_gpio : info->pdata->tsp_vendor_1 : %d, tsp_vendor_1 : %d\n", __func__, info->pdata->tsp_vendor_1, ret);
-  if (!gpio_is_valid(ret)) {
-    dev_err(dev, "[USE_DUAL_FW] %s [ERROR] of_get_named_gpio : tsp_vendor_1\n", __func__);
-    goto ERROR;
-  }
-	else{
-		info->pdata->tsp_vendor_1 = ret;
-	}
-
-  ret = of_get_named_gpio(np, "tsp_vendor_2", 0);
-  dev_dbg(dev, "[USE_DUAL_FW] %s info->pdata->tsp_vendor_2 : %d, of_get_named_gpio : tsp_vendor_2 : %d\n", __func__, info->pdata->tsp_vendor_2, ret);
-  if (!gpio_is_valid(ret)) {
-    dev_err(dev, "[USE_DUAL_FW] %s [ERROR] of_get_named_gpio : tsp_vendor_2\n", __func__);
-    goto ERROR;
-  } else {
-		info->pdata->tsp_vendor_2 = ret;
-	}
-
-  dev_dbg(dev, "[USE_DUAL_FW] %s gpio_direction_input [START] \n", __func__);
-
-  ret = gpio_request(info->pdata->tsp_vendor_1, "tsp_vendor_1");
-  if (ret < 0) {
-    dev_err(dev, "[USE_DUAL_FW] %s gpio_request [ERROR] : tsp_vendor_1\n", __func__);
-  } else {
-    gpio_direction_input(info->pdata->tsp_vendor_1);  
-  }
-
-  ret = gpio_request(info->pdata->tsp_vendor_2, "tsp_vendor_2");
-  if (ret < 0) {
-    dev_err(dev, "[USE_DUAL_FW] %s gpio_request [ERROR] : tsp_vendor_2\n", __func__);
-  } else {
-    gpio_direction_input(info->pdata->tsp_vendor_2);  
-  }
-
-  dev_dbg(&info->client->dev,
-    "[USE_DUAL_FW] gpio_get_value(TSP_ID_1:gpio%d)=%d,gpio_get_value(TSP_ID_2:gpio%d)=%d\n",
-    info->pdata->tsp_vendor_1,gpio_get_value(info->pdata->tsp_vendor_1),
-    info->pdata->tsp_vendor_2,gpio_get_value(info->pdata->tsp_vendor_2));
-
-  dev_dbg(dev, "[USE_DUAL_FW] %s gpio_direction_input [DONE] \n", __func__);
-#endif
 
 	/*
 	ret = of_get_named_gpio(np, MMS_DEVICE_NAME",reset-gpio", 0);

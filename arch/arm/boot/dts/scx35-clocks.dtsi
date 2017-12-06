@@ -36,7 +36,7 @@
 		clk_tdpll: clk_tdpll {
 			compatible = "sprd,fixed-pll-clock";
 			#clock-cells = <0>;
-			clock-frequency = <800000000>;
+			clock-frequency = <768000000>;
 			reg = <0x402b0094 0x1>;	/* prepare reg */
 			clock-output-names = "clk_tdpll";
 		};

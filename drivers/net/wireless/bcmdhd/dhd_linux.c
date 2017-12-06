@@ -2375,15 +2375,13 @@ dhd_txcomplete(dhd_pub_t *dhdp, void *txp, bool success)
 	if (dhdp->wlfc_state && (dhdp->proptxstatus_mode != WLFC_FCMODE_NONE)) {
 		dhd_if_t *ifp = dhd->iflist[DHD_PKTTAG_IF(PKTTAG(txp))];
 		uint datalen  = PKTLEN(dhd->pub.osh, txp);
-		if (ifp !=  NULL)
-		{
-			if (success) {
-				dhd->pub.tx_packets++;
-				ifp->stats.tx_packets++;
-				ifp->stats.tx_bytes += datalen;
-			} else {
-				ifp->stats.tx_dropped++;
-			}
+
+		if (success) {
+			dhd->pub.tx_packets++;
+			ifp->stats.tx_packets++;
+			ifp->stats.tx_bytes += datalen;
+		} else {
+			ifp->stats.tx_dropped++;
 		}
 	}
 #endif
@@ -4866,10 +4864,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #if defined(CUSTOMER_HW4) && defined(USE_DYNAMIC_F2_BLKSIZE)
 		dhdsdio_func_blocksize(dhd, 2, DYNAMIC_F2_BLKSIZE_FOR_NONLEGACY);
 #endif /* CUSTOMER_HW4 && USE_DYNAMIC_F2_BLKSIZE */
-
-#if defined(RXFRAME_THREAD) && defined (BCM43430_CHIP_ID)
-		dhd->info->rxthread_enabled = FALSE;
-#endif
 	} else if ((!op_mode && dhd_get_fw_mode(dhd->info) == DHD_FLAG_MFG_MODE) ||
 		(op_mode == DHD_FLAG_MFG_MODE)) {
 #if defined(ARP_OFFLOAD_SUPPORT)

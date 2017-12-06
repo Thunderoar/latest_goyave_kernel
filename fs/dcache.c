@@ -96,6 +96,8 @@ static struct kmem_cache *dentry_cache __read_mostly;
  * This hash-function tries to avoid losing too many bits of hash
  * information, yet avoid using a prime hash-size or similar.
  */
+#define D_HASHBITS     d_hash_shift
+#define D_HASHMASK     d_hash_mask
 
 static unsigned int d_hash_mask __read_mostly;
 static unsigned int d_hash_shift __read_mostly;
@@ -106,7 +108,8 @@ static inline struct hlist_bl_head *d_hash(const struct dentry *parent,
 					unsigned int hash)
 {
 	hash += (unsigned long) parent / L1_CACHE_BYTES;
-	return dentry_hashtable + hash_32(hash, d_hash_shift);
+	hash = hash + (hash >> D_HASHBITS);
+	return dentry_hashtable + (hash & D_HASHMASK);
 }
 
 /* Statistics gathering. */
@@ -366,7 +369,7 @@ static struct dentry *d_kill(struct dentry *dentry, struct dentry *parent)
 {
 	list_del(&dentry->d_u.d_child);
 	/*
-	 * Inform ascending readers that we are no longer attached to the
+	 * Inform try_to_ascend() that we are no longer attached to the
 	 * dentry tree
 	 */
 	dentry->d_flags |= DCACHE_DENTRY_KILLED;
@@ -988,6 +991,35 @@ void shrink_dcache_for_umount(struct super_block *sb)
 }
 
 /*
+ * This tries to ascend one level of parenthood, but
+ * we can race with renaming, so we need to re-check
+ * the parenthood after dropping the lock and check
+ * that the sequence number still matches.
+ */
+static struct dentry *try_to_ascend(struct dentry *old, int locked, unsigned seq)
+{
+	struct dentry *new = old->d_parent;
+
+	rcu_read_lock();
+	spin_unlock(&old->d_lock);
+	spin_lock(&new->d_lock);
+
+	/*
+	 * might go back up the wrong parent if we have had a rename
+	 * or deletion
+	 */
+	if (new != old->d_parent ||
+		 (old->d_flags & DCACHE_DENTRY_KILLED) ||
+		 (!locked && read_seqretry(&rename_lock, seq))) {
+		spin_unlock(&new->d_lock);
+		new = NULL;
+	}
+	rcu_read_unlock();
+	return new;
+}
+
+
+/*
  * Search for at least 1 mount point in the dentry's subdirs.
  * We descend to the next level whenever the d_subdirs
  * list is non-empty and continue searching.
@@ -1041,52 +1073,30 @@ resume:
 	/*
 	 * All done at this level ... ascend and resume the search.
 	 */
-	rcu_read_lock();
-ascend:
 	if (this_parent != parent) {
 		struct dentry *child = this_parent;
-		this_parent = child->d_parent;
-
-		spin_unlock(&child->d_lock);
-		spin_lock(&this_parent->d_lock);
-
-		/* might go back up the wrong parent if we have had a rename. */
-		if (!locked && read_seqretry(&rename_lock, seq))
+		this_parent = try_to_ascend(this_parent, locked, seq);
+		if (!this_parent)
 			goto rename_retry;
-<<<<<<< HEAD
-		next = child->d_child.next;
-		while (unlikely(child->d_flags & DCACHE_DENTRY_KILLED)) {
-			if (next == &this_parent->d_subdirs)
-				goto ascend;
-			child = list_entry(next, struct dentry, d_child);
-			next = next->next;
-		}
-		rcu_read_unlock();
-=======
 		next = child->d_u.d_child.next;
->>>>>>> parent of 71db39f... move d_rcu from overlapping d_child to overlapping d_alias
 		goto resume;
 	}
+	spin_unlock(&this_parent->d_lock);
 	if (!locked && read_seqretry(&rename_lock, seq))
 		goto rename_retry;
-	spin_unlock(&this_parent->d_lock);
-	rcu_read_unlock();
 	if (locked)
 		write_sequnlock(&rename_lock);
 	return 0; /* No mount points found in tree */
 positive:
 	if (!locked && read_seqretry(&rename_lock, seq))
-		goto rename_retry_unlocked;
+		goto rename_retry;
 	if (locked)
 		write_sequnlock(&rename_lock);
 	return 1;
 
 rename_retry:
-	spin_unlock(&this_parent->d_lock);
-	rcu_read_unlock();
 	if (locked)
 		goto again;
-rename_retry_unlocked:
 	locked = 1;
 	write_seqlock(&rename_lock);
 	goto again;
@@ -1151,7 +1161,6 @@ resume:
 		 */
 		if (found && need_resched()) {
 			spin_unlock(&dentry->d_lock);
-			rcu_read_lock();
 			goto out;
 		}
 
@@ -1171,44 +1180,23 @@ resume:
 	/*
 	 * All done at this level ... ascend and resume the search.
 	 */
-	rcu_read_lock();
-ascend:
 	if (this_parent != parent) {
 		struct dentry *child = this_parent;
-		this_parent = child->d_parent;
-
-		spin_unlock(&child->d_lock);
-		spin_lock(&this_parent->d_lock);
-
-		/* might go back up the wrong parent if we have had a rename. */
-		if (!locked && read_seqretry(&rename_lock, seq))
+		this_parent = try_to_ascend(this_parent, locked, seq);
+		if (!this_parent)
 			goto rename_retry;
-<<<<<<< HEAD
-		next = child->d_child.next;
-		while (unlikely(child->d_flags & DCACHE_DENTRY_KILLED)) {
-			if (next == &this_parent->d_subdirs)
-				goto ascend;
-			child = list_entry(next, struct dentry, d_child);
-			next = next->next;
-		}
-		rcu_read_unlock();
-=======
 		next = child->d_u.d_child.next;
->>>>>>> parent of 71db39f... move d_rcu from overlapping d_child to overlapping d_alias
 		goto resume;
 	}
 out:
+	spin_unlock(&this_parent->d_lock);
 	if (!locked && read_seqretry(&rename_lock, seq))
 		goto rename_retry;
-	spin_unlock(&this_parent->d_lock);
-	rcu_read_unlock();
 	if (locked)
 		write_sequnlock(&rename_lock);
 	return found;
 
 rename_retry:
-	spin_unlock(&this_parent->d_lock);
-	rcu_read_unlock();
 	if (found)
 		return found;
 	if (locked)
@@ -2698,13 +2686,8 @@ char *d_path(const struct path *path, char *buf, int buflen)
 	 * thus don't need to be hashed.  They also don't need a name until a
 	 * user wants to identify the object in /proc/pid/fd/.  The little hack
 	 * below allows us to generate a name for these objects on demand:
-	 *
-	 * Some pseudo inodes are mountable.  When they are mounted
-	 * path->dentry == path->mnt->mnt_root.  In that case don't call d_dname
-	 * and instead have d_path return the mounted path.
 	 */
-	if (path->dentry->d_op && path->dentry->d_op->d_dname &&
-	    (!IS_ROOT(path->dentry) || path->dentry != path->mnt->mnt_root))
+	if (path->dentry->d_op && path->dentry->d_op->d_dname)
 		return path->dentry->d_op->d_dname(path->dentry, buf, buflen);
 
 	get_fs_root(current->fs, &root);
@@ -2969,47 +2952,26 @@ resume:
 		}
 		spin_unlock(&dentry->d_lock);
 	}
-	rcu_read_lock();
-ascend:
 	if (this_parent != root) {
 		struct dentry *child = this_parent;
 		if (!(this_parent->d_flags & DCACHE_GENOCIDE)) {
 			this_parent->d_flags |= DCACHE_GENOCIDE;
 			this_parent->d_count--;
 		}
-		this_parent = child->d_parent;
-
-		spin_unlock(&child->d_lock);
-		spin_lock(&this_parent->d_lock);
-
-		/* might go back up the wrong parent if we have had a rename. */
-		if (!locked && read_seqretry(&rename_lock, seq))
+		this_parent = try_to_ascend(this_parent, locked, seq);
+		if (!this_parent)
 			goto rename_retry;
-<<<<<<< HEAD
-		next = child->d_child.next;
-		while (unlikely(child->d_flags & DCACHE_DENTRY_KILLED)) {
-			if (next == &this_parent->d_subdirs)
-				goto ascend;
-			child = list_entry(next, struct dentry, d_child);
-			next = next->next;
-		}
-		rcu_read_unlock();
-=======
 		next = child->d_u.d_child.next;
->>>>>>> parent of 71db39f... move d_rcu from overlapping d_child to overlapping d_alias
 		goto resume;
 	}
+	spin_unlock(&this_parent->d_lock);
 	if (!locked && read_seqretry(&rename_lock, seq))
 		goto rename_retry;
-	spin_unlock(&this_parent->d_lock);
-	rcu_read_unlock();
 	if (locked)
 		write_sequnlock(&rename_lock);
 	return;
 
 rename_retry:
-	spin_unlock(&this_parent->d_lock);
-	rcu_read_unlock();
 	if (locked)
 		goto again;
 	locked = 1;

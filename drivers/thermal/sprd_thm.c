@@ -27,7 +27,7 @@
 #include <linux/of_irq.h>
 #endif
 
-#define COOLING_TEST 0
+///#define COOLING_TEST
 #ifdef COOLING_TEST		//test cooling
 static int get_max_state(struct thermal_cooling_device *cdev,
 			 unsigned long *state)

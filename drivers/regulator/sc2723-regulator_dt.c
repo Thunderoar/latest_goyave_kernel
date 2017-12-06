@@ -50,9 +50,9 @@
 #define REGULATOR_ROOT_DIR	"sprd-regulator"
 
 #undef debug
-#define debug(format, arg...) //pr_info("regu: " "@@@%s: " format, __func__, ## arg)
+#define debug(format, arg...) pr_info("regu: " "@@@%s: " format, __func__, ## arg)
 #define debug0(format, arg...)	//pr_debug("regu: " "@@@%s: " format, __func__, ## arg)
-#define debug2(format, arg...)	//pr_debug("regu: " "@@@%s: " format, __func__, ## arg)
+#define debug2(format, arg...)	pr_debug("regu: " "@@@%s: " format, __func__, ## arg)
 
 
 #ifndef	ANA_REG_OR

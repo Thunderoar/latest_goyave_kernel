@@ -265,18 +265,13 @@ static void setup_autopd_mode(void)
 	/* KEEP eMMC/SD power */
 	sci_adi_clr(ANA_REG_GLB_LDO_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN | BIT_SLP_LDOEMMCIO_PD_EN);
 	sci_adi_clr(ANA_REG_GLB_LDO_SLP_CTRL1, BIT_SLP_LDOSD_PD_EN );
-#endif
-#if defined (CONFIG_ADIE_SC2723S) && defined (CONFIG_LDOGEN0_VCCQ)
+#else
+#if defined(CONFIG_ADIE_SC2723S)
 	/* KEEP eMMC/SD power */
-	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN | BIT_SLP_LDOGEN0_PD_EN);
-	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL1, BIT_SLP_LDOSDIO_PD_EN);
+	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN); /* | BIT_SLP_LDOEMMCIO_PD_EN);*/
+	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL1, BIT_SLP_LDOSDIO_PD_EN );
 #endif
-#if defined (CONFIG_ADIE_SC2723S) && defined (CONFIG_LDOGEN1_VCCQ)
-	/* KEEP eMMC/SD power */
-	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN | BIT_SLP_LDOGEN1_PD_EN);
-	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL1, BIT_SLP_LDOSDIO_PD_EN);
 #endif
-
 	/*****************  for idle to deep  ****************/
 	configure_for_deepsleep(1);
 	return;

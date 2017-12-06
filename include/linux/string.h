@@ -52,9 +52,6 @@ extern int strncasecmp(const char *s1, const char *s2, size_t n);
 #ifndef __HAVE_ARCH_STRCHR
 extern char * strchr(const char *,int);
 #endif
-#ifndef __HAVE_ARCH_STRCHRNUL
-extern char * strchrnul(const char *,int);
-#endif
 #ifndef __HAVE_ARCH_STRNCHR
 extern char * strnchr(const char *, size_t, int);
 #endif
@@ -136,7 +133,7 @@ int bprintf(u32 *bin_buf, size_t size, const char *fmt, ...) __printf(3, 4);
 #endif
 
 extern ssize_t memory_read_from_buffer(void *to, size_t count, loff_t *ppos,
-				       const void *from, size_t available);
+			const void *from, size_t available);
 
 /**
  * strstarts - does @str start with @prefix?
@@ -148,8 +145,7 @@ static inline bool strstarts(const char *str, const char *prefix)
 	return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
-size_t memweight(const void *ptr, size_t bytes);
-void memzero_explicit(void *s, size_t count);
+extern size_t memweight(const void *ptr, size_t bytes);
 
 /**
  * kbasename - return the last part of a pathname.
