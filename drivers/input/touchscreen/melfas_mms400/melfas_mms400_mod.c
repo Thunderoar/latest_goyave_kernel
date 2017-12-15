@@ -213,11 +213,13 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 			}
 
 			input_report_key(info->input_dev, key_code, key_state);
+#if 0
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP			
 			dev_info(&client->dev, "%s - Key : ID[%d] Code[%d] State[%d]\n", __func__, key, key_code, key_state);			
 #else
 			dev_info(&client->dev, "%s - Key : State[%d]\n", __func__, key_state);
-#endif				
+#endif
+#endif
 			//
 			/////////////////////////////////			
 		}
@@ -235,11 +237,13 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 				input_mt_slot(info->input_dev, id);
 				input_mt_report_slot_state(info->input_dev, MT_TOOL_FINGER, false);
 				input_sync(info->input_dev);
+#if 0
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 				dev_info(&client->dev, "%s - Touch : ID[%d] X[%d], Y[%d] Release\n", __func__, id, x,y);
 #else
 				dev_info(&client->dev, "%s - Touch : ID[%d] Release\n", __func__, id);
-#endif	
+#endif
+#endif
 				if (info->finger_state[id])
 				{
 					info->finger_state[id] = false;
@@ -251,7 +255,9 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 						info->min_handle = NULL;
 #ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 						_store_cpu_num_min_limit(1);
+#if 0
 						dev_info(&client->dev, "cpu freq off\n");
+#endif
 #endif
 					}
 #endif
@@ -266,10 +272,12 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 			input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 			input_report_abs(info->input_dev, ABS_MT_PRESSURE, pressure);
 			input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, touch_major);
+#if 0
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 			dev_info(&client->dev, "%s - Touch : ID[%d] X[%d] Y[%d] P[%d] M[%d] \n", __func__, id, x, y, pressure, touch_major);			
 #else
 			dev_info(&client->dev, "%s - Touch : ID[%d] Press\n", __func__, id);
+#endif
 #endif
 			if (!info->finger_state[id])
 			{	
@@ -286,7 +294,9 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 					}
 #ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 					_store_cpu_num_min_limit(2);
+#if 0
 					dev_info(&client->dev,"cpu freq on\n");
+#endif
 #endif
 				}
 				info->finger_cnt++;

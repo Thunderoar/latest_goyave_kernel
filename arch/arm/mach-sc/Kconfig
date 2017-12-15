@@ -735,7 +735,7 @@ config SPRD_CPU_DYNAMIC_HOTPLUG
 config SPRD_MEM_POOL
 	default y
 	bool "Using a memory pool to alloc 8k to 64k"
-	depends on !COMPACTION
+	depends on COMPACTION
 	help
 	  This option enables memmory pool for allocating 8k to 64k.
 
