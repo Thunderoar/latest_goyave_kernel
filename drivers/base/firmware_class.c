@@ -1481,7 +1481,7 @@ static int fw_pm_notify(struct notifier_block *notify_block,
 		device_uncache_fw_images_delay(10 * MSEC_PER_SEC);
 		break;
 	}
-	printk("*** %s, mode:0x%x done ***\n", __func__, mode);
+
 	return 0;
 }
 

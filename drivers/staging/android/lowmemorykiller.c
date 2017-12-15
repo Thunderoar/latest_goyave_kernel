@@ -48,7 +48,7 @@
 
 #include <linux/ratelimit.h>
 
-#define ENHANCED_LMK_ROUTINE
+#define ENHANCED_LMK_ROUTINE 0
 #define LMK_COUNT_READ
 
 #ifdef ENHANCED_LMK_ROUTINE

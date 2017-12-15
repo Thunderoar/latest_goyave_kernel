@@ -206,6 +206,17 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	if (suspend_test(TEST_PLATFORM))
 		goto Platform_wake;
 
+	/*
+	 * PM_SUSPEND_FREEZE equals
+	 * frozen processes + suspended devices + idle processors.
+	 * Thus we should invoke freeze_enter() soon after
+	 * all the devices are suspended.
+	 */
+	if (state == PM_SUSPEND_FREEZE) {
+		freeze_enter();
+		goto Platform_wake;
+	}
+
 	error = disable_nonboot_cpus();
 	if (error || suspend_test(TEST_CPUS))
 		goto Enable_cpus;
@@ -321,12 +332,17 @@ static int enter_state(suspend_state_t state)
 	int error;
 
 	if (!valid_state(state))
-		return -ENODEV;
+		return -EINVAL;
 
 	if (!mutex_trylock(&pm_mutex))
 		return -EBUSY;
 
-	suspend_sys_sync_queue();
+	if (state == PM_SUSPEND_FREEZE)
+		freeze_begin();
+
+	printk(KERN_INFO "PM: Syncing filesystems ... ");
+	sys_sync();
+	printk("done.\n");
 
 	pr_debug("PM: Preparing system for %s sleep\n", pm_states[state]);
 	error = suspend_prepare();

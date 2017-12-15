@@ -482,19 +482,6 @@ static int umh_pipe_setup(struct subprocess_info *info, struct cred *new)
 	return err;
 }
 
-static int s_dumpTsk = 0;
-
-int get_dumpTsk(void)
-{
-    return s_dumpTsk;
-}
-
-void set_dumpTsk(int tsk)
-{
-    s_dumpTsk = tsk;
-}
-
-
 void do_coredump(siginfo_t *siginfo)
 {
 	struct core_state core_state;
@@ -522,7 +509,6 @@ void do_coredump(siginfo_t *siginfo)
 		.mm_flags = mm->flags,
 	};
 
-	set_dumpTsk(current);
 	audit_core_dumps(siginfo->si_signo);
 
 	binfmt = mm->binfmt;
@@ -691,8 +677,6 @@ fail_corename:
 fail_creds:
 	put_cred(cred);
 fail:
-	set_dumpTsk(0);
-
 	return;
 }
 

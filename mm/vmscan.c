@@ -214,7 +214,6 @@ static int debug_shrinker_show(struct seq_file *s, void *unused)
 
 	down_read(&shrinker_rwsem);
 	list_for_each_entry(shrinker, &shrinker_list, list) {
-		char name[64];
 		int num_objs;
 
 		num_objs = shrinker->shrink(shrinker, &sc);
@@ -3267,14 +3266,6 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
 		return;
 	if (zone_watermark_ok_safe(zone, order, low_wmark_pages(zone), 0, 0))
 		return;
-
-	if(debug_kswapd_wakeup &&
-		 zone_watermark_ok_safe(zone, order, high_wmark_pages(zone) + min_wmark_pages(zone), 0, 0))
-	{
-		printk("%s(pages): free:%d, free_cma:%d, high:%d, low:%d,  min:%d, order:%d\r\n",
-			   __func__, global_page_state(NR_FREE_PAGES), global_page_state(NR_FREE_CMA_PAGES), high_wmark_pages(zone), low_wmark_pages(zone) , min_wmark_pages(zone) ,order);
-		WARN_ON(1);
-	}
 
 	trace_mm_vmscan_wakeup_kswapd(pgdat->node_id, zone_idx(zone), order);
 	wake_up_interruptible(&pgdat->kswapd_wait);
