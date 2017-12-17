@@ -732,7 +732,8 @@ static ssize_t restart_cpc_store(struct kobject *kobj, struct kobj_attribute *at
 #else
 		unsigned long base_cp_dbg = 0;
 #endif
-	
+
+#ifdef CONFIG_SEC_LOG_BUF_NOCACHE
 	memcpy(cp_assert_info, buf, 1);
 	if (sscanf(cp_assert_info, "%d", &val) == 1 && val > 0){
 		if(sec_log_buf_nocache_enable == 1){
@@ -748,6 +749,7 @@ static ssize_t restart_cpc_store(struct kobject *kobj, struct kobj_attribute *at
 		
 		cp_abort(buf+2);
 	}
+#endif
 
 	return n;
 }
