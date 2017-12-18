@@ -788,16 +788,16 @@ static void sd_check_cpu(int cpu, unsigned int load)
 
 	dbs_info->freq_lo = 0;
 
-	local_load = load_freq/policy->cur;
+	local_load = load/policy->cur;
 
-        pr_debug("[DVFS %d] load %d %x load_freq %d policy->cur %d\n",cpu,local_load,local_load,load_freq,policy->cur);
+        pr_debug("[DVFS %d] load %d %x load %d policy->cur %d\n",cpu,local_load,local_load,load,policy->cur);
 
 	if (thermal_cooling_info.cooling_state && policy->cur > thermal_cooling_info.limit_freq){
 		__cpufreq_driver_target(policy, thermal_cooling_info.limit_freq, CPUFREQ_RELATION_L);
 	}
 
 	/* Check for frequency increase */
-	if (load > od_tuners->up_threshold) {
+	if (load > sd_tuners->up_threshold) {
 		if (thermal_cooling_info.cooling_state){
 			__cpufreq_driver_target(policy,
 					thermal_cooling_info.limit_freq, CPUFREQ_RELATION_L);
@@ -815,7 +815,7 @@ static void sd_check_cpu(int cpu, unsigned int load)
 
 		goto plug_check;
 	} else {
-+		/* Calculate the next frequency proportional to load */
+		/* Calculate the next frequency proportional to load */
 		unsigned int freq_next;
 		freq_next = load * policy->cpuinfo.max_freq / 100;
 
