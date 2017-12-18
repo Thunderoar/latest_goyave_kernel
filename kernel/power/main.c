@@ -347,28 +347,44 @@ static suspend_state_t decode_state(const char *buf, size_t n)
 static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 			   const char *buf, size_t n)
 {
-	suspend_state_t state;
-	int error;
+#ifdef CONFIG_SUSPEND
+#ifdef CONFIG_EARLYSUSPEND
+	suspend_state_t state = PM_SUSPEND_ON;
+#else
+	suspend_state_t state = PM_SUSPEND_STANDBY;
+#endif
+	const char * const *s;
+#endif
+	char *p;
+	int len;
+	int error = -EINVAL;
 
-	error = pm_autosleep_lock();
-	if (error)
-		return error;
+	p = memchr(buf, '\n', n);
+	len = p ? p - buf : n;
 
-	if (pm_autosleep_state() > PM_SUSPEND_ON) {
-		error = -EBUSY;
-		goto out;
+	/* First, check if we are requested to hibernate */
+	if (len == 4 && !strncmp(buf, "disk", len)) {
+		error = hibernate();
+		goto Exit;
 	}
 
-	state = decode_state(buf, n);
-	if (state < PM_SUSPEND_MAX)
-		error = pm_suspend(state);
-	else if (state == PM_SUSPEND_MAX)
-		error = hibernate();
-	else
-		error = -EINVAL;
+#ifdef CONFIG_SUSPEND
+	for (s = &pm_states[state]; state < PM_SUSPEND_MAX; s++, state++) {
+		if (*s && len == strlen(*s) && !strncmp(buf, *s, len)) {
+#ifdef CONFIG_EARLYSUSPEND
+			if (state == PM_SUSPEND_ON || valid_state(state)) {
+				error = 0;
+				request_suspend_state(state);
+				break;
+			}
+#else
+			error = pm_suspend(state);
+#endif
+		}
+	}
+#endif
 
- out:
-	pm_autosleep_unlock();
+ Exit:
 	return error ? error : n;
 }
 
