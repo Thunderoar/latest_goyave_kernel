@@ -114,8 +114,7 @@ static inline int atomic_sub_return(int i, atomic_t *v)
 
 static inline int atomic_cmpxchg(atomic_t *ptr, int old, int new)
 {
-	int oldval;
-	unsigned long res;
+	unsigned long oldval, res;
 
 	smp_mb();
 
