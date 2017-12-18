@@ -118,7 +118,7 @@ static int suspend_test(int level)
  * hibernation).  Run suspend notifiers, allocate the "suspend" console and
  * freeze processes.
  */
-static int suspend_prepare(void)
+static int suspend_prepare(suspend_state_t state)
 {
 	int error;
 
@@ -167,24 +167,6 @@ void __attribute__ ((weak)) arch_suspend_enable_irqs(void)
 static int suspend_enter(suspend_state_t state, bool *wakeup)
 {
 	int error;
-
-#ifdef CONFIG_SEC_GPIO_DVS
-    /************************ Caution !!! ****************************/
-    /* This function must be located in appropriate SLEEP position
-     * in accordance with the specification of each BB vendor.
-     */
-    /************************ Caution !!! ****************************/
-    gpio_dvs_check_sleepgpio();
-#ifdef SECGPIO_SLEEP_DEBUGGING
-    /************************ Caution !!! ****************************/
-    /* This func. must be located in an appropriate position for GPIO SLEEP debugging
-     * in accordance with the specification of each BB vendor, and 
-     * the func. must be called after calling the function "gpio_dvs_check_sleepgpio"
-     */
-    /************************ Caution !!! ****************************/
-    gpio_dvs_set_sleepgpio();
-#endif
-#endif
 
 	if (suspend_ops->prepare) {
 		error = suspend_ops->prepare();
