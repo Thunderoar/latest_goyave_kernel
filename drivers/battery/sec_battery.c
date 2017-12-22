@@ -19,6 +19,11 @@ extern int get_hw_rev();
 
 extern void sec_bat_initial_check(void);
 
+#ifdef CONFIG_SUPER_CHARGER_CONTROL
+#include "super_charger_control.h"
+int cust_ac_lev = AC_DEFAULT_LEVEL; 
+#endif 
+
 static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(batt_reset_soc),
 	SEC_BATTERY_ATTR(batt_read_raw_soc),
@@ -1568,7 +1573,15 @@ static void sec_bat_get_battery_info(
 	value.intval = SEC_BATTEY_CURRENT_MA;
 	psy_do_property(battery->pdata->fuelgauge_name, get,
 		POWER_SUPPLY_PROP_CURRENT_NOW, value);
-	battery->current_now = value.intval;
+	
+#ifdef CONFIG_SUPER_CHARGER_CONTROL
+        if(super_charge) 
+        battery->current_now = cust_ac_lev;
+        else
+ 	battery->current_now = value.intval;
+#else
+        battery->current_now = value.intval; 
+#endif
 
 	value.intval = SEC_BATTEY_CURRENT_MA;
 	psy_do_property(battery->pdata->fuelgauge_name, get,
@@ -1578,8 +1591,14 @@ static void sec_bat_get_battery_info(
 	/* input current limit in charger */
 	psy_do_property(battery->pdata->charger_name, get,
 		POWER_SUPPLY_PROP_CURRENT_MAX, value);
+#ifdef CONFIG_SUPER_CHARGER_CONTROL
+        if(super_charge)  
+        battery->current_max = cust_ac_lev;
+        else
+        battery->current_max = value.intval;
+#else
 	battery->current_max = value.intval;
-
+#endif
 	/* To get SOC value (NOT raw SOC), need to reset value */
 	value.intval = 0;
 	psy_do_property(battery->pdata->fuelgauge_name, get,

@@ -400,3 +400,10 @@ config CHARGER_SPRD4SAMSUNG27X3
 	 for Summit sprd27X3 charger driver.
 	 This driver source code implemented
 	 all functions for sprd27X3 charger.
+
+config SUPER_CHARGER_CONTROL
+  	bool "Control charger rate for AC/USB"
+  	default y
+  	help
+  	  This allows users to control charger current for both USB and AC
+	  charger input current
