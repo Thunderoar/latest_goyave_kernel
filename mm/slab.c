@@ -164,44 +164,6 @@
 static bool pfmemalloc_active __read_mostly;
 
 /*
- * kmem_bufctl_t:
- *
- * Bufctl's are used for linking objs within a slab
- * linked offsets.
- *
- * This implementation relies on "struct page" for locating the cache &
- * slab an object belongs to.
- * This allows the bufctl structure to be small (one int), but limits
- * the number of objects a slab (not a cache) can contain when off-slab
- * bufctls are used. The limit is the size of the largest general cache
- * that does not use off-slab slabs.
- * For 32bit archs with 4 kB pages, is this 56.
- * This is not serious, as it is only for large objects, when it is unwise
- * to have too many per slab.
- * Note: This limit can be raised by introducing a general cache whose size
- * is less than 512 (PAGE_SIZE<<3), but greater than 256.
- */
-
-typedef unsigned int kmem_bufctl_t;
-#define	SLAB_LIMIT	(((kmem_bufctl_t)(~0U))-3)
-
-/*
- * struct slab
- *
- * Manages the objs in a slab. Placed either at the beginning of mem allocated
- * for a slab, or allocated from an general cache.
- * Slabs are chained into three list: fully used, partial, fully free slabs.
- */
-struct slab {
-	struct {
-		struct list_head list;
-		void *s_mem;		/* including colour offset */
-		unsigned int inuse;	/* num of objs active in slab */
-		kmem_bufctl_t free;
-	};
-};
-
-/*
  * struct array_cache
  *
  * Purpose:
@@ -2645,8 +2607,9 @@ static void cache_init_objs(struct kmem_cache *cachep,
 		if (cachep->ctor)
 			cachep->ctor(objp);
 #endif
-		slab_bufctl(slabp)[i] = i;
+		slab_bufctl(page)[i] = i;
 	}
+	slab_bufctl(slabp)[i - 1] = BUFCTL_END;
 }
 
 static void kmem_flagcheck(struct kmem_cache *cachep, gfp_t flags)
@@ -2662,14 +2625,16 @@ static void kmem_flagcheck(struct kmem_cache *cachep, gfp_t flags)
 static void *slab_get_obj(struct kmem_cache *cachep, struct page *page,
 				int nodeid)
 {
-	void *objp;
+	void *objp = index_to_obj(cachep, slabp, slabp->free);
+	kmem_bufctl_t next;
 
-	slabp->inuse++;
-	objp = index_to_obj(cachep, slabp, slab_bufctl(slabp)[slabp->free]);
+	objp = index_to_obj(cachep, page, slab_bufctl(page)[page->active]);
+	page->active++;
 #if DEBUG
-	WARN_ON(page_to_nid(virt_to_page(objp)) != nodeid);
+	slab_bufctl(slabp)[slabp->free] = BUFCTL_FREE;
+	WARN_ON(slabp->nodeid != nodeid);
 #endif
-	slabp->free++;
+	slabp->free = next;
 
 	return objp;
 }
@@ -2677,25 +2642,25 @@ static void *slab_get_obj(struct kmem_cache *cachep, struct page *page,
 static void slab_put_obj(struct kmem_cache *cachep, struct page *page,
 				void *objp, int nodeid)
 {
-	unsigned int objnr = obj_to_index(cachep, slabp, objp);
+	unsigned int objnr = obj_to_index(cachep, page, objp);
 #if DEBUG
-	kmem_bufctl_t i;
+	unsigned int i;
 
+#if DEBUG
 	/* Verify that the slab belongs to the intended node */
 	WARN_ON(slabp->nodeid != nodeid);
 
 	/* Verify double free bug */
-	for (i = slabp->free; i < cachep->num; i++) {
-		if (slab_bufctl(slabp)[i] == objnr) {
+	for (i = page->active; i < cachep->num; i++) {
+		if (slab_bufctl(page)[i] == objnr) {
 			printk(KERN_ERR "slab: double free detected in cache "
 					"'%s', objp %p\n", cachep->name, objp);
 			BUG();
 		}
 	}
 #endif
-	slabp->free--;
-	slab_bufctl(slabp)[slabp->free] = objnr;
-	slabp->inuse--;
+	page->active--;
+	slab_bufctl(page)[page->active] = objnr;
 }
 
 /*
@@ -2856,6 +2821,9 @@ static void *cache_free_debugcheck(struct kmem_cache *cachep, void *objp,
 	BUG_ON(objnr >= cachep->num);
 	BUG_ON(objp != index_to_obj(cachep, page, objnr));
 
+#ifdef CONFIG_DEBUG_SLAB_LEAK
+	slab_bufctl(slabp)[objnr] = BUFCTL_FREE;
+#endif
 	if (cachep->flags & SLAB_POISON) {
 #ifdef CONFIG_DEBUG_PAGEALLOC
 		if ((cachep->size % PAGE_SIZE)==0 && OFF_SLAB(cachep)) {
@@ -2872,9 +2840,33 @@ static void *cache_free_debugcheck(struct kmem_cache *cachep, void *objp,
 	return objp;
 }
 
+static void check_slabp(struct kmem_cache *cachep, struct slab *slabp)
+{
+	kmem_bufctl_t i;
+	int entries = 0;
+
+	/* Check slab's freelist to see if this obj is there. */
+	for (i = slabp->free; i != BUFCTL_END; i = slab_bufctl(slabp)[i]) {
+		entries++;
+		if (entries > cachep->num || i >= cachep->num)
+			goto bad;
+	}
+	if (entries != cachep->num - slabp->inuse) {
+bad:
+		printk(KERN_ERR "slab: Internal list corruption detected in "
+			"cache '%s'(%d), slabp %p(%d). Tainted(%s). Hexdump:\n",
+			cachep->name, cachep->num, slabp, slabp->inuse,
+			print_tainted());
+		print_hex_dump(KERN_ERR, "", DUMP_PREFIX_OFFSET, 16, 1, slabp,
+			sizeof(*slabp) + cachep->num * sizeof(kmem_bufctl_t),
+			1);
+		BUG();
+	}
+}
 #else
 #define kfree_debugcheck(x) do { } while(0)
 #define cache_free_debugcheck(x,objp,z) (objp)
+#define check_slabp(x,y) do { } while(0)
 #endif
 
 static void *cache_alloc_refill(struct kmem_cache *cachep, gfp_t flags,
@@ -2923,7 +2915,7 @@ retry:
 				goto must_grow;
 		}
 
-		slabp = list_entry(entry, struct slab, list);
+		page = list_entry(entry, struct page, lru);
 		check_spinlock_acquired(cachep);
 
 		/*
@@ -2941,11 +2933,12 @@ retry:
 			ac_put_obj(cachep, ac, slab_get_obj(cachep, page,
 									node));
 		}
+		check_slabp(cachep, slabp);
 
 		/* move slabp to correct slabp list: */
-		list_del(&slabp->list);
-		if (slabp->free == cachep->num)
-			list_add(&slabp->list, &n->slabs_full);
+		list_del(&page->lru);
+		if (page->active == cachep->num)
+			list_add(&page->list, &n->slabs_full);
 		else
 			list_add(&page->list, &n->slabs_partial);
 	}
@@ -3019,6 +3012,16 @@ static void *cache_alloc_debugcheck_after(struct kmem_cache *cachep,
 		*dbg_redzone1(cachep, objp) = RED_ACTIVE;
 		*dbg_redzone2(cachep, objp) = RED_ACTIVE;
 	}
+#ifdef CONFIG_DEBUG_SLAB_LEAK
+	{
+		struct slab *slabp;
+		unsigned objnr;
+
+		slabp = virt_to_head_page(objp)->slab_page;
+		objnr = (unsigned)(objp - slabp->s_mem) / cachep->size;
+		slab_bufctl(slabp)[objnr] = BUFCTL_ACTIVE;
+	}
+#endif
 	objp += obj_offset(cachep);
 	if (cachep->ctor && cachep->flags & SLAB_POISON)
 		cachep->ctor(objp);
@@ -3222,6 +3225,7 @@ retry:
 
 	page = list_entry(entry, struct page, lru);
 	check_spinlock_acquired_node(cachep, nodeid);
+	check_slabp(cachep, slabp);
 
 	STATS_INC_NODEALLOCS(cachep);
 	STATS_INC_ACTIVE(cachep);
@@ -3229,13 +3233,13 @@ retry:
 
 	BUG_ON(page->active == cachep->num);
 
-	obj = slab_get_obj(cachep, slabp, nodeid);
+	obj = slab_get_obj(cachep, page, nodeid);
 	n->free_objects--;
 	/* move slabp to correct slabp list: */
 	list_del(&page->lru);
 
-	if (slabp->free == cachep->num)
-		list_add(&slabp->list, &n->slabs_full);
+	if (page->active == cachep->num)
+		list_add(&page->lru, &n->slabs_full);
 	else
 		list_add(&page->lru, &n->slabs_partial);
 
@@ -3408,9 +3412,10 @@ static void free_block(struct kmem_cache *cachep, void **objpp, int nr_objects,
 		n = cachep->node[node];
 		list_del(&page->lru);
 		check_spinlock_acquired_node(cachep, node);
-		slab_put_obj(cachep, slabp, objp, node);
+		slab_put_obj(cachep, page, objp, node);
 		STATS_DEC_ACTIVE(cachep);
 		n->free_objects++;
+		check_slabp(cachep, slabp);
 
 		/* fixup slab chains */
 		if (page->active == 0) {
@@ -4259,23 +4264,21 @@ static void handle_slab(unsigned long *n, struct kmem_cache *c,
 						struct page *page)
 {
 	void *p;
-	int i, j;
-
+	int i;
 	if (n[0] == n[1])
 		return;
-	for (i = 0, p = s->s_mem; i < c->num; i++, p += c->size) {
+	for (i = 0, p = page->s_mem; i < c->num; i++, p += c->size) {
 		bool active = true;
 
-		for (j = s->free; j < c->num; j++) {
+		for (j = page->active; j < c->num; j++) {
 			/* Skip freed item */
-			if (slab_bufctl(s)[j] == i) {
+			if (slab_bufctl(page)[j] == i) {
 				active = false;
 				break;
 			}
 		}
 		if (!active)
 			continue;
-
 		if (!add_caller(n, (unsigned long)*dbg_userword(c, p)))
 			return;
 	}
