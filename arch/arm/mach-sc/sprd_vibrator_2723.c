@@ -41,6 +41,8 @@ static struct work_struct vibrator_work;
 static struct hrtimer vibe_timer;
 static int vibe_state = 0;
 
+int vib_toggle = 1;
+
 static inline uint32_t vibrator_read(uint32_t reg)
 {
 	return sci_adi_read(reg);
@@ -75,8 +77,10 @@ static void update_vibrator(struct work_struct *work)
 	set_vibrator(vibe_state);
 }
 
-static void vibrator_enable(struct timed_output_dev *dev, int value)
-{
+static void sprd_vibrator_enable(struct timed_output_dev *dev, int value)
+{ 
+	if (!vib_toggle)
+		return;
 
 	hrtimer_cancel(&vibe_timer);
 
@@ -117,7 +121,7 @@ static enum hrtimer_restart vibrator_timer_func(struct hrtimer *timer)
 static struct timed_output_dev sprd_vibrator = {
 	.name = "vibrator",
 	.get_time = vibrator_get_time,
-	.enable = vibrator_enable,
+	.enable = sprd_vibrator_enable,
 };
 
 static int __init sprd_init_vibrator(void)
@@ -139,3 +143,47 @@ module_init(sprd_init_vibrator);
 MODULE_DESCRIPTION("vibrator driver for spreadtrum Processors");
 MODULE_LICENSE("GPL");
 
+static ssize_t vib_toggle_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+ 	return sprintf(buf, "%u\n", vib_toggle);
+}
+ 
+static ssize_t vib_toggle_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
+{
+ 	int val;
+  
+ 	if (sscanf(buf, "%u", &val)) {
+ 		vib_toggle = val;
+  	}
+  
+  	return count;
+}
+static struct kobj_attribute vib_toggle_interface = __ATTR(enable, 0644, vib_toggle_show, ib_toggle_store);
+
+static struct attribute *vib_toogle_attrs[] = {
+  	&vib_toggle_interface.attr, 
+  	NULL,
+};
+ 
+static struct attribute_group vib_toogle_interface_group = {
+	.attrs = vib_toogle_attrs,
+};
+ 
+static struct kobject *vib_toogle_kobject;
+ 
+static int __init vib_toogle_sysfs_init(void)
+{
+  	int ret;
+  
+  	vib_toogle_kobject = kobject_create_and_add("vib_toogle", kernel_kobj);
+  	if (!vib_toogle_kobject) {
+  		pr_err("vib_toogle: Failed to create kobject interface\n");
+  	}
+  	ret = sysfs_create_group(vib_toogle_kobject, &vib_toogle_interface_group);
+  	if (ret) {
+  		kobject_put(vib_toogle_kobject);
+  	}
+  
+          return 0;
+}
+late_initcall(vib_toogle_sysfs_init);
