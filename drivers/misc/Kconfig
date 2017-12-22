@@ -622,4 +622,10 @@ config SPRD_SRT_KO
 	depends on SPRD_SRT
 	default m
 
+config BLX
+        bool "Support for Battery Life eXtender"
+        default y
+        help
+          Say Y here to enable Battery Life eXtender
+
 endmenu
