@@ -135,3 +135,4 @@ firmware/*
 output/*
 dt_img/dt_img_gpve.img
 kernel/config_data.h
+arch/arm/boot/compressed/piggy.xzkern
