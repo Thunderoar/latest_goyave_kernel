@@ -1076,6 +1076,12 @@ static inline void inc_nr_running(struct rq *rq)
 {
 	rq->nr_running++;
 
+	if (rq->nr_running >= 2) {
+#ifdef CONFIG_SMP
+	if (!rq->rd->overload)
+		rq->rd->overload = true;
+#endif
+
 #ifdef CONFIG_NO_HZ_FULL
 	if (rq->nr_running == 2) {
 		if (tick_nohz_full_cpu(rq->cpu)) {
