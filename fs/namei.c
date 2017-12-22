@@ -504,12 +504,14 @@ static bool path_connected(const struct path *path)
 
 static inline void lock_rcu_walk(void)
 {
+	br_read_lock(&vfsmount_lock);
 	rcu_read_lock();
 }
 
 static inline void unlock_rcu_walk(void)
 {
 	rcu_read_unlock();
+	br_read_unlock(&vfsmount_lock);
 }
 
 /**
@@ -529,36 +531,14 @@ static int unlazy_walk(struct nameidata *nd, struct dentry *dentry)
 	int want_root = 0;
 
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
-
-	/*
-	 * After legitimizing the bastards, terminate_walk()
-	 * will do the right thing for non-RCU mode, and all our
-	 * subsequent exit cases should rcu_read_unlock()
-	 * before returning.  Do vfsmount first; if dentry
-	 * can't be legitimized, just set nd->path.dentry to NULL
-	 * and rely on dput(NULL) being a no-op.
-	 */
-	if (!legitimize_mnt(nd->path.mnt, nd->m_seq))
-		return -ECHILD;
-	nd->flags &= ~LOOKUP_RCU;
-
-	if (!lockref_get_not_dead(&parent->d_lockref)) {
-		nd->path.dentry = NULL;	
-		unlock_rcu_walk();
-		return -ECHILD;
+	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT)) {
+		want_root = 1;
+		spin_lock(&fs->lock);
+		if (nd->root.mnt != fs->root.mnt ||
+				nd->root.dentry != fs->root.dentry)
+			goto err_root;
 	}
-
-	/*
-	 * For a negative lookup, the lookup sequence point is the parents
-	 * sequence point, and it only needs to revalidate the parent dentry.
-	 *
-	 * For a positive lookup, we need to move both the parent and the
-	 * dentry from the RCU domain to be properly refcounted. And the
-	 * sequence number in the dentry validates *both* dentry counters,
-	 * since we checked the sequence number of the parent after we got
-	 * the child sequence number. So we know the parent must still
-	 * be valid if the child sequence number is still valid.
-	 */
+	spin_lock(&parent->d_lock);
 	if (!dentry) {
 		if (!__d_rcu_to_refcount(parent, nd->seq))
 			goto err_parent;
@@ -625,22 +605,15 @@ static int complete_walk(struct nameidata *nd)
 		nd->flags &= ~LOOKUP_RCU;
 		if (!(nd->flags & LOOKUP_ROOT))
 			nd->root.mnt = NULL;
-
-		if (!legitimize_mnt(nd->path.mnt, nd->m_seq)) {
+		spin_lock(&dentry->d_lock);
+		if (unlikely(!__d_rcu_to_refcount(dentry, nd->seq))) {
+			spin_unlock(&dentry->d_lock);
 			unlock_rcu_walk();
 			return -ECHILD;
 		}
-		if (unlikely(!lockref_get_not_dead(&dentry->d_lockref))) {
-			unlock_rcu_walk();
-			mntput(nd->path.mnt);
-			return -ECHILD;
-		}
-		if (read_seqcount_retry(&dentry->d_seq, nd->seq)) {
-			unlock_rcu_walk();
-			dput(dentry);
-			mntput(nd->path.mnt);
-			return -ECHILD;
-		}
+		BUG_ON(nd->inode != dentry->d_inode);
+		spin_unlock(&dentry->d_lock);
+		mntget(nd->path.mnt);
 		unlock_rcu_walk();
 	}
 
@@ -942,15 +915,15 @@ int follow_up(struct path *path)
 	struct mount *parent;
 	struct dentry *mountpoint;
 
-	read_seqlock_excl(&mount_lock);
+	br_read_lock(&vfsmount_lock);
 	parent = mnt->mnt_parent;
 	if (parent == mnt) {
-		read_sequnlock_excl(&mount_lock);
+		br_read_unlock(&vfsmount_lock);
 		return 0;
 	}
 	mntget(&parent->mnt);
 	mountpoint = dget(mnt->mnt_mountpoint);
-	read_sequnlock_excl(&mount_lock);
+	br_read_unlock(&vfsmount_lock);
 	dput(path->dentry);
 	path->dentry = mountpoint;
 	mntput(path->mnt);
@@ -1081,8 +1054,8 @@ static int follow_managed(struct path *path, unsigned flags)
 
 			/* Something is mounted on this dentry in another
 			 * namespace and/or whatever was mounted there in this
-			 * namespace got unmounted before lookup_mnt() could
-			 * get it */
+			 * namespace got unmounted before we managed to get the
+			 * vfsmount_lock */
 		}
 
 		/* Handle an automount point */
@@ -1905,7 +1878,6 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 		if (flags & LOOKUP_RCU) {
 			lock_rcu_walk();
 			nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
-			nd->m_seq = read_seqbegin(&mount_lock);
 		} else {
 			path_get(&nd->path);
 		}
@@ -1914,7 +1886,6 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 
 	nd->root.mnt = NULL;
 
-	nd->m_seq = read_seqbegin(&mount_lock);
 	if (*name=='/') {
 		if (flags & LOOKUP_RCU) {
 			lock_rcu_walk();
