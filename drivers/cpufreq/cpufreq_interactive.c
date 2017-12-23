@@ -33,6 +33,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/display_state.h>
 #include <asm/cputime.h>
+#include "cpufreq_governor.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpufreq_interactive.h>
