@@ -90,6 +90,7 @@ typedef struct sensor_power_info {
 	uint32_t            op_sensor_id;
 	struct sensor_power main_sensor;
 	struct sensor_power sub_sensor;
+	uint8_t i2c_addr;
 } SENSOR_POWER_CFG_T;
 
 
