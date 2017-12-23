@@ -191,13 +191,6 @@ static int stb6100_write_reg_range(struct stb6100_state *state, u8 buf[], int st
 		.len	= len + 1
 	};
 
-	if (1 + len > sizeof(cmdbuf)) {
-		printk(KERN_WARNING
-		       "%s: i2c wr: len=%d is too big!\n",
-		       KBUILD_MODNAME, len);
-		return -EINVAL;
-	}
-
 	if (unlikely(start < 1 || start + len > STB6100_NUMREGS)) {
 		dprintk(verbose, FE_ERROR, 1, "Invalid register range %d:%d",
 			start, len);

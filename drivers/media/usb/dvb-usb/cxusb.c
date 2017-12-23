@@ -139,7 +139,6 @@ static int cxusb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 			  int num)
 {
 	struct dvb_usb_device *d = i2c_get_adapdata(adap);
-	int ret;
 	int i;
 
 	if (mutex_lock_interruptible(&d->i2c_mutex) < 0)
@@ -159,14 +158,7 @@ static int cxusb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 
 		if (msg[i].flags & I2C_M_RD) {
 			/* read only */
-			u8 obuf[3], ibuf[MAX_XFER_SIZE];
-
-			if (1 + msg[i].len > sizeof(ibuf)) {
-				warn("i2c rd: len=%d is too big!\n",
-				     msg[i].len);
-				ret = -EOPNOTSUPP;
-				goto unlock;
-			}
+			u8 obuf[3], ibuf[1+msg[i].len];
 			obuf[0] = 0;
 			obuf[1] = msg[i].len;
 			obuf[2] = msg[i].addr;
@@ -180,20 +172,7 @@ static int cxusb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		} else if (i+1 < num && (msg[i+1].flags & I2C_M_RD) &&
 			   msg[i].addr == msg[i+1].addr) {
 			/* write to then read from same address */
-			u8 obuf[MAX_XFER_SIZE], ibuf[MAX_XFER_SIZE];
-
-			if (3 + msg[i].len > sizeof(obuf)) {
-				warn("i2c wr: len=%d is too big!\n",
-				     msg[i].len);
-				ret = -EOPNOTSUPP;
-				goto unlock;
-			}
-			if (1 + msg[i + 1].len > sizeof(ibuf)) {
-				warn("i2c rd: len=%d is too big!\n",
-				     msg[i + 1].len);
-				ret = -EOPNOTSUPP;
-				goto unlock;
-			}
+			u8 obuf[3+msg[i].len], ibuf[1+msg[i+1].len];
 			obuf[0] = msg[i].len;
 			obuf[1] = msg[i+1].len;
 			obuf[2] = msg[i].addr;
@@ -212,14 +191,7 @@ static int cxusb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 			i++;
 		} else {
 			/* write only */
-			u8 obuf[MAX_XFER_SIZE], ibuf;
-
-			if (2 + msg[i].len > sizeof(obuf)) {
-				warn("i2c wr: len=%d is too big!\n",
-				     msg[i].len);
-				ret = -EOPNOTSUPP;
-				goto unlock;
-			}
+			u8 obuf[2+msg[i].len], ibuf;
 			obuf[0] = msg[i].addr;
 			obuf[1] = msg[i].len;
 			memcpy(&obuf[2], msg[i].buf, msg[i].len);
@@ -232,14 +204,8 @@ static int cxusb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		}
 	}
 
-	if (i == num)
-		ret = num;
-	else
-		ret = -EREMOTEIO;
-
-unlock:
 	mutex_unlock(&d->i2c_mutex);
-	return ret;
+	return i == num ? num : -EREMOTEIO;
 }
 
 static u32 cxusb_i2c_func(struct i2c_adapter *adapter)
