@@ -404,10 +404,10 @@ static void sprd_find_real_index(unsigned int new_speed, int *index)
 	int i;
 	struct cpufreq_frequency_table *pfreq = sprd_cpufreq_conf->freq_tbl;
 
-	*index = pfreq[0].driver_data;
+	*index = pfreq[0].index;
 	for (i = 0; (pfreq[i].frequency != CPUFREQ_TABLE_END); i++) {
 		if (new_speed == pfreq[i].frequency) {
-			*index = pfreq[i].driver_data;
+			*index = pfreq[i].index;
 			break;
 		}
 	}
