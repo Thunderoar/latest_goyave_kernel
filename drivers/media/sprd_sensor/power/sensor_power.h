@@ -18,4 +18,8 @@
 
 int sensor_power_on(uint8_t sensor_id, struct sensor_power *main_cfg, struct sensor_power *sub_cfg);
 int sensor_power_off(uint8_t sensor_id, struct sensor_power *main_cfg, struct sensor_power *sub_cfg);
+#if defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)
+int sensor_power_on_db221a(uint8_t sensor_id, struct sensor_power *main_cfg, struct sensor_power *sub_cfg);
+int sensor_power_off_db221a(uint8_t sensor_id, struct sensor_power *main_cfg, struct sensor_power *sub_cfg);
+#endif
 #endif
