@@ -158,7 +158,7 @@ static ssize_t vib_toggle_store(struct kobject *kobj, struct kobj_attribute *att
   
   	return count;
 }
-static struct kobj_attribute vib_toggle_interface = __ATTR(enable, 0644, vib_toggle_show, ib_toggle_store);
+static struct kobj_attribute vib_toggle_interface = __ATTR(enable, 0644, vib_toggle_show, vib_toggle_store);
 
 static struct attribute *vib_toogle_attrs[] = {
   	&vib_toggle_interface.attr, 

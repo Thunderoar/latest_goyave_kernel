@@ -12,3 +12,7 @@ obj-$(CONFIG_SND_SOC_SPRD_CODEC_V1)	+= codec/sprd/v1/
 obj-$(CONFIG_SND_SOC_SPRD_CODEC_V3)	+= codec/sprd/v3/
 obj-$(CONFIG_SND_SOC_SPRD_CODEC_V4)	+= codec/sprd/v4/
 obj-$(CONFIG_SND_SOC_NULL_CODEC)	+= codec/null-codec/
+
+#Sound hack 
+obj-$(CONFIG_SOUND_CONTROL_HAX_GPL) += sound_control_gpl.o
+
