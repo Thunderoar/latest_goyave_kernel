@@ -95,7 +95,7 @@ static void fdatawait_one_bdev(struct block_device *bdev, void *arg)
 }
 
 
-+#ifdef CONFIG_DYNAMIC_FSYNC
+#ifdef CONFIG_DYNAMIC_FSYNC
 /*
  * Sync all the data for all the filesystems (called by sys_sync() and
  * emergency sync)
