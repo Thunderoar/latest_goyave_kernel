@@ -5718,12 +5718,6 @@ static inline int find_new_ilb(int call_cpu)
 }
 #endif /* CONFIG_SCHED_MC || CONFIG_SCHED_SMT */
 
-	if (ilb < nr_cpu_ids && idle_cpu(ilb))
-		return ilb;
-
-	return nr_cpu_ids;
-}
-
 /*
  * Kick a CPU to do the nohz balancing, if it is time for it. We pick the
  * nohz_load_balancer CPU (if there is one) otherwise fallback to any idle
