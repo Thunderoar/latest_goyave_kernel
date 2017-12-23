@@ -236,17 +236,9 @@ static int af9035_i2c_master_xfer(struct i2c_adapter *adap,
 					msg[1].len);
 		} else {
 			/* I2C */
-			u8 buf[MAX_XFER_SIZE];
-			struct usb_req req = { CMD_I2C_RD, 0, 5 + msg[0].len,
+			u8 buf[5 + msg[0].len];
+			struct usb_req req = { CMD_I2C_RD, 0, sizeof(buf),
 					buf, msg[1].len, msg[1].buf };
-
-			if (5 + msg[0].len > sizeof(buf)) {
-				dev_warn(&d->udev->dev,
-					 "%s: i2c xfer: len=%d is too big!\n",
-					 KBUILD_MODNAME, msg[0].len);
-				ret = -EOPNOTSUPP;
-				goto unlock;
-			}
 			req.mbox |= ((msg[0].addr & 0x80)  >>  3);
 			buf[0] = msg[1].len;
 			buf[1] = msg[0].addr << 1;
@@ -273,17 +265,9 @@ static int af9035_i2c_master_xfer(struct i2c_adapter *adap,
 					msg[0].len - 3);
 		} else {
 			/* I2C */
-			u8 buf[MAX_XFER_SIZE];
-			struct usb_req req = { CMD_I2C_WR, 0, 5 + msg[0].len,
-					buf, 0, NULL };
-
-			if (5 + msg[0].len > sizeof(buf)) {
-				dev_warn(&d->udev->dev,
-					 "%s: i2c xfer: len=%d is too big!\n",
-					 KBUILD_MODNAME, msg[0].len);
-				ret = -EOPNOTSUPP;
-				goto unlock;
-			}
+			u8 buf[5 + msg[0].len];
+			struct usb_req req = { CMD_I2C_WR, 0, sizeof(buf), buf,
+					0, NULL };
 			req.mbox |= ((msg[0].addr & 0x80)  >>  3);
 			buf[0] = msg[0].len;
 			buf[1] = msg[0].addr << 1;
@@ -302,7 +286,6 @@ static int af9035_i2c_master_xfer(struct i2c_adapter *adap,
 		ret = -EOPNOTSUPP;
 	}
 
-unlock:
 	mutex_unlock(&d->i2c_mutex);
 
 	if (ret < 0)
@@ -1515,10 +1498,6 @@ static const struct usb_device_id af9035_id_table[] = {
 	/* XXX: that same ID [0ccd:0099] is used by af9015 driver too */
 	{ DVB_USB_DEVICE(USB_VID_TERRATEC, 0x0099,
 		&af9035_props, "TerraTec Cinergy T Stick Dual RC (rev. 2)", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_LEADTEK, 0x6a05,
-		&af9035_props, "Leadtek WinFast DTV Dongle Dual", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_HAUPPAUGE, 0xf900,
-		&af9035_props, "Hauppauge WinTV-MiniStick 2", NULL) },
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, af9035_id_table);

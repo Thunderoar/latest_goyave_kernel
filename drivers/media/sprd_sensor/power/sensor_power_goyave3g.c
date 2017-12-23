@@ -66,6 +66,54 @@ static int sensor_sr200pc20m_poweroff(struct sensor_power *main_cfg, struct sens
 	return ret;
 }
 
+static int sensor_db221a_poweron(struct sensor_power *main_cfg, struct sensor_power *sub_cfg)
+{
+	int ret = 0;
+
+	/* Set default status for main and sub sensor */
+	sensor_k_sensor_sel(SENSOR_MAIN); // Select main sensor(sensor DB221A)
+
+	sensor_k_sensor_sel(SENSOR_MAIN); // Select main sensor(sensor DB221A)
+	sensor_k_set_pd_level(0);//power down valid for DB221A
+	sensor_k_set_rst_level(0);//reset valid for DB221A	
+	udelay(1);
+	sensor_k_set_voltage_avdd(SENSOR_VDD_2800MV);
+	mdelay(15);
+	sensor_k_set_voltage_iovdd(SENSOR_VDD_1800MV);
+	mdelay(5);
+	sensor_k_set_pd_level(1);
+	mdelay(5);
+	sensor_k_set_mclk(SENSOR_DEFALUT_MCLK);		// SENSOR_DEFALUT_MCLK 24
+	mdelay(5);
+	sensor_k_set_rst_level(1);
+	mdelay(40);
+
+	printk("sensor_db221a_poweron : OK\n");
+
+	return ret;
+}
+
+static int sensor_db221a_poweroff(struct sensor_power *main_cfg, struct sensor_power *sub_cfg)
+{
+	int ret = 0;
+
+	sensor_k_sensor_sel(SENSOR_MAIN); // Select main sensor(sensor DB221A)
+	sensor_k_set_rst_level(0); // Reset valid for DB221A
+	mdelay(12); // Delay 12ms > 10ms
+	sensor_k_set_pd_level(0); // Power down valid for DB221A
+	mdelay(1);
+	sensor_k_set_mclk(0); // Disable MCLK
+	mdelay(3);
+	sensor_k_set_voltage_avdd(SENSOR_VDD_CLOSED); // Close anolog vdd
+	udelay(3); // Delay 1us >= 0us
+	sensor_k_set_voltage_iovdd(SENSOR_VDD_CLOSED);
+	udelay(1);
+
+	printk("sensor_db221a_poweroff : OK\n");
+
+	return ret;
+}
+
 static int sensor_sr130pc20_poweron(struct sensor_power *main_cfg, struct sensor_power *sub_cfg)
 {
 	int ret = 0;
@@ -181,6 +229,47 @@ int sensor_power_off(uint8_t sensor_id, struct sensor_power *main_cfg, struct se
 	if(SENSOR_MAIN == sensor_id)
 	{
 		ret = sensor_sr200pc20m_poweroff(main_cfg, sub_cfg);
+	}
+	else
+	{
+		ret = sensor_sr130pc20_poweroff(main_cfg, sub_cfg);
+	}
+
+	return ret;
+}
+int sensor_power_on_db221a(uint8_t sensor_id, struct sensor_power *main_cfg, struct sensor_power *sub_cfg)
+{
+	int ret = 0;
+
+	if(!main_cfg || !sub_cfg)
+	{
+		printk("sensor_power_on : main sensor config(0x%x) or front sensor config(0x%x) parameter is error\n", main_cfg, sub_cfg);
+	}
+
+	if(SENSOR_MAIN == sensor_id)
+	{
+		ret = sensor_db221a_poweron(main_cfg, sub_cfg);
+	}
+	else
+	{
+		ret = sensor_sr130pc20_poweron(main_cfg, sub_cfg);
+	}
+
+	return ret;
+}
+
+int sensor_power_off_db221a(uint8_t sensor_id, struct sensor_power *main_cfg, struct sensor_power *sub_cfg)
+{
+	int ret = 0;
+
+	if(!main_cfg || !sub_cfg)
+	{
+		printk("sensor_power_off : main sensor config(0x%x) or front sensor config(0x%x) parameter is error\n", main_cfg, sub_cfg);
+	}
+
+	if(SENSOR_MAIN == sensor_id)
+	{
+		ret = sensor_db221a_poweroff(main_cfg, sub_cfg);
 	}
 	else
 	{
