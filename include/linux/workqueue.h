@@ -457,6 +457,7 @@ __alloc_workqueue_key(const char *fmt, unsigned int flags, int max_active,
 
 #define create_workqueue(name)						\
 	alloc_workqueue((name), WQ_MEM_RECLAIM, 1)
+#define create_rt_workqueue(name) __create_workqueue((name), 0, 0, 1)
 #define create_freezable_workqueue(name)				\
 	alloc_workqueue((name), WQ_FREEZABLE | WQ_UNBOUND | WQ_MEM_RECLAIM, 1)
 #define create_singlethread_workqueue(name)				\
