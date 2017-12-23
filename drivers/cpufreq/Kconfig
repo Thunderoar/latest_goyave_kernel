@@ -244,6 +244,17 @@ config CPU_FREQ_GOV_SPRDEMAND
 	  If you don't have one of these architectures or devices, use
 	  'ondemand' instead.
 
+config CPU_BOOST
+ 	tristate "Event base short term CPU freq boost"
+ 	depends on CPU_FREQ
+ 	help
+ 	  This driver boosts the frequency of one or more CPUs based on
+ 	  various events that might occur in the system. As of now, the
+ 	  events it reacts to are:
+ 	  - Migration of important threads from one CPU to another.
+ 
+ 	  If in doubt, say N.
+
 config SCX35_1300MHZ
 	bool "SCX35 1300MHZ"
 	depends on ARCH_SCX35
