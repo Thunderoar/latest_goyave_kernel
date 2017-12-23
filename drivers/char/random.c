@@ -529,7 +529,7 @@ static void _mix_pool_bytes(struct entropy_store *r, const void *in,
 		 * rotation, so that successive passes spread the
 		 * input bits across the pool evenly.
 		 */
-		input_rotate = (input_rotate + (i ? 7 : 14)) & 
+		input_rotate = (input_rotate + (i ? 7 : 14)) & 31;
 	}
 
 	r->input_rotate = input_rotate;
