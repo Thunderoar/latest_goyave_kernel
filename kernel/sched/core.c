@@ -1619,7 +1619,7 @@ out:
 
 	if (src_cpu != cpu && task_notify_on_migrate(p))
 		atomic_notifier_call_chain(&migration_notifier_head,
-					   cpu, (void *)src_cpu)
+					   cpu, (void *)src_cpu);
 	return success;
 }
 
