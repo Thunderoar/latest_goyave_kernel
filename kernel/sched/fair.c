@@ -4625,7 +4625,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 			struct sched_group *group, int load_idx,
 			int local_group, int *balance, struct sg_lb_stats *sgs, bool *overload)
 {
-	unsigned long nr_running, max_nr_running, min_nr_running;
+	unsigned long nr_running, min_nr_running;
 	unsigned long scaled_load, load, max_cpu_load, min_cpu_load, max_nr_running;
 	unsigned int balance_cpu = -1, first_idle_cpu = 0;
 	unsigned long avg_load_per_task = 0;
@@ -5140,7 +5140,7 @@ ret:
 /*
  * find_busiest_queue - find the busiest runqueue among the cpus in group.
  */
-static struct rq *find_busiest_queue(struct lb_env *env,
+static struct rq *find_busiest_queue(struct lb_env *env, unsigned long imbalance,
 				     struct sched_group *group)
 {
 	struct rq *busiest = NULL, *rq;
@@ -5247,6 +5247,7 @@ static int load_balance(int this_cpu, struct rq *this_rq,
 {
 	int ld_moved, cur_ld_moved, active_balance = 0;
 	struct sched_group *group;
+	unsigned long imbalance;
 	struct rq *busiest;
 	unsigned long flags;
 	struct cpumask *cpus = __get_cpu_var(load_balance_mask);
@@ -5283,7 +5284,7 @@ redo:
 		goto out_balanced;
 	}
 
-	busiest = find_busiest_queue(&env, group);
+	busiest = find_busiest_queue(&env, imbalance, group);
 	if (!busiest) {
 		schedstat_inc(sd, lb_nobusyq[idle]);
 		goto out_balanced;
