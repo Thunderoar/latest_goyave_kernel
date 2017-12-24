@@ -161,7 +161,3 @@ obj-$(CONFIG_SIPC)		+= sipc/
 obj-$(CONFIG_SENSORS)           += sensor/
 
 obj-$(CONFIG_SPRD_IQ)           += iq/
-
-ifeq (1, $(shell if [ -d drivers/exfat ] ; then echo 1 ; fi))
-obj-y   += exfat/
-endif
