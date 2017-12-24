@@ -427,6 +427,12 @@ struct rq {
 
 	/* capture load from *all* tasks on this cpu: */
 	struct load_weight load;
+	/*
+	 * The difference between nr_running and h_nr_running is:
+	 * nr_running:   present how many entity would take part in the sharing
+	 *               the cpu power of that cfs_rq
+	 * h_nr_running: present how many tasks in current cfs runqueue
+	 */
 	unsigned long nr_load_updates;
 	u64 nr_switches;
 
