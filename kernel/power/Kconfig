@@ -360,6 +360,9 @@ config CPU_PM
 	bool
 	depends on SUSPEND || CPU_IDLE
 
+config SUSPEND_NVS
+	def_bool y
+
 config SUSPEND_TIME
 	bool "Log time spent in suspend"
 	---help---
