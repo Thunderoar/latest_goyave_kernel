@@ -9,4 +9,3 @@
 int get_charginglimit(void);
 
 #endif
-

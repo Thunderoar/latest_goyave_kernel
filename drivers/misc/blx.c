@@ -11,6 +11,8 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 #include <linux/blx.h>
+#include <linux/module.h>
+#include <linux/vmalloc.h>
 
 #define BATTERYLIFEEXTENDER_VERSION 1
 
