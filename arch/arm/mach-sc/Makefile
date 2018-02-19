@@ -1,7 +1,6 @@
 obj-y += irq.o arch_init.o arch_lock.o \
          reserve.o efuse.o common.o glb.o
 
-obj-$(CONFIG_FORCE_FAST_CHARGE) += fastchg.o
 obj-$(CONFIG_SC_INTERNAL_ADI) += adi.o adie_irq.o
 obj-$(CONFIG_SC_INTERNAL_ADC) += adc.o
 obj-$(CONFIG_SC_INTERNAL_WATCHDOG) += watchdog.o

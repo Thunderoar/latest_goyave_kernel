@@ -1219,12 +1219,6 @@ LOCAL int _Sensor_K_WriteReg(SENSOR_REG_BITS_T_PTR pReg)
 
 	if(s_p_sensor_mod->cur_i2c_client->addr == 0x0028)//For only SR541, need check each sensor
 			delay_value = 0xdddd;
-#if defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)
-	else if(s_p_sensor_mod->cur_i2c_client->addr == 0x0045)//For only DB221a, need check each sensor
-		{
-			delay_value = 0x00FE;
-		}
-#endif
 		else
 			delay_value = 0xffff;
 
@@ -1542,59 +1536,6 @@ int sensor_k_open(struct inode *node, struct file *file)
 	return ret;
 }
 
-#if defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)
-int sensor_k_clk_open(struct device_node *dn)
-{
-	int ret = 0;
-
-	printk("%s. ++\n",__func__);
-
-	if( atomic_inc_return(&s_p_sensor_mod->open_count) == 1 )
-	{
-		ret = clk_mm_i_eb(dn,1);
-
-		s_p_sensor_mod->ccir_clk = parse_clk(dn, SENSOR_CLK);
-
-		if (NULL == s_p_sensor_mod->ccir_clk)
-		{
-			SENSOR_PRINT_ERR("### : sensor_k_open : Failed : Can't get clock [ccir_mclk]!\n");
-			SENSOR_PRINT_ERR("### : sensor_k_open : s_sensor_clk = %p\n",s_p_sensor_mod->ccir_clk);
-		}
-		else
-		{
-			SENSOR_PRINT_ERR("### : sensor_k_open : sensor ccir clk get ok.\n");
-		}
-	}
-
-	printk("%s. --\n",__func__);
-
-	return ret;
-}
-
-int sensor_k_clk_release(struct device_node *dn)
-{
-	int ret = 0;
-
-	printk("%s. ++\n",__func__);
-
-	if(atomic_dec_return(&s_p_sensor_mod->open_count) == 0)
-	{
-		sensor_k_set_voltage_cammot(SENSOR_VDD_CLOSED);
-		sensor_k_set_voltage_avdd(SENSOR_VDD_CLOSED);
-		sensor_k_set_voltage_dvdd(SENSOR_VDD_CLOSED);
-		sensor_k_set_voltage_iovdd(SENSOR_VDD_CLOSED);
-		sensor_k_set_mclk(0);
-		clk_put(s_p_sensor_mod->ccir_clk);
-		s_p_sensor_mod->ccir_clk = NULL;
-		ret = clk_mm_i_eb(dn, 0);
-	}
-
-	printk("%s. --\n",__func__);
-
-	return ret;
-}
-#endif //defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)
-
 int sensor_k_release(struct inode *node, struct file *file)
 {
 	SENSOR_PRINT_HIGH("sensor_k_release : E\n");
@@ -1825,22 +1766,7 @@ int _sensor_burst_write_init(SENSOR_REG_T_PTR p_reg_table, uint32_t init_table_s
 		wr_reg = p_reg_table[written_num].reg_addr;
 		wr_val = p_reg_table[written_num].reg_value;
 
-#if defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)
-		if(s_p_sensor_mod->cur_i2c_client->addr == 0x0045 && 0xFE == wr_reg)
-		{
-			if (wr_val >= 10)
-			{
-				msleep(wr_val);
-			}
-			else
-			{
-				mdelay(wr_val);
-			}		
-		}
-		else if (s_p_sensor_mod->cur_i2c_client->addr != 0x0045 && SENSOR_WRITE_DELAY == wr_reg)
-#else
 		if (SENSOR_WRITE_DELAY == wr_reg)
-#endif		
 		{
 			if (wr_val >= 10)
 			{
@@ -2176,22 +2102,10 @@ LOCAL long sensor_k_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 			{
 				if (pwr_cfg.is_on)
 				{
-#if defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)
-					SENSOR_PRINT_ERR("SENSOR_IO_POWER_CFG : on %x\n", pwr_cfg.i2c_addr);
-					if(pwr_cfg.i2c_addr == 0x45)
-						ret = sensor_power_on_db221a((uint8_t)pwr_cfg.op_sensor_id, &pwr_cfg.main_sensor, &pwr_cfg.sub_sensor);
-					else
-#endif					
 					ret = sensor_power_on((uint8_t)pwr_cfg.op_sensor_id, &pwr_cfg.main_sensor, &pwr_cfg.sub_sensor);
 				}
 				else
 				{
-#if defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)
-					SENSOR_PRINT_ERR("SENSOR_IO_POWER_CFG : off %x\n", pwr_cfg.i2c_addr);
-					if(pwr_cfg.i2c_addr == 0x45)
-						ret = sensor_power_off_db221a((uint8_t)pwr_cfg.op_sensor_id, &pwr_cfg.main_sensor, &pwr_cfg.sub_sensor);
-					else
-#endif					
 					ret = sensor_power_off((uint8_t)pwr_cfg.op_sensor_id, &pwr_cfg.main_sensor, &pwr_cfg.sub_sensor);
 				}
 			}
@@ -2415,13 +2329,9 @@ struct class *camera_class;
 #define REAR_SENSOR_NAME	"S5K4EC N\n"
 #define FRONT_SENSOR_NAME	"SR200PC20M N\n"
 
-#elif defined(CONFIG_MACH_GOYAVE3G_SWA)
-#define REAR_SENSOR_NAME	"S5K4ECGX N\n"
-
 #elif defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI) || defined(CONFIG_MACH_GOYAVE3G_SEA) || defined(CONFIG_MACH_GOYAVEWIFI_SEA_XTC)
 
 #define REAR_SENSOR_NAME	"SR200PC20 N\n"
-#define REAR_SENSOR_NAME_DB221A	"DB221A N\n"
 
 #if defined(CONFIG_MACH_GOYAVE3G_SEA) || defined(CONFIG_MACH_GOYAVEWIFI_SEA_XTC)
 #define FRONT_SENSOR_NAME	"SR200PC20M N\n"
@@ -2473,73 +2383,8 @@ LOCAL int _Sensor_K_SetTorch(uint32_t flash_mode)
 
 static ssize_t Rear_Cam_Sensor_ID(struct device *dev, struct device_attribute *attr, char *buf)
 {
-#if defined(CONFIG_MACH_GOYAVE3G) || defined(CONFIG_MACH_GOYAVEWIFI)	
-	int ret;
-	struct sensor_power main_sensor_dummy;
-	struct sensor_power sub_sensor_dummy;
-	SENSOR_REG_BITS_T reg;
-	uint32_t	sensor_id_backup;
-	uint16_t cur_i2c_client_addr_backup; //unsigned short
-	static int rearcam_sensorid = 0;
-
-#define SENSOR_NONE 0
-#define SENSOR_DB221A 1
-#define SENSOR_SR200PC20 2
-#define SENSOR_DB221A_ADDR 0x45
-
-	printk("%s. ++ [%d]\n",__func__,rearcam_sensorid);
-
-	if (rearcam_sensorid == SENSOR_NONE) {			
-		printk("%s. ++ [%d][0x%x]\n",
-			__func__,s_p_sensor_mod->sensor_id,s_p_sensor_mod->cur_i2c_client->addr);
-		sensor_id_backup = s_p_sensor_mod->sensor_id;
-		cur_i2c_client_addr_backup = s_p_sensor_mod->cur_i2c_client->addr;
-
-		sensor_k_sensor_sel(0);
-		s_p_sensor_mod->cur_i2c_client->addr = SENSOR_DB221A_ADDR; 
-		sensor_k_clk_open(sensor_dev.this_device->of_node);
-		//_sensor_k_mipi_clk_en(sensor_dev.this_device->of_node);
-		ret = sensor_power_on_db221a((uint8_t)0, &main_sensor_dummy, &sub_sensor_dummy);			
-		printk("%s. power_on [%d]\n",__func__,ret);
-
-		reg.reg_addr = 0xFF;
-		reg.reg_value = 0xE8;
-		reg.reg_bits = 0x80;
-		ret = _Sensor_K_WriteReg(&reg);
-		printk("%s. write_reg [%d]\n",__func__,ret);
-
-		reg.reg_addr = 0x00;
-		reg.reg_value = 0x00;
-		reg.reg_bits = 0x80;
-		ret = _Sensor_K_ReadReg(&reg);
-		printk("%s. read_reg [%d][0x%x]\n",__func__,ret,reg.reg_value);
-
-		if (reg.reg_value == 0x50) {
-			rearcam_sensorid = SENSOR_DB221A;
-		} else {
-			rearcam_sensorid = SENSOR_SR200PC20;
-		}
-
-		ret = sensor_power_off_db221a((uint8_t)0, &main_sensor_dummy, &sub_sensor_dummy);
-		sensor_k_clk_release(sensor_dev.this_device->of_node);
-		//_sensor_k_mipi_clk_dis();			
-		printk("%s. power_off [%d]\n",__func__,ret);
-
-		s_p_sensor_mod->sensor_id = sensor_id_backup;
-		s_p_sensor_mod->cur_i2c_client->addr = cur_i2c_client_addr_backup;
-	}
-
-	SENSOR_PRINT("Rear_Cam_Sensor_ID\n");
-	printk("%s. Rear_Cam_Sensor_ID [%d]\n",__func__,rearcam_sensorid);
-	if (rearcam_sensorid == SENSOR_DB221A) {
-		return sprintf(buf, REAR_SENSOR_NAME_DB221A);
-	} else {
-		return sprintf(buf, REAR_SENSOR_NAME);
-	}
-#else
 	SENSOR_PRINT("Rear_Cam_Sensor_ID\n");
 	return sprintf(buf, REAR_SENSOR_NAME);
-#endif
 }
 
 static ssize_t Rear_Cam_FW_Store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
@@ -2600,7 +2445,7 @@ static ssize_t Front_Cam_Type_Store(struct device *dev, struct device_attribute 
 }
 #endif
 
-#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G) || defined(CONFIG_MACH_J13G) || defined(CONFIG_MACH_GOYAVE3G_SWA)
+#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G) || defined(CONFIG_MACH_J13G)
 static ssize_t S5K4ECGX_camera_vendorid_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int count;
@@ -2655,6 +2500,7 @@ static ssize_t Sensor_camera_antibanding_store(struct device *dev, struct device
 }
 #endif
 
+
 static DEVICE_ATTR(rear_camfw, S_IRUGO | S_IXOTH, Rear_Cam_Sensor_ID, NULL); // Read(User, Group, Other), Execute(Other)
 static DEVICE_ATTR(rear_type, S_IRUGO | S_IXOTH, Cam_Sensor_TYPE, NULL); // Read(User, Group, Other), Execute(Other)
 
@@ -2670,7 +2516,7 @@ static DEVICE_ATTR(front_camfw, S_IRUGO | S_IXOTH, Front_Cam_Sensor_ID, NULL); /
 
 static DEVICE_ATTR(front_type, S_IRUGO | S_IXOTH, Cam_Sensor_TYPE, NULL); // Read(User, Group, Other), Execute(Other)
 
-#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G)  || defined(CONFIG_MACH_J13G) || defined(CONFIG_MACH_GOYAVE3G_SWA)
+#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G)  || defined(CONFIG_MACH_J13G)
 
 static struct device_attribute S5K4ECGX_camera_vendorid_attr = {
 	.attr = {
@@ -2795,7 +2641,7 @@ int __init sensor_k_init(void)
 	}
 #endif
 
-#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G)  || defined(CONFIG_MACH_J13G) || defined(CONFIG_MACH_GOYAVE3G_SWA)
+#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G)  || defined(CONFIG_MACH_J13G)
 	err = device_create_file(dev_t_rear, &S5K4ECGX_camera_vendorid_attr);
 	if(err)
 	{
@@ -2836,7 +2682,7 @@ int __init sensor_k_init(void)
 		device_remove_file(dev_t_rear, &dev_attr_rear_flash);
 #endif
 
-#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G)  || defined(CONFIG_MACH_J13G) || defined(CONFIG_MACH_GOYAVE3G_SWA)
+#if  defined (CONFIG_MACH_CORE3_W)|| defined (CONFIG_MACH_GRANDNEOVE3G) || defined (CONFIG_MACH_VIVALTO5MVE3G)  || defined(CONFIG_MACH_J13G)
 	err_make_camera_vendorid:
 		device_remove_file(dev_t_rear, &S5K4ECGX_camera_vendorid_attr);
 	err_make_camera_antibanding:

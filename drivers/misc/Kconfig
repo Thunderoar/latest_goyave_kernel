@@ -477,7 +477,7 @@ config ARM_CHARLCD
 	  still useful.
 
 config BMP085
-	tristate
+	bool
 	depends on SYSFS
 
 config BMP085_I2C
@@ -621,11 +621,5 @@ config SPRD_SRT_KO
 	tristate "sprd srt kernel module support"
 	depends on SPRD_SRT
 	default m
-
-config BLX
-        bool "Support for Battery Life eXtender"
-        default y
-        help
-          Say Y here to enable Battery Life eXtender
 
 endmenu

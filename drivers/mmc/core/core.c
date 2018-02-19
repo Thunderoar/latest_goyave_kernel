@@ -45,6 +45,12 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 
+#ifdef CONFIG_MMC_SUPPORT_STLOG
+#include <linux/stlog.h>
+#else
+#define ST_LOG(fmt,...)
+#endif
+
 /* If the device is not responding */
 #define MMC_CORE_TIMEOUT_MS	(10 * 60 * 1000) /* 10 minute timeout */
 
@@ -61,24 +67,9 @@ static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
  * Enabling software CRCs on the data blocks can be a significant (30%)
  * performance cost, and for other reasons may not always be desired.
  * So we allow it it to be disabled.
- *
- * SysFs interface :
- *
- * /sys/module/mmc_core/parameters/crc
- *
- * Enable / Disable CRC
- *
- * echo N > /sys/module/mmc_core/parameters/crc (Disabled) or
- * echo 0 > /sys/module/mmc_core/parameters/crc (Disabled)
- *
- * echo Y > /sys/module/mmc_core/parameters/crc (Enabled) or
- * echo 1 > /sys/module/mmc_core/parameters/crc (Enabled)
-*/
-
-int use_spi_crc = 0;
-EXPORT_SYMBOL(use_spi_crc);
-module_param_named(crc, use_spi_crc, int, 0644);
-MODULE_PARM_DESC(crc, "Enable/disable CRC");
+ */
+bool use_spi_crc = 1;
+module_param(use_spi_crc, bool, 0);
 
 /*
  * We normally treat cards as removed during suspend if they are not
@@ -346,10 +337,8 @@ EXPORT_SYMBOL(mmc_start_bkops);
  */
 static void mmc_wait_data_done(struct mmc_request *mrq)
 {
-	struct mmc_context_info *context_info = &mrq->host->context_info;
-
-	context_info->is_done_rcv = true;
-	wake_up_interruptible(&context_info->wait);
+	mrq->host->context_info.is_done_rcv = true;
+	wake_up_interruptible(&mrq->host->context_info.wait);
 }
 
 static void mmc_wait_done(struct mmc_request *mrq)
@@ -824,11 +813,11 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	/*
 	 * Some cards require longer data read timeout than indicated in CSD.
 	 * Address this by setting the read timeout to a "reasonably high"
-	 * value. For the cards tested, 600ms has proven enough. If necessary,
+	 * value. For the cards tested, 300ms has proven enough. If necessary,
 	 * this value can be increased if other problematic cards require this.
 	 */
 	if (mmc_card_long_read_time(card) && data->flags & MMC_DATA_READ) {
-		data->timeout_ns = 600000000;
+		data->timeout_ns = 300000000;
 		data->timeout_clks = 0;
 	}
 
@@ -1247,11 +1236,11 @@ int mmc_regulator_set_ocr(struct mmc_host *mmc,
 		 */
 		tmp = vdd_bit - ilog2(MMC_VDD_165_195);
 		if (tmp == 0) {
-			min_uV = 1800 * 1000;
-			max_uV = min_uV;
+			min_uV = 1650 * 1000;
+			max_uV = 1950 * 1000;
 		} else {
 			min_uV = 1900 * 1000 + tmp * 100 * 1000;
-			max_uV = min_uV ;
+			max_uV = min_uV + 100 * 1000;
 		}
 
 		/*
@@ -1270,13 +1259,12 @@ int mmc_regulator_set_ocr(struct mmc_host *mmc,
 		else
 			result = 0;
 
-		if (vdd_bit) {
+		if (result == 0 && !mmc->regulator_enabled) {
 			result = regulator_enable(supply);
 			if (!result)
 				mmc->regulator_enabled = true;
 		}
-	} else {
-		printk("mmc_regulator_set_ocr regulator_disable\n");
+	} else if (mmc->regulator_enabled) {
 		result = regulator_disable(supply);
 		if (result == 0)
 			mmc->regulator_enabled = false;
@@ -1636,12 +1624,11 @@ int mmc_resume_bus(struct mmc_host *host)
 		BUG_ON(!host->bus_ops->resume);
 		host->bus_ops->resume(host);
 	}
-	
+
+	if (host->bus_ops->detect && !host->bus_dead)
+		host->bus_ops->detect(host);
+
 	mmc_bus_put(host);
-
-	/*card detection can not be called whithin dfferent task, it may cause some tasks  to remove card at the same time*/
-	mmc_detect_change(host, 0);
-
 	printk("%s: Deferred resume completed\n", mmc_hostname(host));
 	return 0;
 }
@@ -2087,12 +2074,10 @@ EXPORT_SYMBOL(mmc_can_discard);
 
 int mmc_can_sanitize(struct mmc_card *card)
 {
-#ifdef CONFIG_MMC_SANITIZE_ENABLE
 	if (!mmc_can_trim(card) && !mmc_can_erase(card))
 		return 0;
 	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
 		return 1;
-#endif
 	return 0;
 }
 EXPORT_SYMBOL(mmc_can_sanitize);
@@ -2147,9 +2132,6 @@ static unsigned int mmc_do_calc_max_discard(struct mmc_card *card,
 
 	if (!qty)
 		return 0;
-
-	if (qty == 1 && mmc_card_mmc(card))
-		return card->erase_size;
 
 	if (qty == 1)
 		return 1;
@@ -2234,6 +2216,13 @@ static void mmc_hw_reset_for_init(struct mmc_host *host)
 
 int mmc_can_reset(struct mmc_card *card)
 {
+	u8 rst_n_function;
+
+	if (!mmc_card_mmc(card))
+		return 0;
+	rst_n_function = card->ext_csd.rst_n_function;
+	if ((rst_n_function & EXT_CSD_RST_N_EN_MASK) != EXT_CSD_RST_N_ENABLED)
+		return 0;
 	return 1;
 }
 EXPORT_SYMBOL(mmc_can_reset);
@@ -2241,8 +2230,6 @@ EXPORT_SYMBOL(mmc_can_reset);
 static int mmc_do_hw_reset(struct mmc_host *host, int check)
 {
 	struct mmc_card *card = host->card;
-
-	printk("%s: mmc_do_hw_reset \n", mmc_hostname(host));
 
 	if (!host->bus_ops->power_restore)
 		return -EOPNOTSUPP;
@@ -2371,6 +2358,7 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 	if (ret) {
 		mmc_card_set_removed(host->card);
 		pr_debug("%s: card remove detected\n", mmc_hostname(host));
+		ST_LOG("<%s> %s: card remove detected\n", __func__,mmc_hostname(host));
 	}
 
 	return ret;
@@ -2419,16 +2407,12 @@ void mmc_rescan(struct work_struct *work)
 	int i;
 	bool extend_wakelock = false;
 
-	if (host->rescan_disable) {
-		wake_unlock(&host->detect_wake_lock);
+	if (host->rescan_disable)
 		return;
-	}
 
 	/* If there is a non-removable card registered, only scan once */
-	if ((host->caps & MMC_CAP_NONREMOVABLE) && host->rescan_entered) {
-		wake_unlock(&host->detect_wake_lock);
+	if ((host->caps & MMC_CAP_NONREMOVABLE) && host->rescan_entered)
 		return;
-	}
 	host->rescan_entered = 1;
 
 	mmc_bus_get(host);
@@ -2474,6 +2458,8 @@ void mmc_rescan(struct work_struct *work)
 		mmc_release_host(host);
 		goto out;
 	}
+
+	ST_LOG("<%s> %s insertion detected",__func__,host->class_dev.kobj.name);
 
 	mmc_claim_host(host);
 	for (i = 0; i < ARRAY_SIZE(freqs); i++) {
@@ -2704,19 +2690,6 @@ int mmc_cache_ctrl(struct mmc_host *host, u8 enable)
 }
 EXPORT_SYMBOL(mmc_cache_ctrl);
 
-void mmc_ctrl_power(struct mmc_host *host, bool onoff)
-{
-	mmc_claim_host(host);
-	if (onoff)
-		mmc_power_up(host);
-	else
-		mmc_power_off(host);
-	/* Wait at least 1 ms according to SD spec */
-	mmc_delay(1);
-	mmc_release_host(host);
-}
-EXPORT_SYMBOL(mmc_ctrl_power);
-
 #ifdef CONFIG_PM
 
 /**
@@ -2889,81 +2862,6 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 	return 0;
 }
 #endif
-
-#define MIN_WAIT_MS	5
-static int mmc_wait_trans_state(struct mmc_card *card, unsigned int wait_ms)
-{
-	int waited = 0;
-	int status = 0;
-
-	mmc_send_status(card, &status);
-
-	while (R1_CURRENT_STATE(status) != R1_STATE_TRAN) {
-		if (waited > wait_ms)
-			return 0;
-		mdelay(MIN_WAIT_MS);
-		waited += MIN_WAIT_MS;
-		mmc_send_status(card, &status);
-	}
-	return waited;
-}
-
-/*
- * Turn the bkops mode ON/OFF.
- */
-int mmc_bkops_enable(struct mmc_host *host, u8 value)
-{
-	struct mmc_card *card = host->card;
-	unsigned long flags;
-	int err = 0;
-	u8 ext_csd[512];
-
-	if (!card)
-		return err;
-
-	mmc_claim_host(host);
-
-	/* read ext_csd to get EXT_CSD_BKOPS_EN field value */
-	err = mmc_send_ext_csd(card, ext_csd);
-	if (err) {
-		mmc_wait_trans_state(card, 100);
-		err = mmc_send_ext_csd(card, ext_csd);
-		if (err) {
-			pr_err("%s: error %d sending ext_csd\n",
-					mmc_hostname(card->host), err);
-			goto bkops_out;
-		}
-	}
-
-	/* set value to put EXT_CSD_BKOPS_EN field */
-	value |= ext_csd[EXT_CSD_BKOPS_EN] & 0x1;
-	err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-			EXT_CSD_BKOPS_EN, value,
-			card->ext_csd.generic_cmd6_time);
-	if (err) {
-		pr_err("%s: bkops mode error %d\n", mmc_hostname(host), err);
-		goto bkops_out;
-	}
-
-	/* read ext_csd again to get EXT_CSD_BKOPS_EN field value */
-	mmc_wait_trans_state(card, 20);
-	err = mmc_send_ext_csd(card, ext_csd);
-	if (!err) {
-		spin_lock_irqsave(&card->bkops_lock, flags);
-		card->bkops_enable = ext_csd[EXT_CSD_BKOPS_EN];
-		spin_unlock_irqrestore(&card->bkops_lock, flags);
-	} else {
-		pr_err("%s: error %d confirming ext_csd value\n",
-				mmc_hostname(card->host), err);
-
-	}
-
-bkops_out:
-	mmc_release_host(host);
-
-	return err;
-}
-EXPORT_SYMBOL(mmc_bkops_enable);
 
 /**
  * mmc_init_context_info() - init synchronization context

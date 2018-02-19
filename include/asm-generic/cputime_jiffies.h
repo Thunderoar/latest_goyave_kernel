@@ -3,17 +3,6 @@
 
 typedef unsigned long __nocast cputime_t;
 
-#define cputime_zero			(0UL)
-#define cputime_max			((~0UL >> 1) - 1)
-#define cputime_add(__a, __b)		((__a) +  (__b))
-#define cputime_sub(__a, __b)		((__a) -  (__b))
-#define cputime_div(__a, __n)		((__a) /  (__n))
-#define cputime_halve(__a)		((__a) >> 1)
-#define cputime_eq(__a, __b)		((__a) == (__b))
-#define cputime_gt(__a, __b)		((__a) >  (__b))
-#define cputime_ge(__a, __b)		((__a) >= (__b))
-#define cputime_lt(__a, __b)		((__a) <  (__b))
-#define cputime_le(__a, __b)		((__a) <= (__b))
 #define cputime_one_jiffy		jiffies_to_cputime(1)
 #define cputime_to_jiffies(__ct)	(__force unsigned long)(__ct)
 #define cputime_to_scaled(__ct)		(__ct)
@@ -21,12 +10,8 @@ typedef unsigned long __nocast cputime_t;
 
 typedef u64 __nocast cputime64_t;
 
-#define cputime64_zero (0ULL)
-#define cputime64_add(__a, __b)		((__a) + (__b))
-#define cputime64_sub(__a, __b)		((__a) - (__b))
 #define cputime64_to_jiffies64(__ct)	(__force u64)(__ct)
 #define jiffies64_to_cputime64(__jif)	(__force cputime64_t)(__jif)
-#define cputime_to_cputime64(__ct) ((u64) __ct)
 
 
 /*

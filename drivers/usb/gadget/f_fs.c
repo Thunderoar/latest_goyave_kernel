@@ -760,6 +760,10 @@ static ssize_t ffs_epfile_io(struct file *file,
 	ssize_t ret, data_len;
 	int halt;
 
+	if(read)
+		data = &recv_buffer[8];
+	else
+		data = &send_buffer[8];
 	goto first_try;
 	do {
 		spin_unlock_irq(&epfile->ffs->eps_lock);
@@ -1403,13 +1407,11 @@ static int functionfs_bind(struct ffs_data *ffs, struct usb_composite_dev *cdev)
 	ffs->ep0req->context = ffs;
 
 	lang = ffs->stringtabs;
-	if (lang) {
-		for (; *lang; ++lang) {
-			struct usb_string *str = (*lang)->strings;
-			int id = first_id;
-			for (; str->s; ++id, ++str)
-				str->id = id;
-		}
+	for (lang = ffs->stringtabs; *lang; ++lang) {
+		struct usb_string *str = (*lang)->strings;
+		int id = first_id;
+		for (; str->s; ++id, ++str)
+			str->id = id;
 	}
 
 	ffs->gadget = cdev->gadget;

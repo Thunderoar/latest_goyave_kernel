@@ -108,12 +108,6 @@ config CPU_FREQ_DEFAULT_GOV_CONSERVATIVE
 	  governor. If unsure have a look at the help section of the
 	  driver. Fallback governor will be the performance governor.
 
-config CPU_FREQ_DEFAULT_GOV_SMARTASS2
-	bool "smartass2"
-	select CPU_FREQ_GOV_SMARTASS2
-	help
-	  Use the CPUFreq governor 'smartassV2' as default.
-
 config CPU_FREQ_DEFAULT_GOV_INTERACTIVE
 	bool "interactive"
 	select CPU_FREQ_GOV_INTERACTIVE
@@ -193,14 +187,6 @@ config CPU_FREQ_GOV_ONDEMAND
 
 	  If in doubt, say N.
 
-config CPU_FREQ_GOV_SMARTASS2
-	tristate "'smartassV2' cpufreq governor"
-	depends on CPU_FREQ
-	help
-	  'smartassV2' - a "smart" optimized governor for the hero!
-
-	  If in doubt, say N.
-
 config CPU_FREQ_GOV_INTERACTIVE
 	tristate "'interactive' cpufreq policy governor"
 	help
@@ -257,17 +243,6 @@ config CPU_FREQ_GOV_SPRDEMAND
 
 	  If you don't have one of these architectures or devices, use
 	  'ondemand' instead.
-
-config CPU_BOOST
- 	tristate "Event base short term CPU freq boost"
- 	depends on CPU_FREQ
- 	help
- 	  This driver boosts the frequency of one or more CPUs based on
- 	  various events that might occur in the system. As of now, the
- 	  events it reacts to are:
- 	  - Migration of important threads from one CPU to another.
- 
- 	  If in doubt, say N.
 
 config SCX35_1300MHZ
 	bool "SCX35 1300MHZ"

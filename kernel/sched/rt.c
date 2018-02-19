@@ -852,7 +852,7 @@ static int sched_rt_runtime_exceeded(struct rt_rq *rt_rq)
 
 			if (!once) {
 				once = true;
-				printk_deferred("sched: RT throttling activated\n");
+				printk_sched("sched: RT throttling activated\n");
 			}
 		} else {
 			/*
@@ -924,13 +924,6 @@ inc_rt_prio_smp(struct rt_rq *rt_rq, int prio, int prev_prio)
 {
 	struct rq *rq = rq_of_rt_rq(rt_rq);
 
-#ifdef CONFIG_RT_GROUP_SCHED
-	/*
-	 * Change rq's cpupri only if rt_rq is the top queue.
-	 */
-	if (&rq->rt != rt_rq)
-		return;
-#endif
 	if (rq->online && prio < prev_prio)
 		cpupri_set(&rq->rd->cpupri, rq->cpu, prio);
 }
@@ -940,13 +933,6 @@ dec_rt_prio_smp(struct rt_rq *rt_rq, int prio, int prev_prio)
 {
 	struct rq *rq = rq_of_rt_rq(rt_rq);
 
-#ifdef CONFIG_RT_GROUP_SCHED
-	/*
-	 * Change rq's cpupri only if rt_rq is the top queue.
-	 */
-	if (&rq->rt != rt_rq)
-		return;
-#endif
 	if (rq->online && rt_rq->highest_prio.curr != prev_prio)
 		cpupri_set(&rq->rd->cpupri, rq->cpu, rt_rq->highest_prio.curr);
 }
@@ -1261,12 +1247,7 @@ select_task_rq_rt(struct task_struct *p, int sd_flag, int flags)
 	    (p->nr_cpus_allowed > 1)) {
 		int target = find_lowest_rq(p);
 
-		/*
-		* Don't bother moving it if the destination CPU is
-		* not running a lower priority task.
-		*/
- 		if (target != -1 &&
-		 	p->prio < cpu_rq(target)->rt.highest_prio.curr)
+		if (target != -1)
 			cpu = target;
 	}
 	rcu_read_unlock();
@@ -1542,16 +1523,6 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 
 		lowest_rq = cpu_rq(cpu);
 
-		if (lowest_rq->rt.highest_prio.curr <= task->prio) {
- 			/*
-			* Target rq has tasks of equal or higher priority,
-			* retrying does not release any lock and is unlikely
-			* to yield a different result.
-			*/
- 			lowest_rq = NULL;
- 			break;
- 		}
-
 		/* if the prio of this runqueue changed, try again */
 		if (double_lock_balance(rq, lowest_rq)) {
 			/*
@@ -1614,7 +1585,6 @@ static int push_rt_task(struct rq *rq)
 	struct task_struct *next_task;
 	struct rq *lowest_rq;
 	int ret = 0;
-	bool moved = false;
 
 	if (!rq->rt.overloaded)
 		return 0;
@@ -1679,7 +1649,6 @@ retry:
 
 	deactivate_task(rq, next_task, 0);
 	set_task_cpu(next_task, lowest_rq->cpu);
-	moved = true;
 	activate_task(lowest_rq, next_task, 0);
 	ret = 1;
 
@@ -1689,11 +1658,6 @@ retry:
 
 out:
 	put_task_struct(next_task);
-
-	if (moved && task_notify_on_migrate(next_task))
-		atomic_notifier_call_chain(&migration_notifier_head,
-					   cpu_of(lowest_rq),
-					   (void *)cpu_of(rq));
 
 	return ret;
 }
@@ -1708,10 +1672,8 @@ static void push_rt_tasks(struct rq *rq)
 static int pull_rt_task(struct rq *this_rq)
 {
 	int this_cpu = this_rq->cpu, ret = 0, cpu;
-	struct task_struct *p = NULL;
+	struct task_struct *p;
 	struct rq *src_rq;
-	bool moved = false;
-	int src_cpu = 0;
 
 	if (likely(!rt_overloaded(this_rq)))
 		return 0;
@@ -1772,10 +1734,6 @@ static int pull_rt_task(struct rq *this_rq)
 			deactivate_task(src_rq, p, 0);
 			set_task_cpu(p, this_cpu);
 			activate_task(this_rq, p, 0);
-
-			moved = true;
-			src_cpu = cpu_of(src_rq);
-
 			/*
 			 * We continue with the search, just in
 			 * case there's an even higher prio task
@@ -1786,11 +1744,6 @@ static int pull_rt_task(struct rq *this_rq)
 skip:
 		double_unlock_balance(this_rq, src_rq);
 	}
-
-	if (moved && task_notify_on_migrate(p))
-		atomic_notifier_call_chain(&migration_notifier_head,
-					   this_cpu,
-					   (void *)src_cpu);
 
 	return ret;
 }

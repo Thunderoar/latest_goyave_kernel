@@ -976,7 +976,7 @@ static int __init mms_probe(struct i2c_client *client, const struct i2c_device_i
 #if TOUCH_BOOSTER
 	info->finger_cnt = 0;
         info->min_handle = NULL;
-	info->touch_cpufreq_lock = 768000;
+	info->touch_cpufreq_lock = 1200000;
 #endif
 
 	//Enable device

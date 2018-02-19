@@ -732,8 +732,7 @@ static ssize_t restart_cpc_store(struct kobject *kobj, struct kobj_attribute *at
 #else
 		unsigned long base_cp_dbg = 0;
 #endif
-
-#ifdef CONFIG_SEC_LOG_BUF_NOCACHE
+	
 	memcpy(cp_assert_info, buf, 1);
 	if (sscanf(cp_assert_info, "%d", &val) == 1 && val > 0){
 		if(sec_log_buf_nocache_enable == 1){
@@ -749,14 +748,12 @@ static ssize_t restart_cpc_store(struct kobject *kobj, struct kobj_attribute *at
 		
 		cp_abort(buf+2);
 	}
-#endif
 
 	return n;
 }
 
 power_attr(restart_cpc);
 #endif
-
 #ifdef CONFIG_USER_WAKELOCK
 power_attr(wake_lock);
 power_attr(wake_unlock);
@@ -788,6 +785,7 @@ static struct attribute * g[] = {
 #ifdef CONFIG_FREEZER
 	&pm_freeze_timeout_attr.attr,
 #endif
+
 #ifdef CONFIG_ARCH_SC
 	&restart_cpc_attr.attr,
 #endif

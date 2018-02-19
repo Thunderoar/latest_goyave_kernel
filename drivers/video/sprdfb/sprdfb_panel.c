@@ -21,7 +21,6 @@
 #include "sprdfb_panel.h"
 #include "sprdfb_dispc_reg.h"
 #include "sprdfb_lcdc_reg.h"
-#include <linux/display_state.h>
 #include <linux/gpio.h>
 
 static LIST_HEAD(panel_list_main);
@@ -70,13 +69,6 @@ static void sprd_panel_set_rstn_prop(unsigned int if_slp)
 			panel_rstpin_map[i].val, 0xffffffff);
 }
 #endif
-
-bool display_on = true;
-
-bool is_display_on(void)
-{
- 	return display_on;
-}
 
 static int __init lcd_id_get(char *str)
 {
@@ -186,8 +178,6 @@ static int panel_reset(struct sprdfb_device *dev)
 		return -1;
 	}
 
-	display_on = true;
-
 	pr_debug("%s, enter\n", __func__);
 
 	/* clk/data lane enter LP */
@@ -206,8 +196,6 @@ static int panel_sleep(struct sprdfb_device *dev)
 		pr_err("%s, no dev\n", __func__);
 		return -1;
 	}
-
-	display_on = false; 
 
 	pr_debug("%s, enter\n", __func__);
 

@@ -218,35 +218,7 @@ alloc_stats:
 static void throtl_pd_init(struct blkcg_gq *blkg)
 {
 	struct throtl_grp *tg = blkg_to_tg(blkg);
-	struct throtl_data *td = blkg->q->td;
-	struct throtl_service_queue *parent_sq;
 	unsigned long flags;
-	int rw;
-
-	/*
-	 * If sane_hierarchy is enabled, we switch to properly hierarchical
-	 * behavior where limits on a given throtl_grp are applied to the
-	 * whole subtree rather than just the group itself.  e.g. If 16M
-	 * read_bps limit is set on the root group, the whole system can't
-	 * exceed 16M for the device.
-	 *
-	 * If sane_hierarchy is not enabled, the broken flat hierarchy
-	 * behavior is retained where all throtl_grps are treated as if
-	 * they're all separate root groups right below throtl_data.
-	 * Limits of a group don't interact with limits of other groups
-	 * regardless of the position of the group in the hierarchy.
-	 */
-	parent_sq = &td->service_queue;
-
-	if (cgroup_sane_behavior(blkg->blkcg->css.cgroup) && blkg->parent)
-		parent_sq = &blkg_to_tg(blkg->parent)->service_queue;
-
-	throtl_service_queue_init(&tg->service_queue, parent_sq);
-
-	for (rw = READ; rw <= WRITE; rw++) {
-		throtl_qnode_init(&tg->qnode_on_self[rw], tg);
-		throtl_qnode_init(&tg->qnode_on_parent[rw], tg);
-	}
 
 	RB_CLEAR_NODE(&tg->rb_node);
 	bio_list_init(&tg->bio_lists[0]);
@@ -969,9 +941,6 @@ static u64 tg_prfill_cpu_rwstat(struct seq_file *sf,
 	struct throtl_grp *tg = pd_to_tg(pd);
 	struct blkg_rwstat rwstat = { }, tmp;
 	int i, cpu;
-
-	if (tg->stats_cpu == NULL)
-		return 0;
 
 	for_each_possible_cpu(cpu) {
 		struct tg_stats_cpu *sc = per_cpu_ptr(tg->stats_cpu, cpu);

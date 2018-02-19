@@ -6,7 +6,7 @@
  */
 
 //Config debug msg : Must be disabled for production builds
-#if 0	// 0 : disable, 1 : enable
+#if 1	// 0 : disable, 1 : enable
 #define DEBUG	
 #endif
 
@@ -52,7 +52,7 @@
 //Include register map
 #include "melfas_mms400_reg.h"
 
-#define TOUCH_BOOSTER			0
+#define TOUCH_BOOSTER			1
 #if TOUCH_BOOSTER
 #include <linux/cpufreq.h>
 #include <linux/cpufreq_limit.h>
@@ -65,22 +65,19 @@ extern int _store_cpu_num_min_limit(unsigned int input);
 #define CHIP_NAME		"MMS438"
 #define CHIP_FW_CODE	"M4H0"
 #define FW_UPDATE_TYPE	"MMS438"
-
-#endif
+#endif
 #ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449
 #define CHIP_MMS449
 #define CHIP_NAME		"MMS449"
 #define CHIP_FW_CODE	"M4HP"
 #define FW_UPDATE_TYPE	"MMS438"
-
-#endif
+#endif
 #ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS458
 #define CHIP_MMS458
 #define CHIP_NAME		"MMS458"
 #define CHIP_FW_CODE	"M4HN"
 #define FW_UPDATE_TYPE	"MMS438"
-
-#endif
+#endif
 #ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS492
 #define CHIP_MMS492
 #define CHIP_NAME		"MMS492"

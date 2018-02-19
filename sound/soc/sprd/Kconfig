@@ -49,12 +49,6 @@ config SND_SOC_SPRD_AUDIO_DEBUG
 	    print debug information for detail.
 	    Or, maybe could reduce the code size.
 
-config SOUND_CONTROL_HAX_GPL
- 	tristate "sprd-codec sound control hax"
- 	default y
- 	help
- 	  FauxSound sprd-codec chipset sound control hacks
-
 source "sound/soc/sprd/dai/Kconfig"
 source "sound/soc/sprd/dai/vbc/Kconfig"
 source "sound/soc/sprd/dai/vaudio/Kconfig"

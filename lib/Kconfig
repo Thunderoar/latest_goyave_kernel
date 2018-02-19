@@ -189,9 +189,6 @@ config LZO_COMPRESS
 config LZO_DECOMPRESS
 	tristate
 
-config LZ4_DECOMPRESS
-	tristate
-
 source "lib/xz/Kconfig"
 
 #
@@ -231,10 +228,6 @@ config LZO_HW_ALGO
 	default n
 	help
 	Support for HW LZO ALGO.
-
-config DECOMPRESS_LZ4
-	select LZ4_DECOMPRESS
-	tristate
 
 #
 # Generic allocator support is selected if needed
@@ -316,20 +309,6 @@ config TEXTSEARCH_FSM
 
 config BTREE
 	boolean
-
-config ASSOCIATIVE_ARRAY
-	bool
-	help
-	  Generic associative array.  Can be searched and iterated over whilst
-	  it is being modified.  It is also reasonably quick to search and
-	  modify.  The algorithms are non-recursive, and the trees are highly
-	  capacious.
-
-	  See:
-
-		Documentation/assoc_array.txt
-
-	  for more information.
 
 config HAS_IOMEM
 	boolean

@@ -720,12 +720,8 @@ int blkg_conf_prep(struct blkcg *blkcg, const struct blkcg_policy *pol,
 		return -EINVAL;
 
 	disk = get_gendisk(MKDEV(major, minor), &part);
-	if (!disk)
+	if (!disk || part)
 		return -EINVAL;
-	if (part) {
-		put_disk(disk);
-		return -EINVAL;
-	}
 
 	rcu_read_lock();
 	spin_lock_irq(disk->queue->queue_lock);
@@ -880,20 +876,6 @@ void blkcg_drain_queue(struct request_queue *q)
 {
 	lockdep_assert_held(q->queue_lock);
 
-	/*
-	 * @q could be exiting and already have destroyed all blkgs as
-	 * indicated by NULL root_blkg.  If so, don't confuse policies.
-	 */
-	if (!q->root_blkg)
-		return;
-
-	/*
-	 * @q could be exiting and already have destroyed all blkgs as
-	 * indicated by NULL root_blkg.  If so, don't confuse policies.
-	 */
-	if (!q->root_blkg)
-		return;
-
 	blk_throtl_drain(q);
 }
 
@@ -946,6 +928,14 @@ struct cgroup_subsys blkio_subsys = {
 	.subsys_id = blkio_subsys_id,
 	.base_cftypes = blkcg_files,
 	.module = THIS_MODULE,
+
+	/*
+	 * blkio subsystem is utterly broken in terms of hierarchy support.
+	 * It treats all cgroups equally regardless of where they're
+	 * located in the hierarchy - all cgroups are treated as if they're
+	 * right below the root.  Fix it and remove the following.
+	 */
+	.broken_hierarchy = true,
 };
 EXPORT_SYMBOL_GPL(blkio_subsys);
 

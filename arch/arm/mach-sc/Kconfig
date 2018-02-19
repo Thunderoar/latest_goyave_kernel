@@ -658,13 +658,6 @@ config MACH_GRANDNEOVE3G
 		  
 endmenu
 
-config FORCE_FAST_CHARGE
-	bool "Force AC charge mode at will"
-	default y
-	help
-	  A simple sysfs interface to force adapters that
-	  are detected as USB to charge as AC.
-
 config SPRD_ION_MM_SIZE
         int "size for ion"
         range 1 64
@@ -742,7 +735,7 @@ config SPRD_CPU_DYNAMIC_HOTPLUG
 config SPRD_MEM_POOL
 	default y
 	bool "Using a memory pool to alloc 8k to 64k"
-	depends on COMPACTION
+	depends on !COMPACTION
 	help
 	  This option enables memmory pool for allocating 8k to 64k.
 

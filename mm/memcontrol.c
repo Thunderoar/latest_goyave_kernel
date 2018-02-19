@@ -379,7 +379,7 @@ struct mem_cgroup {
 static size_t memcg_size(void)
 {
 	return sizeof(struct mem_cgroup) +
-		nr_node_ids * sizeof(struct mem_cgroup_per_node *);
+		nr_node_ids * sizeof(struct mem_cgroup_per_node);
 }
 
 /* internal only representation about the status of kmem accounting. */
@@ -1220,7 +1220,7 @@ struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *root,
 			if (dead_count == iter->last_dead_count) {
 				smp_rmb();
 				last_visited = iter->last_visited;
-				if (last_visited && last_visited != root &&
+				if (last_visited &&
 				    !css_tryget(&last_visited->css))
 					last_visited = NULL;
 			}
@@ -1229,7 +1229,7 @@ struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *root,
 		memcg = __mem_cgroup_iter_next(root, last_visited);
 
 		if (reclaim) {
-			if (last_visited && last_visited != root)
+			if (last_visited)
 				css_put(&last_visited->css);
 
 			iter->last_visited = memcg;
@@ -5758,17 +5758,16 @@ static void mem_cgroup_usage_unregister_event(struct cgroup *cgrp,
 swap_buffers:
 	/* Swap primary and spare array */
 	thresholds->spare = thresholds->primary;
-
-	rcu_assign_pointer(thresholds->primary, new);
-
-	/* To be sure that nobody uses thresholds */
-	synchronize_rcu();
-
 	/* If all events are unregistered, free the spare array */
 	if (!new) {
 		kfree(thresholds->spare);
 		thresholds->spare = NULL;
 	}
+
+	rcu_assign_pointer(thresholds->primary, new);
+
+	/* To be sure that nobody uses thresholds */
+	synchronize_rcu();
 unlock:
 	mutex_unlock(&memcg->thresholds_lock);
 }
@@ -6327,23 +6326,9 @@ static void mem_cgroup_invalidate_reclaim_iterators(struct mem_cgroup *memcg)
 static void mem_cgroup_css_offline(struct cgroup *cont)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_cont(cont);
-	struct cgroup *iter;
 
 	mem_cgroup_invalidate_reclaim_iterators(memcg);
-
-	/*
-	 * This requires that offlining is serialized.  Right now that is
-	 * guaranteed because css_killed_work_fn() holds the cgroup_mutex.
-	 */
-	rcu_read_lock();
-	cgroup_for_each_descendant_post(iter, cont) {
-		rcu_read_unlock();
-		mem_cgroup_reparent_charges(mem_cgroup_from_cont(iter));
-		rcu_read_lock();
-	}
-	rcu_read_unlock();
 	mem_cgroup_reparent_charges(memcg);
-
 	mem_cgroup_destroy_all_caches(memcg);
 }
 

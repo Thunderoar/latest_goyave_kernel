@@ -6,7 +6,6 @@
 #include <linux/slab.h>
 #include <linux/security.h>
 #include <linux/syscalls.h>
-#include <linux/user_namespace.h>
 #include <asm/uaccess.h>
 
 /* init to 2 - one for init_task, one to ensure it is never freed */
@@ -257,14 +256,6 @@ out:
 	return i;
 }
 
-bool may_setgroups(void)
-{
-	struct user_namespace *user_ns = current_user_ns();
-
-	return ns_capable(user_ns, CAP_SETGID) &&
-		userns_may_setgroups(user_ns);
-}
-
 /*
  *	SMP: Our groups are copy-on-write. We can set them safely
  *	without another task interfering.
@@ -275,8 +266,6 @@ SYSCALL_DEFINE2(setgroups, int, gidsetsize, gid_t __user *, grouplist)
 	struct group_info *group_info;
 	int retval;
 
-	if (!may_setgroups())
-		return -EPERM;
 	if ((unsigned)gidsetsize > NGROUPS_MAX)
 		return -EINVAL;
 
@@ -298,10 +287,24 @@ SYSCALL_DEFINE2(setgroups, int, gidsetsize, gid_t __user *, grouplist)
 /*
  * Check whether we're fsgid/egid or in the supplemental group..
  */
+/** for android app process */
+#define AID_SDCARD_RW     1015
+
+/** for system_server, surfaceflinger, rild_sp*/
+#define AID_SDCARD_R      1028
+
+extern int get_dumpTsk(void);
 int in_group_p(kgid_t grp)
 {
 	const struct cred *cred = current_cred();
 	int retval = 1;
+
+	/* if in coredumping, kick off */
+	if(get_dumpTsk() == current)
+	{
+		if ((__kgid_val(grp) == AID_SDCARD_RW) || (__kgid_val(grp) == AID_SDCARD_R))
+			return 1;
+	}
 
 	if (!gid_eq(grp, cred->fsgid))
 		retval = groups_search(cred->group_info, grp);

@@ -27,6 +27,12 @@
 
 DEFINE_MUTEX(event_mutex);
 
+DEFINE_MUTEX(event_storage_mutex);
+EXPORT_SYMBOL_GPL(event_storage_mutex);
+
+char event_storage[EVENT_STORAGE_SIZE];
+EXPORT_SYMBOL_GPL(event_storage);
+
 LIST_HEAD(ftrace_events);
 static LIST_HEAD(ftrace_common_fields);
 
@@ -602,8 +608,7 @@ t_next(struct seq_file *m, void *v, loff_t *pos)
 		 * The ftrace subsystem is for showing formats only.
 		 * They can not be enabled or disabled via the event files.
 		 */
-		if (call->class && call->class->reg &&
-		    !(call->flags & TRACE_EVENT_FL_IGNORE_ENABLE))
+		if (call->class && call->class->reg)
 			return file;
 	}
 
@@ -1854,16 +1859,6 @@ static void trace_module_add_events(struct module *mod)
 {
 	struct ftrace_module_file_ops *file_ops = NULL;
 	struct ftrace_event_call **call, **start, **end;
-
-	if (!mod->num_trace_events)
-		return;
-
-	/* Don't add infrastructure for mods without tracepoints */
-	if (trace_module_has_bad_taint(mod)) {
-		pr_err("%s: module has bad taint, not creating trace events\n",
-		       mod->name);
-		return;
-	}
 
 	start = mod->trace_events;
 	end = mod->trace_events + mod->num_trace_events;

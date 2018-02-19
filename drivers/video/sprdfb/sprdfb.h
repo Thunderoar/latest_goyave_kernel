@@ -128,7 +128,9 @@ struct sprdfb_device {
 
 	uint32_t	bpp;
 			/*input bit per pixel*/
+#ifdef CONFIG_SEC_DEBUG
 	uint32_t	framebuffer_nr;	/*number of framebuffer*/
+#endif
 	uint16_t		panel_ready; /*panel has been inited by uboot*/
 	uint16_t		panel_if_type; /*panel IF*/
 
