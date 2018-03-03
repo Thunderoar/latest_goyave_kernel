@@ -823,6 +823,7 @@ deps_config := \
 	drivers/cpufreq/Kconfig.x86 \
 	drivers/cpufreq/Kconfig \
 	mm/Kconfig \
+	kernel/Kconfig.hz \
 	kernel/Kconfig.preempt \
 	drivers/pcmcia/Kconfig \
 	drivers/pci/Kconfig \
