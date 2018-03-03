@@ -21,6 +21,10 @@
 #include <linux/spinlock.h>
 #include <linux/notifier.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/sort.h>
+#include <linux/err.h>
+#include <linux/of.h>
 #include <asm/cputime.h>
 
 static spinlock_t cpufreq_stats_lock;
@@ -39,7 +43,14 @@ struct cpufreq_stats {
 #endif
 };
 
+struct cpufreq_power_stats {
+	unsigned int state_num;
+	unsigned int *curr;
+	unsigned int *freq_table;
+};
+
 static DEFINE_PER_CPU(struct cpufreq_stats *, cpufreq_stats_table);
+static DEFINE_PER_CPU(struct cpufreq_power_stats *, cpufreq_power_stats);
 
 struct cpufreq_stats_attribute {
 	struct attribute attr;
