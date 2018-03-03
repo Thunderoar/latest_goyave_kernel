@@ -1,1 +1,1 @@
-#define UTS_RELEASE "3.10.30+"
+#define UTS_RELEASE "3.10.40+"
