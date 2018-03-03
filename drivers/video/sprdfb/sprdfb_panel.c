@@ -21,6 +21,7 @@
 #include "sprdfb_panel.h"
 #include "sprdfb_dispc_reg.h"
 #include "sprdfb_lcdc_reg.h"
+#include <linux/display_state.h>
 #include <linux/gpio.h>
 
 static LIST_HEAD(panel_list_main);
@@ -28,6 +29,13 @@ static LIST_HEAD(panel_list_sub);
 static DEFINE_MUTEX(panel_mutex);
 
 static struct panel_spec *g_panel;
+
+bool display_on = true;
+
+bool is_display_on(void)
+{
+        return display_on;
+}
 
 uint32_t lcd_id_from_uboot;
 uint32_t lcd_base_from_uboot;
@@ -674,6 +682,7 @@ void sprdfb_panel_suspend(struct sprdfb_device *dev)
 		panel_after_suspend(dev);
 
 	pr_info("%s -\n", __func__);
+
 }
 
 void sprdfb_panel_start(struct sprdfb_device *dev)
@@ -698,6 +707,8 @@ void sprdfb_panel_resume(struct sprdfb_device *dev, bool from_deep_sleep)
 
 	pr_info("%s, + enable:%d, from_deep_sleep:%d\n",
 			__func__, dev->enable, from_deep_sleep);
+
+	display_on = true;
 
 	if (from_deep_sleep) {
 		/* 1. turn on mipi */
