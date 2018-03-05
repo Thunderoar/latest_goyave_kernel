@@ -131,35 +131,6 @@ config SW_SYNC_USER
 	  *WARNING* improper use of this can result in deadlocking kernel
 	  drivers from userspace.
 
-config RUNTIME_COMPCACHE
-        bool "Android rtcc"
-        depends on ZRAM && ANDROID
-        default n
-        help
-          This option enables rtcc v3 for android
-
-config KSWAPD_NOSWAP
-        bool "Disable swap in kswapd"
-        depends on RUNTIME_COMPCACHE
-        default n
-        help
-          This option controls swap action in kswapd
-
-
-config RUNTIME_COMPCACHE
-	bool "Android rtcc v3"
-	depends on ZRAM && ANDROID
-	default n
-	help
-	  This option enables rtcc v3 for android
-
-config KSWAPD_NOSWAP
-	bool "Disable swap in kswapd"
-	depends on RUNTIME_COMPCACHE
-	default n
-	help
-	  This option controls swap action in kswapd
-
 endif # if ANDROID
 
 endmenu
