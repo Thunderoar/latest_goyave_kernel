@@ -732,6 +732,8 @@ deps_config := \
 	drivers/mtd/maps/Kconfig \
 	drivers/mtd/chips/Kconfig \
 	drivers/mtd/Kconfig \
+	drivers/gpu/mali400/r0p5/Kconfig \
+	drivers/gpu/mali400/Kconfig \
 	drivers/connector/Kconfig \
 	drivers/bus/Kconfig \
 	drivers/battery/Kconfig \
