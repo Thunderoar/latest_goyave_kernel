@@ -1409,11 +1409,6 @@ static int __too_many_isolated(struct zone *zone, int file,
 static int too_many_isolated(struct zone *zone, int file,
 		struct scan_control *sc, int safe)
 {
-<<<<<<< HEAD
-	unsigned long inactive, isolated;
-
-=======
->>>>>>> 5dc989b2...  mm: vmscan: limit the number of pages kswapd reclaims at each priority
 	if (current_is_kswapd())
 		return 0;
 
@@ -2086,14 +2081,6 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long nr_reclaimed = 0;
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
 	struct blk_plug plug;
-<<<<<<< HEAD
-
-	get_scan_count(lruvec, sc, nr);
-
-	blk_start_plug(&plug);
-	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
-					nr[LRU_INACTIVE_FILE]) {
-=======
 	bool scan_adjusted;
 
 	get_scan_count(lruvec, sc, nr);
@@ -2121,7 +2108,6 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		unsigned long nr_anon, nr_file, percentage;
 		unsigned long nr_scanned;
 
->>>>>>> 5dc989b2...  mm: vmscan: limit the number of pages kswapd reclaims at each priority
 		for_each_evictable_lru(lru) {
 			if (nr[lru]) {
 				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);
