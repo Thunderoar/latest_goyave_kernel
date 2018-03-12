@@ -324,10 +324,19 @@ void can_put_echo_skb(struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (!priv->echo_skb[idx]) {
+		struct sock *srcsk = skb->sk;
 
-		skb = can_create_echo_skb(skb);
-		if (!skb)
-			return;
+		if (atomic_read(&skb->users) != 1) {
+			struct sk_buff *old_skb = skb;
+
+			skb = skb_clone(old_skb, GFP_ATOMIC);
+			kfree_skb(old_skb);
+			if (!skb)
+				return;
+		} else
+			skb_orphan(skb);
+
+		skb->sk = srcsk;
 
 		/* make settings for echo to reduce code in irq context */
 		skb->protocol = htons(ETH_P_CAN);
@@ -696,14 +705,14 @@ static size_t can_get_size(const struct net_device *dev)
 	size_t size;
 
 	size = nla_total_size(sizeof(u32));   /* IFLA_CAN_STATE */
-	size += nla_total_size(sizeof(struct can_ctrlmode));  /* IFLA_CAN_CTRLMODE */
+	size += sizeof(struct can_ctrlmode);  /* IFLA_CAN_CTRLMODE */
 	size += nla_total_size(sizeof(u32));  /* IFLA_CAN_RESTART_MS */
-	size += nla_total_size(sizeof(struct can_bittiming)); /* IFLA_CAN_BITTIMING */
-	size += nla_total_size(sizeof(struct can_clock));     /* IFLA_CAN_CLOCK */
+	size += sizeof(struct can_bittiming); /* IFLA_CAN_BITTIMING */
+	size += sizeof(struct can_clock);     /* IFLA_CAN_CLOCK */
 	if (priv->do_get_berr_counter)        /* IFLA_CAN_BERR_COUNTER */
-		size += nla_total_size(sizeof(struct can_berr_counter));
+		size += sizeof(struct can_berr_counter);
 	if (priv->bittiming_const)	      /* IFLA_CAN_BITTIMING_CONST */
-		size += nla_total_size(sizeof(struct can_bittiming_const));
+		size += sizeof(struct can_bittiming_const);
 
 	return size;
 }

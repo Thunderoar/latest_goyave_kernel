@@ -103,8 +103,8 @@ struct isert_conn {
 	struct isert_device	*conn_device;
 	struct work_struct	conn_logout_work;
 	struct mutex		conn_mutex;
-	struct completion	conn_wait;
-	struct completion	conn_wait_comp_err;
+	wait_queue_head_t	conn_wait;
+	wait_queue_head_t	conn_wait_comp_err;
 	struct kref		conn_kref;
 };
 
@@ -131,7 +131,7 @@ struct isert_device {
 };
 
 struct isert_np {
-	struct semaphore	np_sem;
+	wait_queue_head_t	np_accept_wq;
 	struct rdma_cm_id	*np_cm_id;
 	struct mutex		np_accept_mutex;
 	struct list_head	np_accept_list;

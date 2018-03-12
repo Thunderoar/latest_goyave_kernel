@@ -2264,9 +2264,7 @@ static irqreturn_t bt532_touch_work(int irq, void *data)
 						touch_cpufreq_lock, PTR_ERR(min_handle));
 						min_handle = NULL;
 					}
-#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 					_store_cpu_num_min_limit(2);
-#endif
 					dev_info(&client->dev,"cpu freq on\n");
 				}
 				info->finger_cnt++;
@@ -2327,9 +2325,7 @@ static irqreturn_t bt532_touch_work(int irq, void *data)
 			{
 				cpufreq_limit_put(min_handle);
 				min_handle = NULL;
-#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 				_store_cpu_num_min_limit(1);
-#endif
 				dev_info(&client->dev, "cpu freq off\n");
 			}
 #endif

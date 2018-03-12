@@ -73,7 +73,6 @@ void machine_crash_nonpanic_core(void *unused)
 	crash_save_cpu(&regs, smp_processor_id());
 	flush_cache_all();
 
-	set_cpu_online(smp_processor_id(), false);
 	atomic_dec(&waiting_for_crash_ipi);
 	while (1)
 		cpu_relax();
@@ -168,11 +167,4 @@ void machine_kexec(struct kimage *image)
 		kexec_reinit();
 
 	soft_restart(reboot_code_buffer_phys);
-}
-
-void arch_crash_save_vmcoreinfo(void)
-{
-#ifdef CONFIG_ARM_LPAE
-	VMCOREINFO_CONFIG(ARM_LPAE);
-#endif
 }

@@ -477,8 +477,6 @@ static void _rtl_usb_rx_process_agg(struct ieee80211_hw *hw,
 			if (unicast)
 				rtlpriv->link_info.num_rx_inperiod++;
 		}
-		/* static bcn for roaming */
-		rtl_beacon_statistic(hw, skb);
 	}
 }
 
@@ -550,7 +548,7 @@ static void _rtl_rx_pre_process(struct ieee80211_hw *hw, struct sk_buff *skb)
 	}
 }
 
-#define __RX_SKB_MAX_QUEUED	64
+#define __RX_SKB_MAX_QUEUED	32
 
 static void _rtl_rx_work(unsigned long param)
 {

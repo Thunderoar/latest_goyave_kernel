@@ -1300,13 +1300,14 @@ static void srp_handle_recv(struct srp_target_port *target, struct ib_wc *wc)
 			     PFX "Recv failed with error code %d\n", res);
 }
 
-static void srp_handle_qp_err(enum ib_wc_status wc_status, bool send_err,
+static void srp_handle_qp_err(enum ib_wc_status wc_status,
+			      enum ib_wc_opcode wc_opcode,
 			      struct srp_target_port *target)
 {
 	if (target->connected && !target->qp_in_error) {
 		shost_printk(KERN_ERR, target->scsi_host,
 			     PFX "failed %s status %d\n",
-			     send_err ? "send" : "receive",
+			     wc_opcode & IB_WC_RECV ? "receive" : "send",
 			     wc_status);
 	}
 	target->qp_in_error = true;
@@ -1322,7 +1323,7 @@ static void srp_recv_completion(struct ib_cq *cq, void *target_ptr)
 		if (likely(wc.status == IB_WC_SUCCESS)) {
 			srp_handle_recv(target, &wc);
 		} else {
-			srp_handle_qp_err(wc.status, false, target);
+			srp_handle_qp_err(wc.status, wc.opcode, target);
 		}
 	}
 }
@@ -1338,7 +1339,7 @@ static void srp_send_completion(struct ib_cq *cq, void *target_ptr)
 			iu = (struct srp_iu *) (uintptr_t) wc.wr_id;
 			list_add(&iu->list, &target->free_tx);
 		} else {
-			srp_handle_qp_err(wc.status, true, target);
+			srp_handle_qp_err(wc.status, wc.opcode, target);
 		}
 	}
 }

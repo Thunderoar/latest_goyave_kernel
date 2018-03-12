@@ -279,15 +279,6 @@ static cpumask_var_t *wq_numa_possible_cpumask;
 static bool wq_disable_numa;
 module_param_named(disable_numa, wq_disable_numa, bool, 0444);
 
-/* see the comment above the definition of WQ_POWER_EFFICIENT */
-#ifdef CONFIG_WQ_POWER_EFFICIENT_DEFAULT
-static bool wq_power_efficient = true;
-#else
-static bool wq_power_efficient;
-#endif
-
-module_param_named(power_efficient, wq_power_efficient, bool, 0644);
-
 static bool wq_numa_enabled;		/* unbound NUMA affinity enabled */
 
 /* buf for wq_update_unbound_numa_attrs(), protected by CPU hotplug exclusion */
@@ -311,9 +302,6 @@ static DEFINE_HASHTABLE(unbound_pool_hash, UNBOUND_POOL_HASH_ORDER);
 /* I: attributes used when instantiating standard unbound pools on demand */
 static struct workqueue_attrs *unbound_std_wq_attrs[NR_STD_WORKER_POOLS];
 
-/* I: attributes used when instantiating ordered pools on demand */
-static struct workqueue_attrs *ordered_wq_attrs[NR_STD_WORKER_POOLS];
-
 struct workqueue_struct *system_wq __read_mostly;
 EXPORT_SYMBOL(system_wq);
 struct workqueue_struct *system_highpri_wq __read_mostly;
@@ -324,10 +312,6 @@ struct workqueue_struct *system_unbound_wq __read_mostly;
 EXPORT_SYMBOL_GPL(system_unbound_wq);
 struct workqueue_struct *system_freezable_wq __read_mostly;
 EXPORT_SYMBOL_GPL(system_freezable_wq);
-struct workqueue_struct *system_power_efficient_wq __read_mostly;
-EXPORT_SYMBOL_GPL(system_power_efficient_wq);
-struct workqueue_struct *system_freezable_power_efficient_wq __read_mostly;
-EXPORT_SYMBOL_GPL(system_freezable_power_efficient_wq);
 
 static int worker_thread(void *__worker);
 static void copy_workqueue_attrs(struct workqueue_attrs *to,
@@ -1470,13 +1454,13 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	timer_stats_timer_set_start_info(&dwork->timer);
 
 	dwork->wq = wq;
-	/* timer isn't guaranteed to run in this cpu, record earlier */
-	if (cpu == WORK_CPU_UNBOUND)
-		cpu = raw_smp_processor_id();
 	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
 
-	add_timer_on(timer, cpu);
+	if (unlikely(cpu != WORK_CPU_UNBOUND))
+		add_timer_on(timer, cpu);
+	else
+		add_timer(timer);
 }
 
 /**
@@ -1843,12 +1827,6 @@ static void destroy_worker(struct worker *worker)
 	if (worker->flags & WORKER_IDLE)
 		pool->nr_idle--;
 
-	/*
-	 * Once WORKER_DIE is set, the kworker may destroy itself at any
-	 * point.  Pin to ensure the task stays until we're done with it.
-	 */
-	get_task_struct(worker->task);
-
 	list_del_init(&worker->entry);
 	worker->flags |= WORKER_DIE;
 
@@ -1857,7 +1835,6 @@ static void destroy_worker(struct worker *worker)
 	spin_unlock_irq(&pool->lock);
 
 	kthread_stop(worker->task);
-	put_task_struct(worker->task);
 	kfree(worker);
 
 	spin_lock_irq(&pool->lock);
@@ -1901,12 +1878,6 @@ static void send_mayday(struct work_struct *work)
 
 	/* mayday mayday mayday */
 	if (list_empty(&pwq->mayday_node)) {
-		/*
-		 * If @pwq is for an unbound wq, its base ref may be put at
-		 * any time due to an attribute change.  Pin @pwq until the
-		 * rescuer is done with it.
-		 */
-		get_pwq(pwq);
 		list_add_tail(&pwq->mayday_node, &wq->maydays);
 		wake_up_process(wq->rescuer->task);
 	}
@@ -2393,7 +2364,6 @@ static int rescuer_thread(void *__rescuer)
 	struct worker *rescuer = __rescuer;
 	struct workqueue_struct *wq = rescuer->rescue_wq;
 	struct list_head *scheduled = &rescuer->scheduled;
-	bool should_stop;
 
 	set_user_nice(current, RESCUER_NICE_LEVEL);
 
@@ -2405,15 +2375,11 @@ static int rescuer_thread(void *__rescuer)
 repeat:
 	set_current_state(TASK_INTERRUPTIBLE);
 
-	/*
-	 * By the time the rescuer is requested to stop, the workqueue
-	 * shouldn't have any work pending, but @wq->maydays may still have
-	 * pwq(s) queued.  This can happen by non-rescuer workers consuming
-	 * all the work items before the rescuer got to them.  Go through
-	 * @wq->maydays processing before acting on should_stop so that the
-	 * list is always empty on exit.
-	 */
-	should_stop = kthread_should_stop();
+	if (kthread_should_stop()) {
+		__set_current_state(TASK_RUNNING);
+		rescuer->task->flags &= ~PF_WQ_WORKER;
+		return 0;
+	}
 
 	/* see whether any pwq is asking for help */
 	spin_lock_irq(&wq_mayday_lock);
@@ -2445,12 +2411,6 @@ repeat:
 		process_scheduled_works(rescuer);
 
 		/*
-		 * Put the reference grabbed by send_mayday().  @pool won't
-		 * go away while we're holding its lock.
-		 */
-		put_pwq(pwq);
-
-		/*
 		 * Leave this pool.  If keep_working() is %true, notify a
 		 * regular worker; otherwise, we end up with 0 concurrency
 		 * and stalling the execution.
@@ -2464,12 +2424,6 @@ repeat:
 	}
 
 	spin_unlock_irq(&wq_mayday_lock);
-
-	if (should_stop) {
-		__set_current_state(TASK_RUNNING);
-		rescuer->task->flags &= ~PF_WQ_WORKER;
-		return 0;
-	}
 
 	/* rescuers should never participate in concurrency management */
 	WARN_ON_ONCE(!(rescuer->flags & WORKER_NOT_RUNNING));
@@ -2877,19 +2831,6 @@ already_gone:
 	return false;
 }
 
-static bool __flush_work(struct work_struct *work)
-{
-	struct wq_barrier barr;
-
-	if (start_flush_work(work, &barr)) {
-		wait_for_completion(&barr.done);
-		destroy_work_on_stack(&barr.work);
-		return true;
-	} else {
-		return false;
-	}
-}
-
 /**
  * flush_work - wait for a work to finish executing the last queueing instance
  * @work: the work to flush
@@ -2903,10 +2844,18 @@ static bool __flush_work(struct work_struct *work)
  */
 bool flush_work(struct work_struct *work)
 {
+	struct wq_barrier barr;
+
 	lock_map_acquire(&work->lockdep_map);
 	lock_map_release(&work->lockdep_map);
 
-	return __flush_work(work);
+	if (start_flush_work(work, &barr)) {
+		wait_for_completion(&barr.done);
+		destroy_work_on_stack(&barr.work);
+		return true;
+	} else {
+		return false;
+	}
 }
 EXPORT_SYMBOL_GPL(flush_work);
 
@@ -4102,8 +4051,7 @@ static void wq_update_unbound_numa(struct workqueue_struct *wq, int cpu,
 	if (!pwq) {
 		pr_warning("workqueue: allocation failed while updating NUMA affinity of \"%s\"\n",
 			   wq->name);
-		mutex_lock(&wq->mutex);
-		goto use_dfl_pwq;
+		goto out_unlock;
 	}
 
 	/*
@@ -4129,7 +4077,7 @@ out_unlock:
 static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 {
 	bool highpri = wq->flags & WQ_HIGHPRI;
-	int cpu, ret;
+	int cpu;
 
 	if (!(wq->flags & WQ_UNBOUND)) {
 		wq->cpu_pwqs = alloc_percpu(struct pool_workqueue);
@@ -4149,13 +4097,6 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 			mutex_unlock(&wq->mutex);
 		}
 		return 0;
-	} else if (wq->flags & __WQ_ORDERED) {
-		ret = apply_workqueue_attrs(wq, ordered_wq_attrs[highpri]);
-		/* there should only be single pwq for ordering guarantee */
-		WARN(!ret && (wq->pwqs.next != &wq->dfl_pwq->pwqs_node ||
-			      wq->pwqs.prev != &wq->dfl_pwq->pwqs_node),
-		     "ordering guarantee broken for workqueue %s\n", wq->name);
-		return ret;
 	} else {
 		return apply_workqueue_attrs(wq, unbound_std_wq_attrs[highpri]);
 	}
@@ -4183,10 +4124,6 @@ struct workqueue_struct *__alloc_workqueue_key(const char *fmt,
 	va_list args;
 	struct workqueue_struct *wq;
 	struct pool_workqueue *pwq;
-
-	/* see the comment above the definition of WQ_POWER_EFFICIENT */
-	if ((flags & WQ_POWER_EFFICIENT) && wq_power_efficient)
-		flags |= WQ_UNBOUND;
 
 	/* allocate wq and format name */
 	if (flags & WQ_UNBOUND)
@@ -4841,14 +4778,7 @@ long work_on_cpu(int cpu, long (*fn)(void *), void *arg)
 
 	INIT_WORK_ONSTACK(&wfc.work, work_for_cpu_fn);
 	schedule_work_on(cpu, &wfc.work);
-
-	/*
-	 * The work item is on-stack and can't lead to deadlock through
-	 * flushing.  Use __flush_work() to avoid spurious lockdep warnings
-	 * when work_on_cpu()s are nested.
-	 */
-	__flush_work(&wfc.work);
-
+	flush_work(&wfc.work);
 	return wfc.ret;
 }
 EXPORT_SYMBOL_GPL(work_on_cpu);
@@ -5078,23 +5008,13 @@ static int __init init_workqueues(void)
 		}
 	}
 
-	/* create default unbound and ordered wq attrs */
+	/* create default unbound wq attrs */
 	for (i = 0; i < NR_STD_WORKER_POOLS; i++) {
 		struct workqueue_attrs *attrs;
 
 		BUG_ON(!(attrs = alloc_workqueue_attrs(GFP_KERNEL)));
 		attrs->nice = std_nice[i];
 		unbound_std_wq_attrs[i] = attrs;
-
-		/*
-		 * An ordered wq should have only one pwq as ordering is
-		 * guaranteed by max_active which is enforced by pwqs.
-		 * Turn off NUMA so that dfl_pwq is used for all nodes.
-		 */
-		BUG_ON(!(attrs = alloc_workqueue_attrs(GFP_KERNEL)));
-		attrs->nice = std_nice[i];
-		attrs->no_numa = true;
-		ordered_wq_attrs[i] = attrs;
 	}
 
 	system_wq = alloc_workqueue("events", 0, 0);
@@ -5104,16 +5024,8 @@ static int __init init_workqueues(void)
 					    WQ_UNBOUND_MAX_ACTIVE);
 	system_freezable_wq = alloc_workqueue("events_freezable",
 					      WQ_FREEZABLE, 0);
-	system_power_efficient_wq = alloc_workqueue("events_power_efficient",
-					      WQ_POWER_EFFICIENT, 0);
-	system_freezable_power_efficient_wq = alloc_workqueue("events_freezable_power_efficient",
-					      WQ_FREEZABLE | WQ_POWER_EFFICIENT,
-					      0);
 	BUG_ON(!system_wq || !system_highpri_wq || !system_long_wq ||
-	       !system_unbound_wq || !system_freezable_wq ||
-	       !system_power_efficient_wq ||
-	       !system_freezable_power_efficient_wq);
+	       !system_unbound_wq || !system_freezable_wq);
 	return 0;
 }
 early_initcall(init_workqueues);
-

@@ -380,7 +380,6 @@ struct address_space_operations {
 	int (*launder_page) (struct page *);
 	int (*is_partially_uptodate) (struct page *, read_descriptor_t *,
 					unsigned long);
-	void (*is_dirty_writeback) (struct page *, bool *, bool *);
 	int (*error_remove_page)(struct address_space *, struct page *);
 
 	/* swapfile support */
@@ -2081,7 +2080,6 @@ static inline void iterate_bdevs(void (*f)(struct block_device *, void *), void 
 #endif
 extern int sync_filesystem(struct super_block *);
 extern const struct file_operations def_blk_fops;
-extern void sync_filesystems(int wait);
 extern const struct file_operations def_chr_fops;
 extern const struct file_operations bad_sock_fops;
 #ifdef CONFIG_BLOCK
@@ -2691,4 +2689,3 @@ static inline void inode_has_no_xattr(struct inode *inode)
 }
 
 #endif /* _LINUX_FS_H */
-

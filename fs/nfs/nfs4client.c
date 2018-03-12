@@ -240,11 +240,13 @@ struct nfs_client *nfs4_init_client(struct nfs_client *clp,
 	error = nfs4_discover_server_trunking(clp, &old);
 	if (error < 0)
 		goto error;
-
-	if (clp != old)
-		clp->cl_preserve_clid = true;
 	nfs_put_client(clp);
-	return old;
+	if (clp != old) {
+		clp->cl_preserve_clid = true;
+		clp = old;
+	}
+
+	return clp;
 
 error:
 	nfs_mark_client_ready(clp, error);
@@ -322,10 +324,9 @@ int nfs40_walk_client_list(struct nfs_client *new,
 			prev = pos;
 
 			status = nfs_wait_client_init_complete(pos);
-			if (status < 0)
-				goto out;
-			status = -NFS4ERR_STALE_CLIENTID;
 			spin_lock(&nn->nfs_client_lock);
+			if (status < 0)
+				continue;
 		}
 		if (pos->cl_cons_state != NFS_CS_READY)
 			continue;
@@ -463,8 +464,7 @@ int nfs41_walk_client_list(struct nfs_client *new,
 			}
 			spin_lock(&nn->nfs_client_lock);
 			if (status < 0)
-				break;
-			status = -NFS4ERR_STALE_CLIENTID;
+				continue;
 		}
 		if (pos->cl_cons_state != NFS_CS_READY)
 			continue;

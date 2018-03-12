@@ -423,12 +423,10 @@ static void kill_ioctx_rcu(struct rcu_head *head)
  *	when the processes owning a context have all exited to encourage
  *	the rapid destruction of the kioctx.
  */
-static void kill_ioctx(struct mm_struct *mm, struct kioctx *ctx)
+static void kill_ioctx(struct kioctx *ctx)
 {
 	if (!atomic_xchg(&ctx->dead, 1)) {
-		spin_lock(&mm->ioctx_lock);
 		hlist_del_rcu(&ctx->list);
-		spin_unlock(&mm->ioctx_lock);
 
 		/*
 		 * It'd be more correct to do this in free_ioctx(), after all
@@ -496,7 +494,7 @@ void exit_aio(struct mm_struct *mm)
 		 */
 		ctx->mmap_size = 0;
 
-		kill_ioctx(mm, ctx);
+		kill_ioctx(ctx);
 	}
 }
 
@@ -854,7 +852,7 @@ SYSCALL_DEFINE2(io_setup, unsigned, nr_events, aio_context_t __user *, ctxp)
 	if (!IS_ERR(ioctx)) {
 		ret = put_user(ioctx->user_id, ctxp);
 		if (ret)
-			kill_ioctx(current->mm, ioctx);
+			kill_ioctx(ioctx);
 		put_ioctx(ioctx);
 	}
 
@@ -872,7 +870,7 @@ SYSCALL_DEFINE1(io_destroy, aio_context_t, ctx)
 {
 	struct kioctx *ioctx = lookup_ioctx(ctx);
 	if (likely(NULL != ioctx)) {
-		kill_ioctx(current->mm, ioctx);
+		kill_ioctx(ioctx);
 		put_ioctx(ioctx);
 		return 0;
 	}
@@ -1152,6 +1150,7 @@ long do_io_submit(aio_context_t ctx_id, long nr,
 	struct kioctx *ctx;
 	long ret = 0;
 	int i = 0;
+	struct blk_plug plug;
 
 	if (unlikely(nr < 0))
 		return -EINVAL;
@@ -1167,6 +1166,8 @@ long do_io_submit(aio_context_t ctx_id, long nr,
 		pr_debug("EINVAL: invalid context id\n");
 		return -EINVAL;
 	}
+
+	blk_start_plug(&plug);
 
 	/*
 	 * AKPM: should this return a partial result if some of the IOs were
@@ -1190,6 +1191,7 @@ long do_io_submit(aio_context_t ctx_id, long nr,
 		if (ret)
 			break;
 	}
+	blk_finish_plug(&plug);
 
 	put_ioctx(ctx);
 	return i ? i : ret;

@@ -920,10 +920,9 @@ int gnttab_map_refs(struct gnttab_map_grant_ref *map_ops,
 		ret = m2p_add_override(mfn, pages[i], kmap_ops ?
 				       &kmap_ops[i] : NULL);
 		if (ret)
-			goto out;
+			return ret;
 	}
 
- out:
 	if (lazy)
 		arch_leave_lazy_mmu_mode();
 
@@ -954,10 +953,9 @@ int gnttab_unmap_refs(struct gnttab_unmap_grant_ref *unmap_ops,
 		ret = m2p_remove_override(pages[i], kmap_ops ?
 				       &kmap_ops[i] : NULL);
 		if (ret)
-			goto out;
+			return ret;
 	}
 
- out:
 	if (lazy)
 		arch_leave_lazy_mmu_mode();
 

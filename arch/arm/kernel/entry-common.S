@@ -8,7 +8,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <asm/assembler.h>
 #include <asm/unistd.h>
 #include <asm/ftrace.h>
 #include <asm/unwind.h>
@@ -89,7 +88,7 @@ ENTRY(ret_from_fork)
 	cmp	r5, #0
 	movne	r0, r4
 	adrne	lr, BSYM(1f)
-	retne	r5
+	movne	pc, r5
 1:	get_thread_info tsk
 	b	ret_slow_syscall
 ENDPROC(ret_from_fork)
@@ -291,7 +290,7 @@ ENDPROC(ftrace_graph_caller_old)
 
 .macro mcount_exit
 	ldmia	sp!, {r0-r3, ip, lr}
-	ret	ip
+	mov	pc, ip
 .endm
 
 ENTRY(__gnu_mcount_nc)
@@ -299,7 +298,7 @@ UNWIND(.fnstart)
 #ifdef CONFIG_DYNAMIC_FTRACE
 	mov	ip, lr
 	ldmia	sp!, {lr}
-	ret	ip
+	mov	pc, ip
 #else
 	__mcount
 #endif
@@ -334,12 +333,12 @@ return_to_handler:
 	bl	ftrace_return_to_handler
 	mov	lr, r0			@ r0 has real ret addr
 	ldmia	sp!, {r0-r3}
-	ret	lr
+	mov	pc, lr
 #endif
 
 ENTRY(ftrace_stub)
 .Lftrace_stub:
-	ret	lr
+	mov	pc, lr
 ENDPROC(ftrace_stub)
 
 #endif /* CONFIG_FUNCTION_TRACER */
@@ -550,7 +549,7 @@ sys_mmap2:
 		streq	r5, [sp, #4]
 		beq	sys_mmap_pgoff
 		mov	r0, #-EINVAL
-		ret	lr
+		mov	pc, lr
 #else
 		str	r5, [sp, #4]
 		b	sys_mmap_pgoff

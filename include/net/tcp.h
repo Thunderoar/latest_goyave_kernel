@@ -287,7 +287,6 @@ extern int sysctl_tcp_thin_dupack;
 extern int sysctl_tcp_early_retrans;
 extern int sysctl_tcp_limit_output_bytes;
 extern int sysctl_tcp_challenge_ack_limit;
-extern int sysctl_tcp_min_tso_segs;
 
 extern atomic_long_t tcp_memory_allocated;
 extern struct percpu_counter tcp_sockets_allocated;
@@ -1308,8 +1307,7 @@ struct tcp_fastopen_request {
 	/* Fast Open cookie. Size 0 means a cookie request */
 	struct tcp_fastopen_cookie	cookie;
 	struct msghdr			*data;  /* data in MSG_FASTOPEN */
-	size_t				size;
-	int				copied;	/* queued in tcp_connect() */
+	u16				copied;	/* queued in tcp_connect() */
 };
 void tcp_free_fastopen_req(struct tcp_sock *tp);
 

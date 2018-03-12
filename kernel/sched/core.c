@@ -5,8 +5,6 @@
  *
  *  Copyright (C) 1991-2002  Linus Torvalds
  *
- *  Copyright (c) 2014, NVIDIA CORPORATION.  All rights reserved.
- *
  *  1996-12-23  Modified by Dave Grothe to fix bugs in semaphores and
  *		make semaphores SMP safe
  *  1998-11-19	Implemented schedule_timeout() and related stuff
@@ -80,7 +78,6 @@
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
 #include <asm/mutex.h>
-#include <asm/relaxed.h>
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #endif
@@ -98,8 +95,6 @@
 #ifdef CONFIG_SEC_DEBUG_SCHED_LOG
 #include <mach/sec_debug.h>
 #endif
-
-ATOMIC_NOTIFIER_HEAD(migration_notifier_head);
 
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
@@ -1091,10 +1086,9 @@ unsigned long wait_task_inactive(struct task_struct *p, long match_state)
 		 * is actually now running somewhere else!
 		 */
 		while (task_running(rq, p)) {
-			if (match_state && unlikely(cpu_relaxed_read_long
-				(&(p->state)) != match_state))
+			if (match_state && unlikely(p->state != match_state))
 				return 0;
-			cpu_read_relax();
+			cpu_relax();
 		}
 
 		/*
@@ -1498,23 +1492,15 @@ static int
 try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
 	unsigned long flags;
-	int cpu, src_cpu, success = 0;
+	int cpu, success = 0;
 
-	/*
-	 * If we are going to wake up a thread waiting for CONDITION we
-	 * need to ensure that CONDITION=1 done by the caller can not be
-	 * reordered with p->state check below. This pairs with mb() in
-	 * set_current_state() the waiting thread does.
-	 */
-	smp_mb__before_spinlock();
+	smp_wmb();
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
-	src_cpu = task_cpu(p);
-	cpu = src_cpu;
-
 	if (!(p->state & state))
 		goto out;
 
 	success = 1; /* we're going to change ->state */
+	cpu = task_cpu(p);
 
 	if (p->on_rq && ttwu_remote(p, wake_flags))
 		goto stat;
@@ -1524,8 +1510,8 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 * If the owning (remote) cpu is still in the middle of schedule() with
 	 * this task as prev, wait until its done referencing the task.
 	 */
-	while (cpu_relaxed_read(&(p->on_cpu)))
-		cpu_read_relax();
+	while (p->on_cpu)
+		cpu_relax();
 	/*
 	 * Pairs with the smp_wmb() in finish_lock_switch().
 	 */
@@ -1538,7 +1524,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		p->sched_class->task_waking(p);
 
 	cpu = select_task_rq(p, SD_BALANCE_WAKE, wake_flags);
-	if (src_cpu != cpu) {
+	if (task_cpu(p) != cpu) {
 		wake_flags |= WF_MIGRATED;
 		set_task_cpu(p, cpu);
 	}
@@ -1550,9 +1536,6 @@ stat:
 out:
 	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
 
-	if (src_cpu != cpu && task_notify_on_migrate(p))
-		atomic_notifier_call_chain(&migration_notifier_head,
-					   cpu, (void *)src_cpu);
 	return success;
 }
 
@@ -2749,20 +2732,6 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 	struct rq *rq;
 	u64 ns = 0;
 
-#if defined(CONFIG_64BIT) && defined(CONFIG_SMP)
- /*
-	* 64-bit doesn't need locks to atomically read a 64bit value.
-	* So we have a optimization chance when the task's delta_exec is 0.
-	* Reading ->on_cpu is racy, but this is ok.
-	*
-	* If we race with it leaving cpu, we'll take a lock. So we're correct.
-	* If we race with it entering cpu, unaccounted time is 0. This is
-	* indistinguishable from the read occurring a few cycles earlier.
-	*/
-	if (!p->on_cpu)
-		return p->se.sum_exec_runtime;
-#endif
-
 	rq = task_rq_lock(p, &flags);
 	ns = p->se.sum_exec_runtime + do_task_delta_exec(p, rq);
 	task_rq_unlock(rq, p, &flags);
@@ -3011,12 +2980,6 @@ need_resched:
 	if (sched_feat(HRTICK))
 		hrtick_clear(rq);
 
-	/*
-	 * Make sure that signal_pending_state()->signal_pending() below
-	 * can't be reordered with __set_current_state(TASK_INTERRUPTIBLE)
-	 * done by the caller to avoid the race with signal_wake_up().
-	 */
-	smp_mb__before_spinlock();
 	raw_spin_lock_irq(&rq->lock);
 
 	switch_count = &prev->nivcsw;
@@ -3847,24 +3810,6 @@ int idle_cpu(int cpu)
 
 #ifdef CONFIG_SMP
 	if (!llist_empty(&rq->wake_list))
-		return 0;
-#endif
-
-	return 1;
-}
-
-int idle_cpu_relaxed(int cpu)
-{
-	struct rq *rq = cpu_rq(cpu);
-
-	if (cpu_relaxed_read_long(&rq->curr) != rq->idle)
-		return 0;
-
-	if (cpu_relaxed_read_long(&rq->nr_running))
-		return 0;
-
-#ifdef CONFIG_SMP
-	if (!llist_empty_relaxed(&rq->wake_list))
 		return 0;
 #endif
 
@@ -4926,7 +4871,6 @@ EXPORT_SYMBOL_GPL(set_cpus_allowed_ptr);
 static int __migrate_task(struct task_struct *p, int src_cpu, int dest_cpu)
 {
 	struct rq *rq_dest, *rq_src;
-	bool moved = false;
 	int ret = 0;
 
 	if (unlikely(!cpu_active(dest_cpu)))
@@ -4953,16 +4897,12 @@ static int __migrate_task(struct task_struct *p, int src_cpu, int dest_cpu)
 		set_task_cpu(p, dest_cpu);
 		enqueue_task(rq_dest, p, 0);
 		check_preempt_curr(rq_dest, p, 0);
-		moved = true;
 	}
 done:
 	ret = 1;
 fail:
 	double_rq_unlock(rq_src, rq_dest);
 	raw_spin_unlock(&p->pi_lock);
-	if (moved && task_notify_on_migrate(p))
-		atomic_notifier_call_chain(&migration_notifier_head,
-					   dest_cpu, (void *)src_cpu);
 	return ret;
 }
 
@@ -5339,6 +5279,7 @@ static int __cpuinit sched_cpu_active(struct notifier_block *nfb,
 				      unsigned long action, void *hcpu)
 {
 	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_STARTING:
 	case CPU_DOWN_FAILED:
 		set_cpu_active((long)hcpu, true);
 		return NOTIFY_OK;
@@ -5803,8 +5744,6 @@ static const struct cpumask *cpu_cpu_mask(int cpu)
 {
 	return cpumask_of_node(cpu_to_node(cpu));
 }
-
-int sched_smt_power_savings = 0, sched_mc_power_savings = 0;
 
 struct sd_data {
 	struct sched_domain **__percpu sd;
@@ -6865,97 +6804,6 @@ match2:
 	mutex_unlock(&sched_domains_mutex);
 }
 
-#if defined(CONFIG_SCHED_MC) || defined(CONFIG_SCHED_SMT)
-static void reinit_sched_domains(void)
-{
-	get_online_cpus();
-
-	/* Destroy domains first to force the rebuild */
-	partition_sched_domains(0, NULL, NULL);
-
-	rebuild_sched_domains();
-	put_online_cpus();
-}
-
-static ssize_t sched_power_savings_store(const char *buf, size_t count, int smt)
-{
-	unsigned int level = 0;
-
-	if (sscanf(buf, "%u", &level) != 1)
-		return -EINVAL;
-
-	/*
-	 * level is always be positive so don't check for
-	 * level < POWERSAVINGS_BALANCE_NONE which is 0
-	 * What happens on 0 or 1 byte write,
-	 * need to check for count as well?
-	 */
-
-	if (level >= MAX_POWERSAVINGS_BALANCE_LEVELS)
-		return -EINVAL;
-
-	if (smt)
-		sched_smt_power_savings = level;
-	else
-		sched_mc_power_savings = level;
-
-	reinit_sched_domains();
-
-	return count;
-}
-
-#ifdef CONFIG_SCHED_MC
-static ssize_t sched_mc_power_savings_show(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
-{
-	return sprintf(buf, "%u\n", sched_mc_power_savings);
-}
-static ssize_t sched_mc_power_savings_store(struct device *dev,
-					    struct device_attribute *attr,
-					    const char *buf, size_t count)
-{
-	return sched_power_savings_store(buf, count, 0);
-}
-static DEVICE_ATTR(sched_mc_power_savings, 0644,
-		   sched_mc_power_savings_show,
-		   sched_mc_power_savings_store);
-#endif
-
-#ifdef CONFIG_SCHED_SMT
-static ssize_t sched_smt_power_savings_show(struct device *dev,
-					    struct device_attribute *attr,
-					    char *buf)
-{
-	return sprintf(buf, "%u\n", sched_smt_power_savings);
-}
-static ssize_t sched_smt_power_savings_store(struct device *dev,
-					    struct device_attribute *attr,
-					     const char *buf, size_t count)
-{
-	return sched_power_savings_store(buf, count, 1);
-}
-static DEVICE_ATTR(sched_smt_power_savings, 0644,
-		   sched_smt_power_savings_show,
-		   sched_smt_power_savings_store);
-#endif
-
-int __init sched_create_sysfs_power_savings_entries(struct device *dev)
-{
-	int err = 0;
-
-#ifdef CONFIG_SCHED_SMT
-	if (smt_capable())
-		err = device_create_file(dev, &dev_attr_sched_smt_power_savings);
-#endif
-#ifdef CONFIG_SCHED_MC
-	if (!err && mc_capable())
-		err = device_create_file(dev, &dev_attr_sched_mc_power_savings);
-#endif
-	return err;
-}
-#endif /* CONFIG_SCHED_MC || CONFIG_SCHED_SMT */
-
 static int num_cpus_frozen;	/* used to mark begin/end of suspend/resume */
 
 /*
@@ -7946,24 +7794,6 @@ cpu_cgroup_exit(struct cgroup *cgrp, struct cgroup *old_cgrp,
 	sched_move_task(task);
 }
 
-static u64 cpu_notify_on_migrate_read_u64(struct cgroup *cgrp,
-					  struct cftype *cft)
-{
-	struct task_group *tg = cgroup_tg(cgrp);
-
-	return tg->notify_on_migrate;
-}
-
-static int cpu_notify_on_migrate_write_u64(struct cgroup *cgrp,
-					   struct cftype *cft, u64 notify)
-{
-	struct task_group *tg = cgroup_tg(cgrp);
-
-	tg->notify_on_migrate = (notify > 0);
-
-	return 0;
-}
-
 #ifdef CONFIG_FAIR_GROUP_SCHED
 static int cpu_shares_write_u64(struct cgroup *cgrp, struct cftype *cftype,
 				u64 shareval)
@@ -8017,12 +7847,7 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota)
 
 	runtime_enabled = quota != RUNTIME_INF;
 	runtime_was_enabled = cfs_b->quota != RUNTIME_INF;
-	/*
-	 * If we need to toggle cfs_bandwidth_used, off->on must occur
-	 * before making related changes, and on->off must occur afterwards
-	 */
-	if (runtime_enabled && !runtime_was_enabled)
-		cfs_bandwidth_usage_inc();
+	account_cfs_bandwidth_used(runtime_enabled, runtime_was_enabled);
 	raw_spin_lock_irq(&cfs_b->lock);
 	cfs_b->period = ns_to_ktime(period);
 	cfs_b->quota = quota;
@@ -8048,8 +7873,6 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota)
 			unthrottle_cfs_rq(cfs_rq);
 		raw_spin_unlock_irq(&rq->lock);
 	}
-	if (runtime_was_enabled && !runtime_enabled)
-		cfs_bandwidth_usage_dec();
 out_unlock:
 	mutex_unlock(&cfs_constraints_mutex);
 
@@ -8242,11 +8065,6 @@ static u64 cpu_rt_period_read_uint(struct cgroup *cgrp, struct cftype *cft)
 #endif /* CONFIG_RT_GROUP_SCHED */
 
 static struct cftype cpu_files[] = {
-	{
-		.name = "notify_on_migrate",
-		.read_u64 = cpu_notify_on_migrate_read_u64,
-		.write_u64 = cpu_notify_on_migrate_write_u64,
-	},
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	{
 		.name = "shares",

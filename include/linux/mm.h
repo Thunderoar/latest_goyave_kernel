@@ -40,17 +40,6 @@ extern int sysctl_legacy_va_layout;
 #define sysctl_legacy_va_layout 0
 #endif
 
-#ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS
-extern const int mmap_rnd_bits_min;
-extern const int mmap_rnd_bits_max;
-extern int mmap_rnd_bits __read_mostly;
-#endif
-#ifdef CONFIG_HAVE_ARCH_MMAP_RND_COMPAT_BITS
-extern const int mmap_rnd_compat_bits_min;
-extern const int mmap_rnd_compat_bits_max;
-extern int mmap_rnd_compat_bits __read_mostly;
-#endif
-
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/processor.h>
@@ -372,18 +361,8 @@ static inline void compound_unlock_irqrestore(struct page *page,
 
 static inline struct page *compound_head(struct page *page)
 {
-	if (unlikely(PageTail(page))) {
-		struct page *head = page->first_page;
-
-		/*
-		 * page->first_page may be a dangling pointer to an old
-		 * compound page, so recheck that it is still a tail
-		 * page before returning.
-		 */
-		smp_rmb();
-		if (likely(PageTail(page)))
-			return head;
-	}
+	if (unlikely(PageTail(page)))
+		return page->first_page;
 	return page;
 }
 
@@ -787,14 +766,11 @@ static __always_inline void *lowmem_page_address(const struct page *page)
 #endif
 
 #if defined(WANT_PAGE_VIRTUAL)
-static inline void *page_address(const struct page *page)
-{
-	return page->virtual;
-}
-static inline void set_page_address(struct page *page, void *address)
-{
-	page->virtual = address;
-}
+#define page_address(page) ((page)->virtual)
+#define set_page_address(page, address)			\
+	do {						\
+		(page)->virtual = (address);		\
+	} while(0)
 #define page_address_init()  do { } while(0)
 #endif
 
@@ -1607,7 +1583,7 @@ int write_one_page(struct page *page, int wait);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
-#define VM_MAX_READAHEAD	512	/* kbytes */
+#define VM_MAX_READAHEAD	128	/* kbytes */
 #define VM_MIN_READAHEAD	16	/* kbytes (includes current page) */
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
@@ -1851,20 +1827,6 @@ static inline bool page_is_guard(struct page *page) { return false; }
 void __init setup_nr_node_ids(void);
 #else
 static inline void setup_nr_node_ids(void) {}
-#endif
-
-#ifdef CONFIG_PROCESS_RECLAIM
-struct reclaim_param {
-	struct vm_area_struct *vma;
-	/* Number of pages scanned */
-	int nr_scanned;
-	/* max pages to reclaim */
-	int nr_to_reclaim;
-	/* pages reclaimed */
-	int nr_reclaimed;
-};
-extern struct reclaim_param reclaim_task_anon(struct task_struct *task,
-		int nr_to_reclaim);
 #endif
 
 #endif /* __KERNEL__ */

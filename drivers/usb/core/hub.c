@@ -506,7 +506,7 @@ static void led_work (struct work_struct *work)
 		changed++;
 	}
 	if (changed)
-		queue_delayed_work(system_power_efficient_wq, &hub->leds, LED_CYCLE_PERIOD);
+		schedule_delayed_work(&hub->leds, LED_CYCLE_PERIOD);
 }
 
 /* use a short timeout for hub/port status fetches */
@@ -1046,7 +1046,8 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 		if (type == HUB_INIT) {
 			delay = hub_power_on(hub, false);
 			PREPARE_DELAYED_WORK(&hub->init_work, hub_init_func2);
-			queue_delayed_work(system_power_efficient_wq, &hub->init_work, msecs_to_jiffies(delay));
+			schedule_delayed_work(&hub->init_work,
+					msecs_to_jiffies(delay));
 
 			/* Suppress autosuspend until init is done */
 			usb_autopm_get_interface_no_resume(
@@ -1127,11 +1128,6 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 			usb_clear_port_feature(hub->hdev, port1,
 					USB_PORT_FEAT_C_ENABLE);
 		}
-		if (portchange & USB_PORT_STAT_C_RESET) {
-			need_debounce_delay = true;
-			usb_clear_port_feature(hub->hdev, port1,
-					USB_PORT_FEAT_C_RESET);
-		}
 		if ((portchange & USB_PORT_STAT_C_BH_RESET) &&
 				hub_is_superspeed(hub->hdev)) {
 			need_debounce_delay = true;
@@ -1201,7 +1197,8 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 		/* Don't do a long sleep inside a workqueue routine */
 		if (type == HUB_INIT2) {
 			PREPARE_DELAYED_WORK(&hub->init_work, hub_init_func3);
-			queue_delayed_work(system_power_efficient_wq, &hub->init_work, msecs_to_jiffies(delay));
+			schedule_delayed_work(&hub->init_work,
+					msecs_to_jiffies(delay));
 			return;		/* Continues at init3: below */
 		} else {
 			msleep(delay);
@@ -1214,7 +1211,7 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 	if (status < 0)
 		dev_err(hub->intfdev, "activate --> %d\n", status);
 	if (hub->has_indicators && blinkenlights)
-		queue_delayed_work(system_power_efficient_wq, &hub->leds, LED_CYCLE_PERIOD);
+		schedule_delayed_work(&hub->leds, LED_CYCLE_PERIOD);
 
 	/* Scan all ports that need attention */
 	kick_khubd(hub);
@@ -1564,15 +1561,10 @@ static int hub_configure(struct usb_hub *hub,
 	if (hub->has_indicators && blinkenlights)
 		hub->indicator [0] = INDICATOR_CYCLE;
 
-	for (i = 0; i < hdev->maxchild; i++) {
-		ret = usb_hub_create_port_device(hub, i + 1);
-		if (ret < 0) {
+	for (i = 0; i < hdev->maxchild; i++)
+		if (usb_hub_create_port_device(hub, i + 1) < 0)
 			dev_err(hub->intfdev,
 				"couldn't create port%d device.\n", i + 1);
-			hdev->maxchild = i;
-			goto fail_keep_maxchild;
-		}
-	}
 
 	usb_hub_adjust_deviceremovable(hdev, hub->descriptor);
 
@@ -1580,8 +1572,6 @@ static int hub_configure(struct usb_hub *hub,
 	return 0;
 
 fail:
-	hdev->maxchild = 0;
-fail_keep_maxchild:
 	dev_err (hub_dev, "config failed, %s (err %d)\n",
 			message, ret);
 	/* hub_disconnect() frees urb and descriptor */
@@ -1602,7 +1592,7 @@ static void hub_disconnect(struct usb_interface *intf)
 {
 	struct usb_hub *hub = usb_get_intfdata(intf);
 	struct usb_device *hdev = interface_to_usbdev(intf);
-	int port1;
+	int i;
 
 	/* Take the hub off the event list and don't let it be added again */
 	spin_lock_irq(&hub_event_lock);
@@ -1617,15 +1607,11 @@ static void hub_disconnect(struct usb_interface *intf)
 	hub->error = 0;
 	hub_quiesce(hub, HUB_DISCONNECT);
 
-	/* Avoid races with recursively_mark_NOTATTACHED() */
-	spin_lock_irq(&device_state_lock);
-	port1 = hdev->maxchild;
-	hdev->maxchild = 0;
-	usb_set_intfdata(intf, NULL);
-	spin_unlock_irq(&device_state_lock);
+	usb_set_intfdata (intf, NULL);
 
-	for (; port1 > 0; --port1)
-		usb_hub_remove_port_device(hub, port1);
+	for (i = 0; i < hdev->maxchild; i++)
+		usb_hub_remove_port_device(hub, i + 1);
+	hub->hdev->maxchild = 0;
 
 	if (hub->hdev->speed == USB_SPEED_HIGH)
 		highspeed_hubs--;
@@ -1693,20 +1679,6 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		/* Hubs have proper suspend/resume support. */
 		usb_enable_autosuspend(hdev);
 #endif
-
-	/*
-	 * Hubs have proper suspend/resume support, except for root hubs
-	 * where the controller driver doesn't have bus_suspend and
-	 * bus_resume methods.
-	 */
-	if (hdev->parent) {		/* normal device */
-		usb_enable_autosuspend(hdev);
-	} else {			/* root hub */
-		const struct hc_driver *drv = bus_to_hcd(hdev->bus)->driver;
-
-		if (drv->bus_suspend && drv->bus_resume)
-			usb_enable_autosuspend(hdev);
-	}
 
 	if (hdev->level == MAX_TOPO_LEVEL) {
 		dev_err(&intf->dev,
@@ -2248,13 +2220,18 @@ static int usb_enumerate_device(struct usb_device *udev)
 			return err;
 		}
 	}
-
-	/* read the standard strings and cache them if present */
-	udev->product = usb_cache_string(udev, udev->descriptor.iProduct);
-	udev->manufacturer = usb_cache_string(udev,
-					      udev->descriptor.iManufacturer);
-	udev->serial = usb_cache_string(udev, udev->descriptor.iSerialNumber);
-
+	if (udev->wusb == 1 && udev->authorized == 0) {
+		udev->product = kstrdup("n/a (unauthorized)", GFP_KERNEL);
+		udev->manufacturer = kstrdup("n/a (unauthorized)", GFP_KERNEL);
+		udev->serial = kstrdup("n/a (unauthorized)", GFP_KERNEL);
+	}
+	else {
+		/* read the standard strings and cache them if present */
+		udev->product = usb_cache_string(udev, udev->descriptor.iProduct);
+		udev->manufacturer = usb_cache_string(udev,
+						      udev->descriptor.iManufacturer);
+		udev->serial = usb_cache_string(udev, udev->descriptor.iSerialNumber);
+	}
 	err = usb_enumerate_device_otg(udev);
 	if (err < 0)
 		return err;
@@ -2433,6 +2410,16 @@ int usb_deauthorize_device(struct usb_device *usb_dev)
 	usb_dev->authorized = 0;
 	usb_set_configuration(usb_dev, -1);
 
+	kfree(usb_dev->product);
+	usb_dev->product = kstrdup("n/a (unauthorized)", GFP_KERNEL);
+	kfree(usb_dev->manufacturer);
+	usb_dev->manufacturer = kstrdup("n/a (unauthorized)", GFP_KERNEL);
+	kfree(usb_dev->serial);
+	usb_dev->serial = kstrdup("n/a (unauthorized)", GFP_KERNEL);
+
+	usb_destroy_configuration(usb_dev);
+	usb_dev->descriptor.bNumConfigurations = 0;
+
 out_unauthorized:
 	usb_unlock_device(usb_dev);
 	return 0;
@@ -2460,7 +2447,17 @@ int usb_authorize_device(struct usb_device *usb_dev)
 		goto error_device_descriptor;
 	}
 
+	kfree(usb_dev->product);
+	usb_dev->product = NULL;
+	kfree(usb_dev->manufacturer);
+	usb_dev->manufacturer = NULL;
+	kfree(usb_dev->serial);
+	usb_dev->serial = NULL;
+
 	usb_dev->authorized = 1;
+	result = usb_enumerate_device(usb_dev);
+	if (result < 0)
+		goto error_enumerate;
 	/* Choose and set the configuration.  This registers the interfaces
 	 * with the driver core and lets interface drivers bind to them.
 	 */
@@ -2476,6 +2473,7 @@ int usb_authorize_device(struct usb_device *usb_dev)
 	}
 	dev_info(&usb_dev->dev, "authorized to connect\n");
 
+error_enumerate:
 error_device_descriptor:
 	usb_autosuspend_device(usb_dev);
 error_autoresume:
@@ -4270,7 +4268,7 @@ check_highspeed (struct usb_hub *hub, struct usb_device *udev, int port1)
 		/* hub LEDs are probably harder to miss than syslog */
 		if (hub->has_indicators) {
 			hub->indicator[port1-1] = INDICATOR_GREEN_BLINK;
-			queue_delayed_work(system_power_efficient_wq, &hub->leds, 0);
+			schedule_delayed_work (&hub->leds, 0);
 		}
 	}
 	kfree(qual);
@@ -4504,7 +4502,7 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 				if (hub->has_indicators) {
 					hub->indicator[port1-1] =
 						INDICATOR_AMBER_BLINK;
-					queue_delayed_work( system_power_efficient_wq, &hub->leds, 0);
+					schedule_delayed_work (&hub->leds, 0);
 				}
 				status = -ENOTCONN;	/* Don't retry */
 				goto loop_disable;
@@ -4807,9 +4805,8 @@ static void hub_events(void)
 					hub->ports[i - 1]->child;
 
 				dev_dbg(hub_dev, "warm reset port %d\n", i);
-				if (!udev ||
-				    !(portstatus & USB_PORT_STAT_CONNECTION) ||
-				    udev->state == USB_STATE_NOTATTACHED) {
+				if (!udev || !(portstatus &
+						USB_PORT_STAT_CONNECTION)) {
 					status = hub_port_reset(hub, i,
 							NULL, HUB_BH_RESET_TIME,
 							true);
@@ -5284,11 +5281,10 @@ int usb_reset_device(struct usb_device *udev)
 				else if (cintf->condition ==
 						USB_INTERFACE_BOUND)
 					rebind = 1;
-				if (rebind)
-					cintf->needs_binding = 1;
 			}
+			if (ret == 0 && rebind)
+				usb_rebind_intf(cintf);
 		}
-		usb_unbind_and_rebind_marked_interfaces(udev);
 	}
 
 	usb_autosuspend_device(udev);

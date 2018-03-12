@@ -95,14 +95,6 @@ config SEC_DEBUG_LMK_MEMINFO
 	help
 	  Show memory information when lmk kills process
 
-config ANDROID_LMK_ADJ_RBTREE
-	bool "Use RBTREE for Android Low Memory Killer"
-	depends on ANDROID_LOW_MEMORY_KILLER
-	default N
-	---help---
-	    Use oom_score_adj rbtree to select the best proecss to kill
-	    when system in low memory status.
-
 config ANDROID_INTF_ALARM_DEV
 	bool "Android alarm driver"
 	depends on RTC_CLASS
@@ -138,6 +130,35 @@ config SW_SYNC_USER
 	  Provides a user space API to the sw sync object.
 	  *WARNING* improper use of this can result in deadlocking kernel
 	  drivers from userspace.
+
+config RUNTIME_COMPCACHE
+        bool "Android rtcc"
+        depends on ZRAM && ANDROID
+        default n
+        help
+          This option enables rtcc v3 for android
+
+config KSWAPD_NOSWAP
+        bool "Disable swap in kswapd"
+        depends on RUNTIME_COMPCACHE
+        default n
+        help
+          This option controls swap action in kswapd
+
+
+config RUNTIME_COMPCACHE
+	bool "Android rtcc v3"
+	depends on ZRAM && ANDROID
+	default n
+	help
+	  This option enables rtcc v3 for android
+
+config KSWAPD_NOSWAP
+	bool "Disable swap in kswapd"
+	depends on RUNTIME_COMPCACHE
+	default n
+	help
+	  This option controls swap action in kswapd
 
 endif # if ANDROID
 
