@@ -178,12 +178,14 @@ extern void swsusp_show_speed(struct timeval *, struct timeval *,
 /* kernel/power/suspend.c */
 extern const char *const pm_states[];
 
+extern bool valid_state(suspend_state_t state);
 extern int suspend_devices_and_enter(suspend_state_t state);
 #else /* !CONFIG_SUSPEND */
 static inline int suspend_devices_and_enter(suspend_state_t state)
 {
 	return -ENOSYS;
 }
+static inline bool valid_state(suspend_state_t state) { return false; }
 #endif /* !CONFIG_SUSPEND */
 
 #ifdef CONFIG_PM_TEST_SUSPEND

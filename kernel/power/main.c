@@ -301,15 +301,7 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	char *s = buf;
 #ifdef CONFIG_SUSPEND
-<<<<<<< HEAD
 	int i;
-=======
-	suspend_state_t i;
-
-	for (i = PM_SUSPEND_MIN; i < PM_SUSPEND_MAX; i++)
-		if (pm_states[i].state)
-			s += sprintf(s,"%s ", pm_states[i].label);
->>>>>>> 5c95fef... PM / sleep: Use valid_state() for platform-dependent sleep states only
 
 	for (i = 0; i < PM_SUSPEND_MAX; i++) {
 		if (pm_states[i] && valid_state(i))
@@ -344,14 +336,8 @@ static suspend_state_t decode_state(const char *buf, size_t n)
 
 #ifdef CONFIG_SUSPEND
 	for (s = &pm_states[state]; state < PM_SUSPEND_MAX; s++, state++)
-<<<<<<< HEAD
 		if (*s && len == strlen(*s) && !strncmp(buf, *s, len))
 			return state;
-=======
-		if (s->state && len == strlen(s->label)
-		    && !strncmp(buf, s->label, len))
-			return s->state;
->>>>>>> 5c95fef... PM / sleep: Use valid_state() for platform-dependent sleep states only
 #endif
 
 	return PM_SUSPEND_ON;
@@ -631,13 +617,8 @@ static ssize_t autosleep_show(struct kobject *kobj,
 
 #ifdef CONFIG_SUSPEND
 	if (state < PM_SUSPEND_MAX)
-<<<<<<< HEAD
 		return sprintf(buf, "%s\n", valid_state(state) ?
 						pm_states[state] : "error");
-=======
-		return sprintf(buf, "%s\n", pm_states[state].state ?
-					pm_states[state].label : "error");
->>>>>>> 5c95fef... PM / sleep: Use valid_state() for platform-dependent sleep states only
 #endif
 #ifdef CONFIG_HIBERNATION
 	return sprintf(buf, "disk\n");
