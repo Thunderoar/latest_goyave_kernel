@@ -193,7 +193,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/x86/ -e s/x86_64/x86/ \
 # Default value for CROSS_COMPILE is not to prefix executables
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 ARCH		=arm
-CROSS_COMPILE	=/home/thn-dev/Uber4.9/bin/arm-eabi-
+CROSS_COMPILE	=/home/thn-dev/gcc-linaro-7.2.1-2017.11-x86_64_arm-eabi/bin/arm-eabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
