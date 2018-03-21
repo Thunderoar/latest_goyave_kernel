@@ -65,7 +65,7 @@ struct cpufreq_conf {
 	struct clk 					*tdpllclk;
 	struct regulator 				*regulator;
 	struct cpufreq_frequency_table			*freq_tbl;
-	unsigned int					*vddarm_mv;
+	unsigned long					*vddarm_mv;
 };
 
 struct cpufreq_table_data {
@@ -473,11 +473,9 @@ static int sprd_cpufreq_target(struct cpufreq_policy *policy,
 	struct cpufreq_frequency_table *table;
 	int max_freq = cpufreq_max_limit;
 	int min_freq = cpufreq_min_limit;
-	int cur_freq = 0;
-	unsigned long irq_flags;
 
 	/* delay 30s to enable dvfs&dynamic-hotplug,
-         * except requirment from termal-cooling device
+         * except requirement from thermal-cooling device
          */
 	if(time_before(jiffies, boot_done)){
 		return 0;
@@ -522,14 +520,11 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 	return sprd_raw_get_cpufreq();
 }
 
-static void sprd_set_cpureq_limit(void)
+static void sprd_set_cpufreq_limit(void)
 {
-	int i;
 	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
-	for (i = 0; (tmp[i].frequency != CPUFREQ_TABLE_END); i++) {
-		cpufreq_min_limit = min(tmp[i].frequency, cpufreq_min_limit);
-		cpufreq_max_limit = max(tmp[i].frequency, cpufreq_max_limit);
-	}
+	cpufreq_min_limit = min(tmp[11].frequency, cpufreq_min_limit);
+	cpufreq_max_limit = max(tmp[0].frequency, cpufreq_max_limit);
 	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
 
@@ -561,7 +556,7 @@ static int sprd_freq_table_init(void)
 		pr_err("%s error chip id\n", __func__);
 		return -EINVAL;
 	}
-	sprd_set_cpureq_limit();
+	sprd_set_cpufreq_limit();
 	return 0;
 }
 
@@ -579,19 +574,21 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 	policy->cpuinfo.transition_latency = TRANSITION_LATENCY;
 	policy->shared_type = CPUFREQ_SHARED_TYPE_ALL;
 
-	cpufreq_frequency_table_get_attr(sprd_cpufreq_conf->freq_tbl, policy->cpu);
-
-	percpu_target[policy->cpu] = policy->cur;
-
 	ret = cpufreq_frequency_table_cpuinfo(policy, sprd_cpufreq_conf->freq_tbl);
 	if (ret != 0)
 		pr_err("%s Failed to config freq table: %d\n", __func__, ret);
 
+	/* do not switch frequencies unless explicitly asked us to */
+	policy->max = sprd_cpufreq_conf->freq_tbl[0].frequency;
+	policy->min = sprd_cpufreq_conf->freq_tbl[11].frequency;
+	cpufreq_frequency_table_get_attr(sprd_cpufreq_conf->freq_tbl, policy->cpu);
 
-	pr_info("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
-		__func__, policy->cpu, policy->cur, ret);
+	percpu_target[policy->cpu] = policy->cur;
 
-       cpumask_setall(policy->cpus);
+	pr_info("%s cpu=%d, cur=%u, min=%u, max=%u, ret=%d\n",
+		__func__, policy->cpu, policy->cur, policy->min, policy->max, ret);
+
+	cpumask_setall(policy->cpus);
 
 	return ret;
 }
