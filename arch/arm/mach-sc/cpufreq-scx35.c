@@ -51,7 +51,7 @@
 #define FREQ_TABLE_SIZE 	14
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
-#define TRANSITION_LATENCY	(100 * 1000) /* ns */
+#define TRANSITION_LATENCY	(50 * 1000) /* ns */
 
 static DEFINE_MUTEX(freq_lock);
 struct cpufreq_freqs global_freqs;
@@ -523,7 +523,7 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 static void sprd_set_cpufreq_limit(void)
 {
 	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
-	cpufreq_min_limit = min(tmp[11].frequency, cpufreq_min_limit);
+	cpufreq_min_limit = min(tmp[10].frequency, cpufreq_min_limit);
 	cpufreq_max_limit = max(tmp[0].frequency, cpufreq_max_limit);
 	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
@@ -580,7 +580,7 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 
 	/* do not switch frequencies unless explicitly asked us to */
 	policy->max = sprd_cpufreq_conf->freq_tbl[0].frequency;
-	policy->min = sprd_cpufreq_conf->freq_tbl[11].frequency;
+	policy->min = sprd_cpufreq_conf->freq_tbl[10].frequency;
 	cpufreq_frequency_table_get_attr(sprd_cpufreq_conf->freq_tbl, policy->cpu);
 
 	percpu_target[policy->cpu] = policy->cur;
