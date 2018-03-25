@@ -3,11 +3,7 @@
 #
 
 mmu-y			:= nommu.o
-<<<<<<< HEAD
-mmu-$(CONFIG_MMU)	:= fremap.o highmem.o madvise.o memory.o mincore.o \
-=======
-mmu-$(CONFIG_MMU)	:= fremap.o gup.o highmem.o memory.o mincore.o \
->>>>>>> d3ac21c... mm: Support compiling out madvise and fadvise
+mmu-$(CONFIG_MMU)	:= fremap.o highmem.o memory.o mincore.o \
 			   mlock.o mmap.o mprotect.o mremap.o msync.o rmap.o \
 			   vmalloc.o pagewalk.o pgtable-generic.o
 
