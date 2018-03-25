@@ -48,7 +48,7 @@
 #define GR_GEN1			(REG_GLB_GEN1)
 #endif
 
-#define FREQ_TABLE_SIZE 	10
+#define FREQ_TABLE_SIZE 	25
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
 #define TRANSITION_LATENCY	(50 * 1000) /* ns */
@@ -233,27 +233,49 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 	.freq_tbl = {
 		{0, 1536000},
-		{1, 1363200},
-		{2, 1300000},
-		{3, 1190400},
-		{4, 1036800},
-		{5, 960000},
-		{6, 800000},
-		{7, SHARK_TDPLL_FREQUENCY},
-		{8, 729600},
-		{9,  CPUFREQ_TABLE_END},
+		{1, 1497600},
+		{2, 1401600},
+		{3, 1363200},
+		{4, 1300000},
+		{5, 1267200},
+		{6, 1190400},
+		{7, 1113600},
+		{8, 1036800},
+		{9, 960000},
+		{10, 883200},
+		{11, 800000},
+		{12, SHARK_TDPLL_FREQUENCY},
+		{13, 729600},
+		{14, 652800},
+		{15, 576000},
+		{16, 499200},
+		{17, 422400},
+		{18, 345600},
+		{19, 300000},
+		{20, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
 		1015000,
 		1000000,
 		985000,
 		970000,
-		955000,
+		960000,
+		950000,
 		940000,
-		925000,
+		930000,
+		920000,
 		910000,
-		895000,
-		895000,
+		900000,
+		890000,
+		880000,
+		870000,
+		860000,
+		850000,
+		840000,
+		830000,
+		820000,
+		810000,
+		810000,
 	},
 };
 #endif
@@ -444,7 +466,7 @@ static int sprd_cpufreq_verify_speed(struct cpufreq_policy *policy)
 	return cpufreq_frequency_table_verify(policy, sprd_cpufreq_conf->freq_tbl);
 }
 
-unsigned int cpufreq_min_limit = 729600;
+unsigned int cpufreq_min_limit = 300000;
 unsigned int cpufreq_max_limit = 1536000;
 unsigned int dvfs_score_select = 5;
 unsigned int dvfs_unplug_select = 2;
@@ -519,7 +541,7 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 static void sprd_set_cpufreq_limit(void)
 {
 	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
-	cpufreq_min_limit = min(tmp[8].frequency, cpufreq_min_limit);
+	cpufreq_min_limit = min(tmp[19].frequency, cpufreq_min_limit);
 	cpufreq_max_limit = max(tmp[0].frequency, cpufreq_max_limit);
 	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
@@ -576,7 +598,7 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 
 	/* do not switch frequencies unless explicitly asked us to */
 	policy->max = sprd_cpufreq_conf->freq_tbl[0].frequency;
-	policy->min = sprd_cpufreq_conf->freq_tbl[8].frequency;
+	policy->min = sprd_cpufreq_conf->freq_tbl[19].frequency;
 	cpufreq_frequency_table_get_attr(sprd_cpufreq_conf->freq_tbl, policy->cpu);
 
 	percpu_target[policy->cpu] = policy->cur;
