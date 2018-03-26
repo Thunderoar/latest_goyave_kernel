@@ -21,6 +21,7 @@
 #include <mach/hardware.h>
 #include <mach/adi.h>
 #include <mach/adc.h>
+#include <linux/wakelock.h>
 
 #ifdef CONFIG_SC_VIBRATOR_GPIO
 #include <linux/gpio.h>
@@ -41,6 +42,8 @@ static struct work_struct vibrator_work;
 static struct hrtimer vibe_timer;
 static int vibe_state = 0;
 
+struct wake_lock wklock;
+
 static inline uint32_t vibrator_read(uint32_t reg)
 {
 	return sci_adi_read(reg);
@@ -53,12 +56,13 @@ static void set_vibrator(int on)
 		sci_adi_clr(ANA_VIBRATOR_CTRL0, SLP_LDOVIBR_PD_EN);
 		printk("v_reg:0x%08x\n",ANA_VIBRATOR_CTRL0);
 		printk("v_reg_value:0x%08x\n",vibrator_read(ANA_VIBRATOR_CTRL0));
+		wake_lock(&wklock);
 
-		}
-	else{
-			sci_adi_write(ANA_VIBRATOR_CTRL0, LDO_VIBR_PD, LDO_VIBR_PD);
-			sci_adi_write(ANA_VIBRATOR_CTRL0, SLP_LDOVIBR_PD_EN, SLP_LDOVIBR_PD_EN);
-		}
+	} else {
+		sci_adi_write(ANA_VIBRATOR_CTRL0, LDO_VIBR_PD, LDO_VIBR_PD);
+		sci_adi_write(ANA_VIBRATOR_CTRL0, SLP_LDOVIBR_PD_EN, SLP_LDOVIBR_PD_EN);
+		wake_unlock(&wklock);
+	}
 }
 
 static void vibrator_hw_init(void)
@@ -125,6 +129,7 @@ static int __init sprd_init_vibrator(void)
 	vibrator_hw_init();
 
 	printk("locate in sprd_init_vibrator!\n");
+	wake_lock_init(&wklock, WAKE_LOCK_SUSPEND, "vibrator");
 	INIT_WORK(&vibrator_work, update_vibrator);
 	vibe_state = 0;
 	hrtimer_init(&vibe_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
