@@ -224,16 +224,16 @@ static struct miscdevice iq_mem_dev = {
 
 static int __init  sprd_iq_init(void)
 {
-    int ret;
-    ret = misc_register(&iq_mem_dev);
-    if (ret) {
-        printk(KERN_ERR "cannot register iq_mmap_dev ret = (%d)\n",ret);
-    }
+	int ret;
 
 	if(!in_iqmode())
 		return -EINVAL;
 	if (sprd_iq_addr() == 0xffffffff)
 		return -ENOMEM;
+	ret = misc_register(&iq_mem_dev);
+	if (ret) {
+		printk(KERN_ERR "cannot register iq_mmap_dev ret = (%d)\n",ret);
+	}
 #ifdef CONFIG_SPRD_SCXX30_DMC_FREQ
 	devfreq_notifier_register(&dmc_iq_notify);
 #endif
