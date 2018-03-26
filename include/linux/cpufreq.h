@@ -135,6 +135,46 @@ static inline bool policy_is_shared(struct cpufreq_policy *policy)
 	return cpumask_weight(policy->cpus) > 1;
 }
 
+int _store_cpu_num_limit(unsigned int input)
+{
+	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
+
+   	printk("%s: input = %d\n", __func__, input);
+
+	if(sd_tuners)
+	{
+		sd_tuners->cpu_num_limit = input;
+		sd_check_cpu_sprd(50);
+	}
+	else
+	{
+		pr_info("[store_cpu_num_min_limit] current governor is not sprdemand\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+int _store_cpu_num_min_limit(unsigned int input)
+{
+	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
+
+    printk("%s: input = %d\n", __func__, input);
+
+	if(sd_tuners)
+	{
+		sd_tuners->cpu_num_min_limit = input;
+		sd_check_cpu_sprd(50);
+	}
+	else
+	{
+		pr_info("[store_cpu_num_min_limit] current governor is not sprdemand\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 /******************** cpufreq transition notifiers *******************/
 
 #define CPUFREQ_PRECHANGE	(0)
