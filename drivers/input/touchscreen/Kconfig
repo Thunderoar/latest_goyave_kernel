@@ -1023,7 +1023,17 @@ config TOUCHSCREEN_MELFAS_MMS449
       If unsure, say N.
 
       To compile this driver as a module, choose M here: the module will be called mms_ts.
-      
+
+config TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+    tristate "MELFAS MMS438 Touchscreen use dual fw"
+    depends on I2C
+    help
+      Say Y here if you have a MELFAS MMS438 touchscreen device in your system.
+
+      If unsure, say N.
+
+      To compile this driver as a module, choose M here: the module will be called mms_ts.
+
 config TOUCHSCREEN_MSG2138
         tristate "MSG2138 touchscreen driver"
         depends on I2C
