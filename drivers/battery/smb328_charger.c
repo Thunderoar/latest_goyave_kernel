@@ -28,6 +28,7 @@
 static bool is_siop_limited;
 #endif
 
+extern int soc_val;
 int otg_enable_flag;
 
 static enum power_supply_property sec_charger_props[] = {
@@ -148,8 +149,11 @@ static int smb328_otg_over_current_status(struct i2c_client *client)
 
 static int smb328_get_charging_status(struct i2c_client *client)
 {
+	struct sec_charger_info *charger = i2c_get_clientdata(client);
 	int status = POWER_SUPPLY_STATUS_UNKNOWN;
 	u8 stat_c = 0;
+
+
 
 	smb328_i2c_read(client, SMB328_BATTERY_CHARGING_STATUS_C, &stat_c);
 	pr_info("%s : Charging status C(0x%02x)\n", __func__, stat_c);
@@ -160,6 +164,10 @@ static int smb328_get_charging_status(struct i2c_client *client)
 	if (stat_c & 0xc0) {
 		/* top-off by full charging */
 		status = POWER_SUPPLY_STATUS_FULL;
+		if (soc_val < 94) {
+			pr_info("%s : SPRD FG IC error : %d)\n", __func__, soc_val);
+			charger->pdata->recharge_condition_vcell = 4250;
+		}
 		return status;
 	}
 
@@ -177,6 +185,9 @@ static int smb328_get_charging_status(struct i2c_client *client)
 	} else {
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
 	}
+
+
+
 
 	return (int)status;
 }
@@ -320,6 +331,7 @@ static u8 smb328_set_fast_charging_current(struct i2c_client *client,
 static void smb328_charger_function_control(struct sec_charger_info *charger)
 {
 	u8 reg_data, charge_mode;
+	union power_supply_propval chg_stat;
 
 	smb328_set_writable(charger->client, 1);
 	reg_data = 0x6E;
@@ -331,7 +343,11 @@ static void smb328_charger_function_control(struct sec_charger_info *charger)
 	smb328_i2c_write(charger->client,
 			SMB328_INTERRUPT_SIGNAL_SELECTION, &reg_data);
 
-	if ((charger->cable_type == POWER_SUPPLY_TYPE_BATTERY) ||
+	psy_do_property("battery", get,
+				POWER_SUPPLY_PROP_STATUS, chg_stat);
+
+	if (((charger->cable_type == POWER_SUPPLY_TYPE_BATTERY) &&
+		(chg_stat.intval != POWER_SUPPLY_STATUS_DISCHARGING)) ||
 		(charger->cable_type == POWER_SUPPLY_TYPE_OTG)) {
 		/* turn off charger */
 		smb328_set_charge_enable(charger->client, 0);

@@ -28,6 +28,7 @@
 #include <linux/of_gpio.h>
 #include "sprd_2713_fgu.h"
 #include "sprd_battery.h"
+#include <linux/battery/fuelgauge/sprd27x3_fuelgauge4samsung.h>
 
 #define REGS_FGU_BASE ANA_FPU_INT_BASE
 
@@ -211,6 +212,9 @@ static u32 start_time;
 static int fgu_nv_4200mv = 2752;
 static int fgu_nv_3600mv = 2374;
 static int fgu_0_cur_adc = 8338;
+
+int vcell_val = 0;
+int curr_val = 0;
 
 static int cmd_vol_raw, cmd_cur_raw;
 
@@ -431,6 +435,7 @@ uint32_t sprdfgu_read_vbat_vol(void)
 	//FGU_DEBUG("cur_vol_raw = %d\n", cur_vol_raw);
 	temp = sprdfgu_adc2vol_mv(cur_vol_raw);
 	//FGU_DEBUG("sprdfgu_read_vbat_vol : %d\n", temp);
+	vcell_val = temp;
 	return temp;
 }
 
@@ -457,6 +462,7 @@ int sprdfgu_read_batcurrent(void)
 #ifndef CONFIG_SPRD_NOFGUCURRENT_CHG
 	int temp = sprdfgu_cur_current_get();
 	//FGU_DEBUG("sprdfgu_read_batcurrent : %d\n", temp);
+	curr_val = temp;
 	return temp;
 #else
 	return 0;
@@ -521,7 +527,18 @@ int sprdfgu_read_soc(void)
 			sprdfgu_soc_adjust(100);
 		}
 	}
+	{	//only for ATE adc cal error
+		union power_supply_propval chg_value;
 
+		psy_do_property("sec-charger", get, POWER_SUPPLY_PROP_STATUS, chg_value);
+		if(POWER_SUPPLY_STATUS_FULL == chg_value.intval) {
+			FGU_DEBUG("sec-charger EOC!!!\n");
+			if(capcity_delta < 100) {
+				capcity_delta = 101;	// EOC occur, soc must tune to 100;
+			}
+		}
+	}
+	//below can reset SOC to 100
 	if (capcity_delta > 100) {
 		capcity_delta = 100;
 		sprdfgu_soc_adjust(100);
