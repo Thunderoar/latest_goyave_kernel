@@ -65,7 +65,7 @@ struct cpufreq_conf {
 	struct clk 					*tdpllclk;
 	struct regulator 				*regulator;
 	struct cpufreq_frequency_table			*freq_tbl;
-	unsigned long					*vddarm_mv;
+	unsigned int					*vddarm_mv;
 };
 
 struct cpufreq_table_data {
@@ -250,14 +250,16 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		{15, 576000},
 		{16, 499200},
 		{17, 422400},
-		{18, 345600},
-		{19, 300000},
-		{20, CPUFREQ_TABLE_END},
+		{18, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1015000,
-		1000000,
-		985000,
+		1100000,
+		1100000,
+		1050000,
+		1050000,
+		1050000,
+		990000,
+		980000,
 		970000,
 		960000,
 		950000,
@@ -269,13 +271,7 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		890000,
 		880000,
 		870000,
-		860000,
-		850000,
-		840000,
-		830000,
-		820000,
-		810000,
-		810000,
+		870000,
 	},
 };
 #endif
@@ -466,7 +462,7 @@ static int sprd_cpufreq_verify_speed(struct cpufreq_policy *policy)
 	return cpufreq_frequency_table_verify(policy, sprd_cpufreq_conf->freq_tbl);
 }
 
-unsigned int cpufreq_min_limit = 300000;
+unsigned int cpufreq_min_limit = 422400;
 unsigned int cpufreq_max_limit = 1536000;
 unsigned int dvfs_score_select = 5;
 unsigned int dvfs_unplug_select = 2;
@@ -541,7 +537,7 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 static void sprd_set_cpufreq_limit(void)
 {
 	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
-	cpufreq_min_limit = min(tmp[19].frequency, cpufreq_min_limit);
+	cpufreq_min_limit = min(tmp[17].frequency, cpufreq_min_limit);
 	cpufreq_max_limit = max(tmp[0].frequency, cpufreq_max_limit);
 	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
@@ -598,7 +594,7 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 
 	/* do not switch frequencies unless explicitly asked us to */
 	policy->max = sprd_cpufreq_conf->freq_tbl[0].frequency;
-	policy->min = sprd_cpufreq_conf->freq_tbl[19].frequency;
+	policy->min = sprd_cpufreq_conf->freq_tbl[17].frequency;
 	cpufreq_frequency_table_get_attr(sprd_cpufreq_conf->freq_tbl, policy->cpu);
 
 	percpu_target[policy->cpu] = policy->cur;
