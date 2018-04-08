@@ -33,11 +33,6 @@ struct ce_unbind {
 	int res;
 };
 
-struct ce_unbind {
-	struct clock_event_device *ce;
-	int res;
-};
-
 static u64 cev_delta2ns(unsigned long latch, struct clock_event_device *evt,
 			bool ismax)
 {
@@ -278,20 +273,12 @@ int clockevents_program_event(struct clock_event_device *dev, ktime_t expires,
 }
 
 /*
- * SMP function call to unbind a device
+ * Called after a notify add to make devices available which were
+ * released from the notifier call.
  */
-static void __clockevents_unbind(void *arg)
+static void clockevents_notify_released(void)
 {
-	struct ce_unbind *cu = arg;
-	int res;
-
-	raw_spin_lock(&clockevents_lock);
-	res = __clockevents_try_unbind(cu->ce, smp_processor_id());
-	if (res == -EAGAIN)
-		res = clockevents_replace(cu->ce);
-	cu->res = res;
-	raw_spin_unlock(&clockevents_lock);
-}
+	struct clock_event_device *dev;
 
 	while (!list_empty(&clockevents_released)) {
 		dev = list_entry(clockevents_released.next,
