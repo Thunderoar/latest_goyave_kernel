@@ -71,15 +71,6 @@ static int cpu_subsys_offline(struct device *dev)
 	return ret;
 }
 
-static struct attribute *hotplug_cpu_attrs[] = {
-	&dev_attr_online.attr,
-	NULL
-};
-
-static struct attribute_group hotplug_cpu_attr_group = {
-	.attrs = hotplug_cpu_attrs,
-};
-
 void unregister_cpu(struct cpu *cpu)
 {
 	int logical_cpu = cpu->dev.id;
@@ -181,9 +172,6 @@ static const struct attribute_group *common_cpu_attr_groups[] = {
 static const struct attribute_group *hotplugable_cpu_attr_groups[] = {
 #ifdef CONFIG_KEXEC
 	&crash_note_cpu_attr_group,
-#endif
-#ifdef CONFIG_HOTPLUG_CPU
-	&hotplug_cpu_attr_group,
 #endif
 	NULL
 };
