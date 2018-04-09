@@ -341,7 +341,6 @@ ieee80211_ibss_add_sta(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	struct sta_info *sta;
 	struct ieee80211_chanctx_conf *chanctx_conf;
-	struct ieee80211_supported_band *sband;
 	int band;
 
 	/*
@@ -381,9 +380,8 @@ ieee80211_ibss_add_sta(struct ieee80211_sub_if_data *sdata,
 	sta->last_rx = jiffies;
 
 	/* make sure mandatory rates are always added */
-	sband = local->hw.wiphy->bands[band];
 	sta->sta.supp_rates[band] = supp_rates |
-			ieee80211_mandatory_rates(sband);
+			ieee80211_mandatory_rates(local, band);
 
 	return ieee80211_ibss_finish_sta(sta, auth);
 }
@@ -494,7 +492,7 @@ static void ieee80211_rx_bss_info(struct ieee80211_sub_if_data *sdata,
 				prev_rates = sta->sta.supp_rates[band];
 				/* make sure mandatory rates are always added */
 				sta->sta.supp_rates[band] = supp_rates |
-					ieee80211_mandatory_rates(sband);
+					ieee80211_mandatory_rates(local, band);
 
 				if (sta->sta.supp_rates[band] != prev_rates) {
 					ibss_dbg(sdata,
@@ -626,7 +624,6 @@ void ieee80211_ibss_rx_no_sta(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	struct sta_info *sta;
 	struct ieee80211_chanctx_conf *chanctx_conf;
-	struct ieee80211_supported_band *sband;
 	int band;
 
 	/*
@@ -661,9 +658,8 @@ void ieee80211_ibss_rx_no_sta(struct ieee80211_sub_if_data *sdata,
 	sta->last_rx = jiffies;
 
 	/* make sure mandatory rates are always added */
-	sband = local->hw.wiphy->bands[band];
 	sta->sta.supp_rates[band] = supp_rates |
-			ieee80211_mandatory_rates(sband);
+			ieee80211_mandatory_rates(local, band);
 
 	spin_lock(&ifibss->incomplete_lock);
 	list_add(&sta->list, &ifibss->incomplete_stations);
