@@ -59,7 +59,7 @@ __cfg80211_wdev_from_attrs(struct net *netns, struct nlattr **attrs)
 	int wiphy_idx = -1;
 	int ifidx = -1;
 
-	ASSERT_RTNL();
+	assert_cfg80211_lock();
 
 	if (!have_ifidx && !have_wdev_id)
 		return ERR_PTR(-EINVAL);
@@ -80,6 +80,7 @@ __cfg80211_wdev_from_attrs(struct net *netns, struct nlattr **attrs)
 		if (have_wdev_id && rdev->wiphy_idx != wiphy_idx)
 			continue;
 
+		mutex_lock(&rdev->devlist_mtx);
 		list_for_each_entry(wdev, &rdev->wdev_list, list) {
 			if (have_ifidx && wdev->netdev &&
 			    wdev->netdev->ifindex == ifidx) {
@@ -91,6 +92,7 @@ __cfg80211_wdev_from_attrs(struct net *netns, struct nlattr **attrs)
 				break;
 			}
 		}
+		mutex_unlock(&rdev->devlist_mtx);
 
 		if (result)
 			break;
@@ -107,7 +109,7 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 	struct cfg80211_registered_device *rdev = NULL, *tmp;
 	struct net_device *netdev;
 
-	ASSERT_RTNL();
+	assert_cfg80211_lock();
 
 	if (!attrs[NL80211_ATTR_WIPHY] &&
 	    !attrs[NL80211_ATTR_IFINDEX] &&
@@ -126,12 +128,14 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 		tmp = cfg80211_rdev_by_wiphy_idx(wdev_id >> 32);
 		if (tmp) {
 			/* make sure wdev exists */
+			mutex_lock(&tmp->devlist_mtx);
 			list_for_each_entry(wdev, &tmp->wdev_list, list) {
 				if (wdev->identifier != (u32)wdev_id)
 					continue;
 				found = true;
 				break;
 			}
+			mutex_unlock(&tmp->devlist_mtx);
 
 			if (!found)
 				tmp = NULL;
@@ -178,6 +182,19 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 /*
  * This function returns a pointer to the driver
  * that the genl_info item that is passed refers to.
+ * If successful, it returns non-NULL and also locks
+ * the driver's mutex!
+ *
+ * This means that you need to call cfg80211_unlock_rdev()
+ * before being allowed to acquire &cfg80211_mutex!
+ *
+ * This is necessary because we need to lock the global
+ * mutex to get an item off the list safely, and then
+ * we lock the rdev mutex so it doesn't go away under us.
+ *
+ * We don't want to keep cfg80211_mutex locked
+ * for all the time in order to allow requests on
+ * other interfaces to go through at the same time.
  *
  * The result of this can be a PTR_ERR and hence must
  * be checked with IS_ERR() for errors.
@@ -185,7 +202,20 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 static struct cfg80211_registered_device *
 cfg80211_get_dev_from_info(struct net *netns, struct genl_info *info)
 {
-	return __cfg80211_rdev_from_attrs(netns, info->attrs);
+	struct cfg80211_registered_device *rdev;
+
+	mutex_lock(&cfg80211_mutex);
+	rdev = __cfg80211_rdev_from_attrs(netns, info->attrs);
+
+	/* if it is not an error we grab the lock on
+	 * it to assure it won't be going away while
+	 * we operate on it */
+	if (!IS_ERR(rdev))
+		mutex_lock(&rdev->mtx);
+
+	mutex_unlock(&cfg80211_mutex);
+
+	return rdev;
 }
 
 /* policy for the attributes */
@@ -425,6 +455,7 @@ static int nl80211_prepare_wdev_dump(struct sk_buff *skb,
 	int err;
 
 	rtnl_lock();
+	mutex_lock(&cfg80211_mutex);
 
 	if (!cb->args[0]) {
 		err = nlmsg_parse(cb->nlh, GENL_HDRLEN + nl80211_fam.hdrsize,
@@ -455,12 +486,14 @@ static int nl80211_prepare_wdev_dump(struct sk_buff *skb,
 		*rdev = wiphy_to_dev(wiphy);
 		*wdev = NULL;
 
+		mutex_lock(&(*rdev)->devlist_mtx);
 		list_for_each_entry(tmp, &(*rdev)->wdev_list, list) {
 			if (tmp->identifier == cb->args[1]) {
 				*wdev = tmp;
 				break;
 			}
 		}
+		mutex_unlock(&(*rdev)->devlist_mtx);
 
 		if (!*wdev) {
 			err = -ENODEV;
@@ -468,14 +501,19 @@ static int nl80211_prepare_wdev_dump(struct sk_buff *skb,
 		}
 	}
 
+	cfg80211_lock_rdev(*rdev);
+
+	mutex_unlock(&cfg80211_mutex);
 	return 0;
  out_unlock:
+	mutex_unlock(&cfg80211_mutex);
 	rtnl_unlock();
 	return err;
 }
 
 static void nl80211_finish_wdev_dump(struct cfg80211_registered_device *rdev)
 {
+	cfg80211_unlock_rdev(rdev);
 	rtnl_unlock();
 }
 
@@ -1531,7 +1569,12 @@ static int nl80211_dump_wiphy(struct sk_buff *skb, struct netlink_callback *cb)
 	struct nlattr **tb;
 	int res;
 
-	rtnl_lock();
+	/* will be zeroed in nlmsg_parse() */
+	tb = kmalloc(sizeof(*tb) * (NL80211_ATTR_MAX + 1), GFP_KERNEL);
+	if (!tb)
+		return -ENOMEM;
+
+	mutex_lock(&cfg80211_mutex);
 	res = nlmsg_parse(cb->nlh, GENL_HDRLEN + nl80211_fam.hdrsize,
 			  tb, NL80211_ATTR_MAX, nl80211_policy);
 	if (res == 0) {
@@ -1545,8 +1588,11 @@ static int nl80211_dump_wiphy(struct sk_buff *skb, struct netlink_callback *cb)
 			int ifidx = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
 
 			netdev = dev_get_by_index(sock_net(skb->sk), ifidx);
-			if (!netdev)
+			if (!netdev) {
+				mutex_unlock(&cfg80211_mutex);
+				kfree(tb);
 				return -ENODEV;
+			}
 			if (netdev->ieee80211_ptr) {
 				dev = wiphy_to_dev(
 					netdev->ieee80211_ptr->wiphy);
@@ -1591,6 +1637,7 @@ static int nl80211_dump_wiphy(struct sk_buff *skb, struct netlink_callback *cb)
 				    !skb->len &&
 				    cb->min_dump_alloc < 4096) {
 					cb->min_dump_alloc = 4096;
+					mutex_unlock(&cfg80211_mutex);
 					return 1;
 				}
 				idx--;
@@ -1599,7 +1646,7 @@ static int nl80211_dump_wiphy(struct sk_buff *skb, struct netlink_callback *cb)
 		} while (cb->args[1] > 0);
 		break;
 	}
-	rtnl_unlock();
+	mutex_unlock(&cfg80211_mutex);
 
 	cb->args[0] = idx;
 
@@ -1754,6 +1801,7 @@ static int __nl80211_set_channel(struct cfg80211_registered_device *rdev,
 	if (result)
 		return result;
 
+	mutex_lock(&rdev->devlist_mtx);
 	switch (iftype) {
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_P2P_GO:
@@ -1777,6 +1825,7 @@ static int __nl80211_set_channel(struct cfg80211_registered_device *rdev,
 	default:
 		result = -EINVAL;
 	}
+	mutex_unlock(&rdev->devlist_mtx);
 
 	return result;
 }
@@ -1825,8 +1874,6 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 	u32 frag_threshold = 0, rts_threshold = 0;
 	u8 coverage_class = 0;
 
-	ASSERT_RTNL();
-
 	/*
 	 * Try to find the wiphy and netdev. Normally this
 	 * function shouldn't need the netdev, but this is
@@ -1836,25 +1883,31 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 	 * also passed a netdev to set_wiphy, so that it is
 	 * possible to let that go to the right netdev!
 	 */
+	mutex_lock(&cfg80211_mutex);
 
 	if (info->attrs[NL80211_ATTR_IFINDEX]) {
 		int ifindex = nla_get_u32(info->attrs[NL80211_ATTR_IFINDEX]);
 
 		netdev = dev_get_by_index(genl_info_net(info), ifindex);
-		if (netdev && netdev->ieee80211_ptr)
+		if (netdev && netdev->ieee80211_ptr) {
 			rdev = wiphy_to_dev(netdev->ieee80211_ptr->wiphy);
-		else
+			mutex_lock(&rdev->mtx);
+		} else
 			netdev = NULL;
 	}
 
 	if (!netdev) {
 		rdev = __cfg80211_rdev_from_attrs(genl_info_net(info),
 						  info->attrs);
-		if (IS_ERR(rdev))
+		if (IS_ERR(rdev)) {
+			mutex_unlock(&cfg80211_mutex);
 			return PTR_ERR(rdev);
+		}
 		wdev = NULL;
 		netdev = NULL;
 		result = 0;
+
+		mutex_lock(&rdev->mtx);
 	} else
 		wdev = netdev->ieee80211_ptr;
 
@@ -1866,6 +1919,8 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 	if (info->attrs[NL80211_ATTR_WIPHY_NAME])
 		result = cfg80211_dev_rename(
 			rdev, nla_data(info->attrs[NL80211_ATTR_WIPHY_NAME]));
+
+	mutex_unlock(&cfg80211_mutex);
 
 	if (result)
 		goto bad_res;
@@ -2073,6 +2128,7 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 	}
 
  bad_res:
+	mutex_unlock(&rdev->mtx);
 	if (netdev)
 		dev_put(netdev);
 	return result;
@@ -2170,7 +2226,7 @@ static int nl80211_dump_interface(struct sk_buff *skb, struct netlink_callback *
 	struct cfg80211_registered_device *rdev;
 	struct wireless_dev *wdev;
 
-	rtnl_lock();
+	mutex_lock(&cfg80211_mutex);
 	list_for_each_entry(rdev, &cfg80211_rdev_list, list) {
 		if (!net_eq(wiphy_net(&rdev->wiphy), sock_net(skb->sk)))
 			continue;
@@ -2180,6 +2236,7 @@ static int nl80211_dump_interface(struct sk_buff *skb, struct netlink_callback *
 		}
 		if_idx = 0;
 
+		mutex_lock(&rdev->devlist_mtx);
 		list_for_each_entry(wdev, &rdev->wdev_list, list) {
 			if (if_idx < if_start) {
 				if_idx++;
@@ -2188,15 +2245,17 @@ static int nl80211_dump_interface(struct sk_buff *skb, struct netlink_callback *
 			if (nl80211_send_iface(skb, NETLINK_CB(cb->skb).portid,
 					       cb->nlh->nlmsg_seq, NLM_F_MULTI,
 					       rdev, wdev) < 0) {
+				mutex_unlock(&rdev->devlist_mtx);
 				goto out;
 			}
 			if_idx++;
 		}
+		mutex_unlock(&rdev->devlist_mtx);
 
 		wp_idx++;
 	}
  out:
-	rtnl_unlock();
+	mutex_unlock(&cfg80211_mutex);
 
 	cb->args[0] = wp_idx;
 	cb->args[1] = if_idx;
@@ -2429,9 +2488,11 @@ static int nl80211_new_interface(struct sk_buff *skb, struct genl_info *info)
 		INIT_LIST_HEAD(&wdev->mgmt_registrations);
 		spin_lock_init(&wdev->mgmt_registrations_lock);
 
+		mutex_lock(&rdev->devlist_mtx);
 		wdev->identifier = ++rdev->wdev_id;
 		list_add_rcu(&wdev->list, &rdev->wdev_list);
 		rdev->devlist_generation++;
+		mutex_unlock(&rdev->devlist_mtx);
 		break;
 	default:
 		break;
@@ -2939,6 +3000,8 @@ static bool nl80211_get_ap_channel(struct cfg80211_registered_device *rdev,
 	struct wireless_dev *wdev;
 	bool ret = false;
 
+	mutex_lock(&rdev->devlist_mtx);
+
 	list_for_each_entry(wdev, &rdev->wdev_list, list) {
 		if (wdev->iftype != NL80211_IFTYPE_AP &&
 		    wdev->iftype != NL80211_IFTYPE_P2P_GO)
@@ -2951,6 +3014,8 @@ static bool nl80211_get_ap_channel(struct cfg80211_registered_device *rdev,
 		ret = true;
 		break;
 	}
+
+	mutex_unlock(&rdev->devlist_mtx);
 
 	return ret;
 }
@@ -3113,10 +3178,13 @@ static int nl80211_start_ap(struct sk_buff *skb, struct genl_info *info)
 		params.radar_required = true;
 	}
 
+	mutex_lock(&rdev->devlist_mtx);
 	err = cfg80211_can_use_iftype_chan(rdev, wdev, wdev->iftype,
 					   params.chandef.chan,
 					   CHAN_MODE_SHARED,
 					   radar_detect_width);
+	mutex_unlock(&rdev->devlist_mtx);
+
 	if (err)
 		return err;
 
@@ -4863,13 +4931,18 @@ static int nl80211_get_reg(struct sk_buff *skb, struct genl_info *info)
 	void *hdr = NULL;
 	struct nlattr *nl_reg_rules;
 	unsigned int i;
+	int err = -EINVAL;
+
+	mutex_lock(&cfg80211_mutex);
 
 	if (!cfg80211_regdomain)
-		return -EINVAL;
+		goto out;
 
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
-	if (!msg)
-		return -ENOBUFS;
+	if (!msg) {
+		err = -ENOBUFS;
+		goto out;
+	}
 
 	hdr = nl80211hdr_put(msg, info->snd_portid, info->snd_seq, 0,
 			     NL80211_CMD_GET_REG);
@@ -4928,7 +5001,8 @@ static int nl80211_get_reg(struct sk_buff *skb, struct genl_info *info)
 	nla_nest_end(msg, nl_reg_rules);
 
 	genlmsg_end(msg, hdr);
-	return genlmsg_reply(msg, info);
+	err = genlmsg_reply(msg, info);
+	goto out;
 
 nla_put_failure_rcu:
 	rcu_read_unlock();
@@ -4936,7 +5010,10 @@ nla_put_failure:
 	genlmsg_cancel(msg, hdr);
 put_failure:
 	nlmsg_free(msg);
-	return -EMSGSIZE;
+	err = -EMSGSIZE;
+out:
+	mutex_unlock(&cfg80211_mutex);
+	return err;
 }
 
 static int nl80211_set_reg(struct sk_buff *skb, struct genl_info *info)
@@ -5002,9 +5079,12 @@ static int nl80211_set_reg(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
+	mutex_lock(&cfg80211_mutex);
+
 	r = set_regdom(rd);
 	/* set_regdom took ownership */
 	rd = NULL;
+	mutex_unlock(&cfg80211_mutex);
 
  bad_reg:
 	kfree(rd);
@@ -5058,6 +5138,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	if (!rdev->ops->scan)
 		return -EOPNOTSUPP;
 
+	mutex_lock(&rdev->sched_scan_mtx);
 	if (rdev->scan_req) {
 		err = -EBUSY;
 		goto unlock;
@@ -5243,6 +5324,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	}
 
  unlock:
+	mutex_unlock(&rdev->sched_scan_mtx);
 	return err;
 }
 
@@ -5313,6 +5395,8 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 
 	if (ie_len > wiphy->max_sched_scan_ie_len)
 		return -EINVAL;
+
+	mutex_lock(&rdev->sched_scan_mtx);
 
 	if (rdev->sched_scan_req) {
 		err = -EINPROGRESS;
@@ -5481,6 +5565,7 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 out_free:
 	kfree(request);
 out:
+	mutex_unlock(&rdev->sched_scan_mtx);
 	return err;
 }
 
@@ -5488,12 +5573,17 @@ static int nl80211_stop_sched_scan(struct sk_buff *skb,
 				   struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+	int err;
 
 	if (!(rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_SCHED_SCAN) ||
 	    !rdev->ops->sched_scan_stop)
 		return -EOPNOTSUPP;
 
-	return __cfg80211_stop_sched_scan(rdev, false);
+	mutex_lock(&rdev->sched_scan_mtx);
+	err = __cfg80211_stop_sched_scan(rdev, false);
+	mutex_unlock(&rdev->sched_scan_mtx);
+
+	return err;
 }
 
 static int nl80211_start_radar_detection(struct sk_buff *skb,
@@ -5525,11 +5615,12 @@ static int nl80211_start_radar_detection(struct sk_buff *skb,
 	if (!rdev->ops->start_radar_detection)
 		return -EOPNOTSUPP;
 
+	mutex_lock(&rdev->devlist_mtx);
 	err = cfg80211_can_use_iftype_chan(rdev, wdev, wdev->iftype,
 					   chandef.chan, CHAN_MODE_SHARED,
 					   BIT(chandef.width));
 	if (err)
-		return err;
+		goto err_locked;
 
 	err = rdev->ops->start_radar_detection(&rdev->wiphy, dev, &chandef);
 	if (!err) {
@@ -5537,6 +5628,9 @@ static int nl80211_start_radar_detection(struct sk_buff *skb,
 		wdev->cac_started = true;
 		wdev->cac_start_time = jiffies;
 	}
+err_locked:
+	mutex_unlock(&rdev->devlist_mtx);
+
 	return err;
 }
 
@@ -6400,8 +6494,6 @@ static int nl80211_testmode_dump(struct sk_buff *skb,
 	void *data = NULL;
 	int data_len = 0;
 
-	rtnl_lock();
-
 	if (cb->args[0]) {
 		/*
 		 * 0 is a valid index, but not valid for args[0],
@@ -6413,16 +6505,18 @@ static int nl80211_testmode_dump(struct sk_buff *skb,
 				  nl80211_fam.attrbuf, nl80211_fam.maxattr,
 				  nl80211_policy);
 		if (err)
-			goto out_err;
+			return err;
 
+		mutex_lock(&cfg80211_mutex);
 		rdev = __cfg80211_rdev_from_attrs(sock_net(skb->sk),
 						  nl80211_fam.attrbuf);
 		if (IS_ERR(rdev)) {
-			err = PTR_ERR(rdev);
-			goto out_err;
+			mutex_unlock(&cfg80211_mutex);
+			return PTR_ERR(rdev);
 		}
 		phy_idx = rdev->wiphy_idx;
 		rdev = NULL;
+		mutex_unlock(&cfg80211_mutex);
 
 		if (nl80211_fam.attrbuf[NL80211_ATTR_TESTDATA])
 			cb->args[1] =
@@ -6434,11 +6528,14 @@ static int nl80211_testmode_dump(struct sk_buff *skb,
 		data_len = nla_len((void *)cb->args[1]);
 	}
 
+	mutex_lock(&cfg80211_mutex);
 	rdev = cfg80211_rdev_by_wiphy_idx(phy_idx);
 	if (!rdev) {
-		err = -ENOENT;
-		goto out_err;
+		mutex_unlock(&cfg80211_mutex);
+		return -ENOENT;
 	}
+	cfg80211_lock_rdev(rdev);
+	mutex_unlock(&cfg80211_mutex);
 
 	if (!rdev->ops->testmode_dump) {
 		err = -EOPNOTSUPP;
@@ -6479,7 +6576,7 @@ static int nl80211_testmode_dump(struct sk_buff *skb,
 	/* see above */
 	cb->args[0] = phy_idx + 1;
  out_err:
-	rtnl_unlock();
+	cfg80211_unlock_rdev(rdev);
 	return err;
 }
 
@@ -8128,7 +8225,9 @@ static int nl80211_start_p2p_device(struct sk_buff *skb, struct genl_info *info)
 	if (wdev->p2p_started)
 		return 0;
 
+	mutex_lock(&rdev->devlist_mtx);
 	err = cfg80211_can_add_interface(rdev, wdev->iftype);
+	mutex_unlock(&rdev->devlist_mtx);
 	if (err)
 		return err;
 
@@ -8137,7 +8236,9 @@ static int nl80211_start_p2p_device(struct sk_buff *skb, struct genl_info *info)
 		return err;
 
 	wdev->p2p_started = true;
+	mutex_lock(&rdev->devlist_mtx);
 	rdev->opencount++;
+	mutex_unlock(&rdev->devlist_mtx);
 
 	return 0;
 }
@@ -8153,7 +8254,11 @@ static int nl80211_stop_p2p_device(struct sk_buff *skb, struct genl_info *info)
 	if (!rdev->ops->stop_p2p_device)
 		return -EOPNOTSUPP;
 
+	mutex_lock(&rdev->devlist_mtx);
+	mutex_lock(&rdev->sched_scan_mtx);
 	cfg80211_stop_p2p_device(rdev, wdev);
+	mutex_unlock(&rdev->sched_scan_mtx);
+	mutex_unlock(&rdev->devlist_mtx);
 
 	return 0;
 }
@@ -8296,11 +8401,11 @@ static int nl80211_pre_doit(struct genl_ops *ops, struct sk_buff *skb,
 		info->user_ptr[0] = rdev;
 	} else if (ops->internal_flags & NL80211_FLAG_NEED_NETDEV ||
 		   ops->internal_flags & NL80211_FLAG_NEED_WDEV) {
-		ASSERT_RTNL();
-
+		mutex_lock(&cfg80211_mutex);
 		wdev = __cfg80211_wdev_from_attrs(genl_info_net(info),
 						  info->attrs);
 		if (IS_ERR(wdev)) {
+			mutex_unlock(&cfg80211_mutex);
 			if (rtnl)
 				rtnl_unlock();
 			return PTR_ERR(wdev);
@@ -8311,6 +8416,7 @@ static int nl80211_pre_doit(struct genl_ops *ops, struct sk_buff *skb,
 
 		if (ops->internal_flags & NL80211_FLAG_NEED_NETDEV) {
 			if (!dev) {
+				mutex_unlock(&cfg80211_mutex);
 				if (rtnl)
 					rtnl_unlock();
 				return -EINVAL;
@@ -8324,6 +8430,7 @@ static int nl80211_pre_doit(struct genl_ops *ops, struct sk_buff *skb,
 		if (dev) {
 			if (ops->internal_flags & NL80211_FLAG_CHECK_NETDEV_UP &&
 			    !netif_running(dev)) {
+				mutex_unlock(&cfg80211_mutex);
 				if (rtnl)
 					rtnl_unlock();
 				return -ENETDOWN;
@@ -8332,11 +8439,16 @@ static int nl80211_pre_doit(struct genl_ops *ops, struct sk_buff *skb,
 			dev_hold(dev);
 		} else if (ops->internal_flags & NL80211_FLAG_CHECK_NETDEV_UP) {
 			if (!wdev->p2p_started) {
+				mutex_unlock(&cfg80211_mutex);
 				if (rtnl)
 					rtnl_unlock();
 				return -ENETDOWN;
 			}
 		}
+
+		cfg80211_lock_rdev(rdev);
+
+		mutex_unlock(&cfg80211_mutex);
 
 		info->user_ptr[0] = rdev;
 	}
@@ -8347,6 +8459,8 @@ static int nl80211_pre_doit(struct genl_ops *ops, struct sk_buff *skb,
 static void nl80211_post_doit(struct genl_ops *ops, struct sk_buff *skb,
 			      struct genl_info *info)
 {
+	if (info->user_ptr[0])
+		cfg80211_unlock_rdev(info->user_ptr[0]);
 	if (info->user_ptr[1]) {
 		if (ops->internal_flags & NL80211_FLAG_NEED_WDEV) {
 			struct wireless_dev *wdev = info->user_ptr[1];
@@ -8368,8 +8482,7 @@ static struct genl_ops nl80211_ops[] = {
 		.dumpit = nl80211_dump_wiphy,
 		.policy = nl80211_policy,
 		/* can be retrieved by unprivileged users */
-		.internal_flags = NL80211_FLAG_NEED_WIPHY |
-				  NL80211_FLAG_NEED_RTNL,
+		.internal_flags = NL80211_FLAG_NEED_WIPHY,
 	},
 	{
 		.cmd = NL80211_CMD_SET_WIPHY,
@@ -8384,8 +8497,7 @@ static struct genl_ops nl80211_ops[] = {
 		.dumpit = nl80211_dump_interface,
 		.policy = nl80211_policy,
 		/* can be retrieved by unprivileged users */
-		.internal_flags = NL80211_FLAG_NEED_WDEV |
-				  NL80211_FLAG_NEED_RTNL,
+		.internal_flags = NL80211_FLAG_NEED_WDEV,
 	},
 	{
 		.cmd = NL80211_CMD_SET_INTERFACE,
@@ -8544,7 +8656,6 @@ static struct genl_ops nl80211_ops[] = {
 		.cmd = NL80211_CMD_GET_REG,
 		.doit = nl80211_get_reg,
 		.policy = nl80211_policy,
-		.internal_flags = NL80211_FLAG_NEED_RTNL,
 		/* can be retrieved by unprivileged users */
 	},
 	{
@@ -8552,7 +8663,6 @@ static struct genl_ops nl80211_ops[] = {
 		.doit = nl80211_set_reg,
 		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL80211_FLAG_NEED_RTNL,
 	},
 	{
 		.cmd = NL80211_CMD_REQ_SET_REG,
@@ -9007,6 +9117,8 @@ static int nl80211_add_scan_req(struct sk_buff *msg,
 	struct cfg80211_scan_request *req = rdev->scan_req;
 	struct nlattr *nest;
 	int i;
+
+	lockdep_assert_held(&rdev->sched_scan_mtx);
 
 	if (WARN_ON(!req))
 		return 0;

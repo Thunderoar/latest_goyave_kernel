@@ -808,8 +808,12 @@ void cfg80211_process_rdev_events(struct cfg80211_registered_device *rdev)
 	ASSERT_RTNL();
 	ASSERT_RDEV_LOCK(rdev);
 
+	mutex_lock(&rdev->devlist_mtx);
+
 	list_for_each_entry(wdev, &rdev->wdev_list, list)
 		cfg80211_process_wdev_events(wdev);
+
+	mutex_unlock(&rdev->devlist_mtx);
 }
 
 int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
@@ -841,8 +845,10 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 		return -EBUSY;
 
 	if (ntype != otype && netif_running(dev)) {
+		mutex_lock(&rdev->devlist_mtx);
 		err = cfg80211_can_change_interface(rdev, dev->ieee80211_ptr,
 						    ntype);
+		mutex_unlock(&rdev->devlist_mtx);
 		if (err)
 			return err;
 
@@ -1204,6 +1210,8 @@ int cfg80211_validate_beacon_int(struct cfg80211_registered_device *rdev,
 	if (!beacon_int)
 		return -EINVAL;
 
+	mutex_lock(&rdev->devlist_mtx);
+
 	list_for_each_entry(wdev, &rdev->wdev_list, list) {
 		if (!wdev->beacon_interval)
 			continue;
@@ -1212,6 +1220,8 @@ int cfg80211_validate_beacon_int(struct cfg80211_registered_device *rdev,
 			break;
 		}
 	}
+
+	mutex_unlock(&rdev->devlist_mtx);
 
 	return res;
 }
@@ -1236,6 +1246,7 @@ int cfg80211_can_use_iftype_chan(struct cfg80211_registered_device *rdev,
 	int i, j;
 
 	ASSERT_RTNL();
+	lockdep_assert_held(&rdev->devlist_mtx);
 
 	if (WARN_ON(hweight32(radar_detect) > 1))
 		return -EINVAL;
