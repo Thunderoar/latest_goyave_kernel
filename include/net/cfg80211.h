@@ -2890,6 +2890,8 @@ struct wireless_dev {
 
 	struct mutex mtx;
 
+	struct work_struct cleanup_work;
+
 	bool use_4addr, p2p_started;
 
 	u8 address[ETH_ALEN] __aligned(sizeof(u16));
