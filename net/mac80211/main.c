@@ -336,7 +336,7 @@ static int ieee80211_ifa_changed(struct notifier_block *nb,
 		return NOTIFY_DONE;
 
 	ifmgd = &sdata->u.mgd;
-	sdata_lock(sdata);
+	mutex_lock(&ifmgd->mtx);
 
 	/* Copy the addresses to the bss_conf list */
 	ifa = idev->ifa_list;
@@ -354,7 +354,7 @@ static int ieee80211_ifa_changed(struct notifier_block *nb,
 		ieee80211_bss_info_change_notify(sdata,
 						 BSS_CHANGED_ARP_FILTER);
 
-	sdata_unlock(sdata);
+	mutex_unlock(&ifmgd->mtx);
 
 	return NOTIFY_DONE;
 }

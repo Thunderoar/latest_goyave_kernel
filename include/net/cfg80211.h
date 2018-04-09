@@ -1867,9 +1867,7 @@ struct cfg80211_update_ft_ies_params {
  * @get_mpath: get a mesh path for the given parameters
  * @dump_mpath: dump mesh path callback -- resume dump at index @idx
  * @join_mesh: join the mesh network with the specified parameters
- *	(invoked with the wireless_dev mutex held)
  * @leave_mesh: leave the current mesh network
- *	(invoked with the wireless_dev mutex held)
  *
  * @get_mesh_config: Get the current mesh configuration
  *
@@ -1896,28 +1894,20 @@ struct cfg80211_update_ft_ies_params {
  *	the scan/scan_done bracket too.
  *
  * @auth: Request to authenticate with the specified peer
- *	(invoked with the wireless_dev mutex held)
  * @assoc: Request to (re)associate with the specified peer
- *	(invoked with the wireless_dev mutex held)
  * @deauth: Request to deauthenticate from the specified peer
- *	(invoked with the wireless_dev mutex held)
  * @disassoc: Request to disassociate from the specified peer
- *	(invoked with the wireless_dev mutex held)
  *
  * @connect: Connect to the ESS with the specified parameters. When connected,
  *	call cfg80211_connect_result() with status code %WLAN_STATUS_SUCCESS.
  *	If the connection fails for some reason, call cfg80211_connect_result()
  *	with the status from the AP.
- *	(invoked with the wireless_dev mutex held)
  * @disconnect: Disconnect from the BSS/ESS.
- *	(invoked with the wireless_dev mutex held)
  *
  * @join_ibss: Join the specified IBSS (or create if necessary). Once done, call
  *	cfg80211_ibss_joined(), also call that function when changing BSSID due
  *	to a merge.
- *	(invoked with the wireless_dev mutex held)
  * @leave_ibss: Leave the IBSS.
- *	(invoked with the wireless_dev mutex held)
  *
  * @set_mcast_rate: Set the specified multicast rate (only if vif is in ADHOC or
  *	MESH mode)
@@ -2865,8 +2855,7 @@ struct cfg80211_cached_keys;
  *	by cfg80211 on change_interface
  * @mgmt_registrations: list of registrations for management frames
  * @mgmt_registrations_lock: lock for the list
- * @mtx: mutex used to lock data in this struct, may be used by drivers
- *	and some API functions require it held
+ * @mtx: mutex used to lock data in this struct
  * @cleanup_work: work struct used for cleanup that can't be done directly
  * @beacon_interval: beacon interval used on this device for transmitting
  *	beacons, 0 when not valid
@@ -3441,8 +3430,7 @@ void cfg80211_unlink_bss(struct wiphy *wiphy, struct cfg80211_bss *bss);
  * This function is called whenever an authentication has been processed in
  * station mode. The driver is required to call either this function or
  * cfg80211_send_auth_timeout() to indicate the result of cfg80211_ops::auth()
- * call. This function may sleep. The caller must hold the corresponding wdev's
- * mutex.
+ * call. This function may sleep.
  */
 void cfg80211_send_rx_auth(struct net_device *dev, const u8 *buf, size_t len);
 
@@ -3451,8 +3439,7 @@ void cfg80211_send_rx_auth(struct net_device *dev, const u8 *buf, size_t len);
  * @dev: network device
  * @addr: The MAC address of the device with which the authentication timed out
  *
- * This function may sleep. The caller must hold the corresponding wdev's
- * mutex.
+ * This function may sleep.
  */
 void cfg80211_send_auth_timeout(struct net_device *dev, const u8 *addr);
 
@@ -3467,8 +3454,7 @@ void cfg80211_send_auth_timeout(struct net_device *dev, const u8 *addr);
  * This function is called whenever a (re)association response has been
  * processed in station mode. The driver is required to call either this
  * function or cfg80211_send_assoc_timeout() to indicate the result of
- * cfg80211_ops::assoc() call. This function may sleep. The caller must hold
- * the corresponding wdev's mutex.
+ * cfg80211_ops::assoc() call. This function may sleep.
  */
 void cfg80211_send_rx_assoc(struct net_device *dev, struct cfg80211_bss *bss,
 			    const u8 *buf, size_t len);
@@ -3478,7 +3464,7 @@ void cfg80211_send_rx_assoc(struct net_device *dev, struct cfg80211_bss *bss,
  * @dev: network device
  * @addr: The MAC address of the device with which the association timed out
  *
- * This function may sleep. The caller must hold the corresponding wdev's mutex.
+ * This function may sleep.
  */
 void cfg80211_send_assoc_timeout(struct net_device *dev, const u8 *addr);
 
@@ -3490,10 +3476,19 @@ void cfg80211_send_assoc_timeout(struct net_device *dev, const u8 *addr);
  *
  * This function is called whenever deauthentication has been processed in
  * station mode. This includes both received deauthentication frames and
- * locally generated ones. This function may sleep. The caller must hold the
- * corresponding wdev's mutex.
+ * locally generated ones. This function may sleep.
  */
 void cfg80211_send_deauth(struct net_device *dev, const u8 *buf, size_t len);
+
+/**
+ * __cfg80211_send_deauth - notification of processed deauthentication
+ * @dev: network device
+ * @buf: deauthentication frame (header + body)
+ * @len: length of the frame data
+ *
+ * Like cfg80211_send_deauth(), but doesn't take the wdev lock.
+ */
+void __cfg80211_send_deauth(struct net_device *dev, const u8 *buf, size_t len);
 
 /**
  * cfg80211_send_disassoc - notification of processed disassociation
@@ -3503,10 +3498,20 @@ void cfg80211_send_deauth(struct net_device *dev, const u8 *buf, size_t len);
  *
  * This function is called whenever disassociation has been processed in
  * station mode. This includes both received disassociation frames and locally
- * generated ones. This function may sleep. The caller must hold the
- * corresponding wdev's mutex.
+ * generated ones. This function may sleep.
  */
 void cfg80211_send_disassoc(struct net_device *dev, const u8 *buf, size_t len);
+
+/**
+ * __cfg80211_send_disassoc - notification of processed disassociation
+ * @dev: network device
+ * @buf: disassociation response frame (header + body)
+ * @len: length of the frame data
+ *
+ * Like cfg80211_send_disassoc(), but doesn't take the wdev lock.
+ */
+void __cfg80211_send_disassoc(struct net_device *dev, const u8 *buf,
+	size_t len);
 
 /**
  * cfg80211_send_unprot_deauth - notification of unprotected deauthentication

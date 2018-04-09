@@ -1581,9 +1581,9 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 			if (sdata->u.mgd.dtim_period)
 				changed |= BSS_CHANGED_DTIM_PERIOD;
 
-			sdata_lock(sdata);
+			mutex_lock(&sdata->u.mgd.mtx);
 			ieee80211_bss_info_change_notify(sdata, changed);
-			sdata_unlock(sdata);
+			mutex_unlock(&sdata->u.mgd.mtx);
 			break;
 		case NL80211_IFTYPE_ADHOC:
 			changed |= BSS_CHANGED_IBSS;
