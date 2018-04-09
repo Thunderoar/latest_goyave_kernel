@@ -1715,18 +1715,20 @@ void regulatory_hint_11d(struct wiphy *wiphy, enum ieee80211_band band,
 {
 	char alpha2[2];
 	enum environment_cap env = ENVIRON_ANY;
-	struct regulatory_request *request = NULL, *lr;
+	struct regulatory_request *request, *lr;
+
+	mutex_lock(&reg_mutex);
+	lr = get_last_request();
+
+	if (unlikely(!lr))
+		goto out;
 
 	/* IE len must be evenly divisible by 2 */
 	if (country_ie_len & 0x01)
-		return;
+		goto out;
 
 	if (country_ie_len < IEEE80211_COUNTRY_IE_MIN_LEN)
-		return;
-
-	request = kzalloc(sizeof(*request), GFP_KERNEL);
-	if (!request)
-		return;
+		goto out;
 
 	alpha2[0] = country_ie[0];
 	alpha2[1] = country_ie[1];
@@ -1735,12 +1737,6 @@ void regulatory_hint_11d(struct wiphy *wiphy, enum ieee80211_band band,
 		env = ENVIRON_INDOOR;
 	else if (country_ie[2] == 'O')
 		env = ENVIRON_OUTDOOR;
-
-	rcu_read_lock();
-	lr = get_last_request();
-
-	if (unlikely(!lr))
-		goto out;
 
 	/*
 	 * We will run this only upon a successful connection on cfg80211.
@@ -1751,6 +1747,10 @@ void regulatory_hint_11d(struct wiphy *wiphy, enum ieee80211_band band,
 	    lr->wiphy_idx != WIPHY_IDX_INVALID)
 		goto out;
 
+	request = kzalloc(sizeof(struct regulatory_request), GFP_KERNEL);
+	if (!request)
+		goto out;
+
 	request->wiphy_idx = get_wiphy_idx(wiphy);
 	request->alpha2[0] = alpha2[0];
 	request->alpha2[1] = alpha2[1];
@@ -1758,10 +1758,8 @@ void regulatory_hint_11d(struct wiphy *wiphy, enum ieee80211_band band,
 	request->country_ie_env = env;
 
 	queue_regulatory_request(request);
-	request = NULL;
 out:
-	kfree(request);
-	rcu_read_unlock();
+	mutex_unlock(&reg_mutex);
 }
 
 static void restore_alpha2(char *alpha2, bool reset_user)
