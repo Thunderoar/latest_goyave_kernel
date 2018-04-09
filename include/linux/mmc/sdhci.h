@@ -96,6 +96,14 @@ struct sdhci_host {
 #define SDHCI_QUIRK2_NO_1_8_V				(1<<2)
 #define SDHCI_QUIRK2_PRESET_VALUE_BROKEN		(1<<3)
 #define SDHCI_QUIRK2_CARD_ON_NEEDS_BUS_ON		(1<<4)
+#define SDHCI_QUIRK2_TIMEOUT_DIVIDE			(1<<5)
+	/*
+	 * Dont use the max_discard_to in sdhci driver so that the maximum discard
+	 * unit gets picked by the mmc queue. Otherwise, it takes a long time for
+	 * secure discard kind of operations to complete.
+	 */
+#define SDHCI_QUIRK2_USE_MAX_DISCARD_SIZE	(1<<7)
+
 
 	int irq;		/* Device IRQ */
 	void __iomem *ioaddr;	/* Mapped address */
