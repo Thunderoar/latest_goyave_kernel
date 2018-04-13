@@ -36,9 +36,9 @@
 #    include "f_rndis.c"
 #    include "rndis.c"
 #  endif
-#  include "u_ether.h"
+#  include "u_ether.c"
 
-static u8 gfs_host_mac[ETH_ALEN];
+static u8 gfs_hostaddr[ETH_ALEN];
 static struct eth_dev *the_dev;
 #  ifdef CONFIG_USB_FUNCTIONFS_ETH
 static int eth_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
@@ -47,7 +47,7 @@ static int eth_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 #else
 #  define the_dev	NULL
 #  define gether_cleanup(dev) do { } while (0)
-#  define gfs_host_mac NULL
+#  define gfs_hostaddr NULL
 struct eth_dev;
 #endif
 
@@ -74,8 +74,6 @@ struct gfs_ffs_obj {
 };
 
 USB_GADGET_COMPOSITE_OPTIONS();
-
-USB_ETHERNET_MODULE_PARAMETERS();
 
 static struct usb_device_descriptor gfs_dev_desc = {
 	.bLength		= sizeof gfs_dev_desc,
@@ -354,8 +352,7 @@ static int gfs_bind(struct usb_composite_dev *cdev)
 	if (missing_funcs)
 		return -ENODEV;
 #if defined CONFIG_USB_FUNCTIONFS_ETH || defined CONFIG_USB_FUNCTIONFS_RNDIS
-	the_dev = gether_setup(cdev->gadget, dev_addr, host_addr, gfs_host_mac,
-			       qmult);
+	the_dev = gether_setup(cdev->gadget, gfs_hostaddr);
 #endif
 	if (IS_ERR(the_dev)) {
 		ret = PTR_ERR(the_dev);
@@ -451,7 +448,7 @@ static int gfs_do_config(struct usb_configuration *c)
 	}
 
 	if (gc->eth) {
-		ret = gc->eth(c, gfs_host_mac, the_dev);
+		ret = gc->eth(c, gfs_hostaddr, the_dev);
 		if (unlikely(ret < 0))
 			return ret;
 	}

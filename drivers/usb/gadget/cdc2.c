@@ -35,7 +35,15 @@
 
 USB_GADGET_COMPOSITE_OPTIONS();
 
-USB_ETHERNET_MODULE_PARAMETERS();
+/*
+ * Kbuild is not very cooperative with respect to linking separately
+ * compiled library objects into one module.  So for now we won't use
+ * separate compilation ... ensuring init/exit sections work to shrink
+ * the runtime footprint, and giving us at least some parts of what
+ * a "gcc --combine ... part1.c part2.c part3.c ... " build would.
+ */
+#include "f_ecm.c"
+#include "u_ether.c"
 
 /*-------------------------------------------------------------------------*/
 
@@ -94,6 +102,8 @@ static struct usb_gadget_strings *dev_strings[] = {
 	NULL,
 };
 
+static u8 hostaddr[ETH_ALEN];
+static struct eth_dev *the_dev;
 /*-------------------------------------------------------------------------*/
 static struct usb_function *f_acm;
 static struct usb_function_instance *fi_serial;
@@ -113,21 +123,9 @@ static int __init cdc_do_config(struct usb_configuration *c)
 		c->bmAttributes |= USB_CONFIG_ATT_WAKEUP;
 	}
 
-	fi_ecm = usb_get_function_instance("ecm");
-	if (IS_ERR(fi_ecm)) {
-		status = PTR_ERR(fi_ecm);
-		goto err_func_ecm;
-	}
-
-	f_ecm = usb_get_function(fi_ecm);
-	if (IS_ERR(f_ecm)) {
-		status = PTR_ERR(f_ecm);
-		goto err_get_ecm;
-	}
-
-	status = usb_add_function(c, f_ecm);
-	if (status)
-		goto err_add_ecm;
+	status = ecm_bind_config(c, hostaddr, the_dev);
+	if (status < 0)
+		return status;
 
 	fi_serial = usb_get_function_instance("acm");
 	if (IS_ERR(fi_serial)) {
@@ -182,23 +180,10 @@ static int __init cdc_bind(struct usb_composite_dev *cdev)
 		return -EINVAL;
 	}
 
-	fi_ecm = usb_get_function_instance("ecm");
-	if (IS_ERR(fi_ecm))
-		return PTR_ERR(fi_ecm);
-
-	ecm_opts = container_of(fi_ecm, struct f_ecm_opts, func_inst);
-
-	gether_set_qmult(ecm_opts->net, qmult);
-	if (!gether_set_host_addr(ecm_opts->net, host_addr))
-		pr_info("using host ethernet address: %s", host_addr);
-	if (!gether_set_dev_addr(ecm_opts->net, dev_addr))
-		pr_info("using self ethernet address: %s", dev_addr);
-
-	fi_serial = usb_get_function_instance("acm");
-	if (IS_ERR(fi_serial)) {
-		status = PTR_ERR(fi_serial);
-		goto fail;
-	}
+	/* set up network link layer */
+	the_dev = gether_setup(cdev->gadget, hostaddr);
+	if (IS_ERR(the_dev))
+		return PTR_ERR(the_dev);
 
 	/* Allocate string descriptor numbers ... note that string
 	 * contents can be overridden by the composite_dev glue.

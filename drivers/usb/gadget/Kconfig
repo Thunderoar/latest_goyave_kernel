@@ -526,9 +526,6 @@ config USB_F_SS_LB
 config USB_U_SERIAL
 	tristate
 
-config USB_U_ETHER
-	tristate
-
 config USB_F_SERIAL
 	tristate
 
@@ -675,7 +672,6 @@ config USB_ETH
 	tristate "Ethernet Gadget (with CDC Ethernet support)"
 	depends on NET
 	select USB_LIBCOMPOSITE
-	select USB_U_ETHER
 	select CRC32
 	help
 	  This driver implements Ethernet style communication, in one of
@@ -749,8 +745,6 @@ config USB_G_NCM
 	tristate "Network Control Model (NCM) support"
 	depends on NET
 	select USB_LIBCOMPOSITE
-	select USB_U_ETHER
-	select USB_F_NCM
 	select CRC32
 	help
 	  This driver implements USB CDC NCM subclass standard. NCM is
@@ -794,7 +788,6 @@ config USB_FUNCTIONFS
 config USB_FUNCTIONFS_ETH
 	bool "Include configuration with CDC ECM (Ethernet)"
 	depends on USB_FUNCTIONFS && NET
-	select USB_U_ETHER
 	help
 	  Include a configuration with CDC ECM function (Ethernet) and the
 	  Function Filesystem.
@@ -802,7 +795,6 @@ config USB_FUNCTIONFS_ETH
 config USB_FUNCTIONFS_RNDIS
 	bool "Include configuration with RNDIS (Ethernet)"
 	depends on USB_FUNCTIONFS && NET
-	select USB_U_ETHER
 	help
 	  Include a configuration with RNDIS function (Ethernet) and the Filesystem.
 
@@ -939,7 +931,6 @@ config USB_CDC_COMPOSITE
 	depends on NET
 	select USB_LIBCOMPOSITE
 	select USB_U_SERIAL
-	select USB_U_ETHER
 	select USB_F_ACM
 	select USB_F_ECM
 	help
@@ -958,7 +949,6 @@ config USB_G_NOKIA
 	depends on PHONET
 	select USB_LIBCOMPOSITE
 	select USB_U_SERIAL
-	select USB_U_ETHER
 	select USB_F_ACM
 	select USB_F_OBEX
 	select USB_F_PHONET
@@ -989,7 +979,6 @@ config USB_G_MULTI
 	select USB_G_MULTI_CDC if !USB_G_MULTI_RNDIS
 	select USB_LIBCOMPOSITE
 	select USB_U_SERIAL
-	select USB_U_ETHER
 	select USB_F_ACM
 	help
 	  The Multifunction Composite Gadget provides Ethernet (RNDIS

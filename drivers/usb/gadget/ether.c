@@ -107,13 +107,11 @@ static inline bool has_rndis(void)
 #include "f_rndis.c"
 #include "rndis.c"
 #endif
-
-#include "u_eem.h"
+#include "f_eem.c"
+#include "u_ether.c"
 
 /*-------------------------------------------------------------------------*/
 USB_GADGET_COMPOSITE_OPTIONS();
-
-USB_ETHERNET_MODULE_PARAMETERS();
 
 /* DO NOT REUSE THESE IDs with a protocol-incompatible driver!!  Ever!!
  * Instead:  allocate your own, using normal USB-IF procedures.
@@ -209,7 +207,7 @@ static struct usb_gadget_strings *dev_strings[] = {
 	NULL,
 };
 
-static u8 host_mac[ETH_ALEN];
+static u8 hostaddr[ETH_ALEN];
 static struct eth_dev *the_dev;
 
 static struct usb_function_instance *fi_ecm;
@@ -237,7 +235,7 @@ static int __init rndis_do_config(struct usb_configuration *c)
 		c->bmAttributes |= USB_CONFIG_ATT_WAKEUP;
 	}
 
-	return rndis_bind_config(c, host_mac, the_dev);
+	return rndis_bind_config(c, hostaddr, the_dev);
 }
 
 static struct usb_configuration rndis_config_driver = {
@@ -271,38 +269,12 @@ static int __init eth_do_config(struct usb_configuration *c)
 		c->bmAttributes |= USB_CONFIG_ATT_WAKEUP;
 	}
 
-	if (use_eem) {
-		f_eem = usb_get_function(fi_eem);
-		if (IS_ERR(f_eem))
-			return PTR_ERR(f_eem);
-
-		status = usb_add_function(c, f_eem);
-		if (status < 0)
-			usb_put_function(f_eem);
-
-		return status;
-	} else if (can_support_ecm(c->cdev->gadget)) {
-		f_ecm = usb_get_function(fi_ecm);
-		if (IS_ERR(f_ecm))
-			return PTR_ERR(f_ecm);
-
-		status = usb_add_function(c, f_ecm);
-		if (status < 0)
-			usb_put_function(f_ecm);
-
-		return status;
-	} else {
-		f_geth = usb_get_function(fi_geth);
-		if (IS_ERR(f_geth))
-			return PTR_ERR(f_geth);
-
-		status = usb_add_function(c, f_geth);
-		if (status < 0)
-			usb_put_function(f_geth);
-
-		return status;
-	}
-
+	if (use_eem)
+		return eem_bind_config(c, the_dev);
+	else if (can_support_ecm(c->cdev->gadget))
+		return ecm_bind_config(c, hostaddr, the_dev);
+	else
+		return geth_bind_config(c, hostaddr, the_dev);
 }
 
 static struct usb_configuration eth_config_driver = {
@@ -322,6 +294,11 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 	struct f_gether_opts	*geth_opts = NULL;
 	struct net_device	*net;
 	int			status;
+
+	/* set up network link layer */
+	the_dev = gether_setup(cdev->gadget, hostaddr);
+	if (IS_ERR(the_dev))
+		return PTR_ERR(the_dev);
 
 	/* set up main config label and device descriptor */
 	if (use_eem) {

@@ -30,9 +30,23 @@
 #define NOKIA_VERSION_NUM		0x0211
 #define NOKIA_LONG_NAME			"N900 (PC-Suite Mode)"
 
-USB_GADGET_COMPOSITE_OPTIONS();
+/*-------------------------------------------------------------------------*/
 
-USB_ETHERNET_MODULE_PARAMETERS();
+/*
+ * Kbuild is not very cooperative with respect to linking separately
+ * compiled library objects into one module.  So for now we won't use
+ * separate compilation ... ensuring init/exit sections work to shrink
+ * the runtime footprint, and giving us at least some parts of what
+ * a "gcc --combine ... part1.c part2.c part3.c ... " build would.
+ */
+#define USBF_OBEX_INCLUDED
+#include "f_ecm.c"
+#include "f_obex.c"
+#include "f_phonet.c"
+#include "u_ether.c"
+
+/*-------------------------------------------------------------------------*/
+USB_GADGET_COMPOSITE_OPTIONS();
 
 #define NOKIA_VENDOR_ID			0x0421	/* Nokia */
 #define NOKIA_PRODUCT_ID		0x01c8	/* Nokia Gadget */
@@ -86,14 +100,14 @@ MODULE_LICENSE("GPL");
 /*-------------------------------------------------------------------------*/
 static struct usb_function *f_acm_cfg1;
 static struct usb_function *f_acm_cfg2;
-static struct usb_function *f_ecm_cfg1;
-static struct usb_function *f_ecm_cfg2;
-static struct usb_function *f_obex1_cfg1;
-static struct usb_function *f_obex2_cfg1;
-static struct usb_function *f_obex1_cfg2;
-static struct usb_function *f_obex2_cfg2;
-static struct usb_function *f_phonet_cfg1;
-static struct usb_function *f_phonet_cfg2;
+static u8 hostaddr[ETH_ALEN];
+static struct eth_dev *the_dev;
+
+enum {
+	TTY_PORT_OBEX0,
+	TTY_PORT_OBEX1,
+	TTY_PORTS_MAX,
+};
 
 
 static struct usb_configuration nokia_config_500ma_driver = {
@@ -182,7 +196,7 @@ static int __init nokia_bind_config(struct usb_configuration *c)
 	if (status)
 		goto err_conf;
 
-	status = usb_add_function(c, f_ecm);
+	status = ecm_bind_config(c, hostaddr, the_dev);
 	if (status) {
 		pr_debug("could not bind ecm config %d\n", status);
 		goto err_ecm;
@@ -228,6 +242,23 @@ static int __init nokia_bind(struct usb_composite_dev *cdev)
 {
 	struct usb_gadget	*gadget = cdev->gadget;
 	int			status;
+	int			cur_line;
+
+	status = gphonet_setup(cdev->gadget);
+	if (status < 0)
+		goto err_phonet;
+
+	for (cur_line = 0; cur_line < TTY_PORTS_MAX; cur_line++) {
+		status = gserial_alloc_line(&tty_lines[cur_line]);
+		if (status)
+			goto err_ether;
+	}
+
+	the_dev = gether_setup(cdev->gadget, hostaddr);
+	if (IS_ERR(the_dev)) {
+		status = PTR_ERR(the_dev);
+		goto err_ether;
+	}
 
 	status = usb_string_ids_tab(cdev, strings_dev);
 	if (status < 0)
