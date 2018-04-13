@@ -2643,7 +2643,7 @@ struct wiphy {
 	u32 hw_version;
 
 #ifdef CONFIG_PM
-	const struct wiphy_wowlan_support *wowlan;
+	struct wiphy_wowlan_support wowlan;
 	struct cfg80211_wowlan *wowlan_config;
 #endif
 

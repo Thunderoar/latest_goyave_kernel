@@ -497,13 +497,8 @@ int wiphy_register(struct wiphy *wiphy)
 	u16 ifmodes = wiphy->interface_modes;
 
 #ifdef CONFIG_PM
-	if (WARN_ON(wiphy->wowlan &&
-		    (wiphy->wowlan->flags & WIPHY_WOWLAN_GTK_REKEY_FAILURE) &&
-		    !(wiphy->wowlan->flags & WIPHY_WOWLAN_SUPPORTS_GTK_REKEY)))
-		return -EINVAL;
-	if (WARN_ON(wiphy->wowlan &&
-		    !wiphy->wowlan->flags && !wiphy->wowlan->n_patterns &&
-		    !wiphy->wowlan->tcp))
+	if (WARN_ON((wiphy->wowlan.flags & WIPHY_WOWLAN_GTK_REKEY_FAILURE) &&
+		    !(wiphy->wowlan.flags & WIPHY_WOWLAN_SUPPORTS_GTK_REKEY)))
 		return -EINVAL;
 #endif
 
@@ -593,11 +588,12 @@ int wiphy_register(struct wiphy *wiphy)
 	}
 
 #ifdef CONFIG_PM
-	if (WARN_ON(rdev->wiphy.wowlan && rdev->wiphy.wowlan->n_patterns &&
-		    (!rdev->wiphy.wowlan->pattern_min_len ||
-		     rdev->wiphy.wowlan->pattern_min_len >
-				rdev->wiphy.wowlan->pattern_max_len)))
-		return -EINVAL;
+	if (rdev->wiphy.wowlan.n_patterns) {
+		if (WARN_ON(!rdev->wiphy.wowlan.pattern_min_len ||
+			    rdev->wiphy.wowlan.pattern_min_len >
+			    rdev->wiphy.wowlan.pattern_max_len))
+			return -EINVAL;
+	}
 #endif
 
 	/* check and set up bitrates */
