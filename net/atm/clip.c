@@ -575,7 +575,6 @@ static int clip_inet_event(struct notifier_block *this, unsigned long event,
 			   void *ifa)
 {
 	struct in_device *in_dev;
-	struct netdev_notifier_info info;
 
 	in_dev = ((struct in_ifaddr *)ifa)->ifa_dev;
 	/*
@@ -584,8 +583,7 @@ static int clip_inet_event(struct notifier_block *this, unsigned long event,
 	 */
 	if (event != NETDEV_UP)
 		return NOTIFY_DONE;
-	netdev_notifier_info_init(&info, in_dev->dev);
-	return clip_device_event(this, NETDEV_CHANGE, &info);
+	return clip_device_event(this, NETDEV_CHANGE, in_dev->dev);
 }
 
 static struct notifier_block clip_dev_notifier = {
