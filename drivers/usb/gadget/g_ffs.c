@@ -33,7 +33,6 @@
 #define USB_FSUBSET_INCLUDED
 #  include "f_subset.c"
 #  ifdef USB_ETH_RNDIS
-#    define USB_FRNDIS_INCLUDED
 #    include "f_rndis.c"
 #    include "rndis.h"
 #  endif
