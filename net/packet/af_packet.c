@@ -3394,11 +3394,10 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 }
 
 
-static int packet_notifier(struct notifier_block *this,
-			   unsigned long msg, void *ptr)
+static int packet_notifier(struct notifier_block *this, unsigned long msg, void *data)
 {
 	struct sock *sk;
-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct net_device *dev = data;
 	struct net *net = dev_net(dev);
 
 	rcu_read_lock();

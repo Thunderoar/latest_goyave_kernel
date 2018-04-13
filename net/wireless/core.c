@@ -894,9 +894,10 @@ void cfg80211_leave(struct cfg80211_registered_device *rdev,
 }
 
 static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
-					 unsigned long state, void *ptr)
+					 unsigned long state,
+					 void *ndev)
 {
-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct net_device *dev = ndev;
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct cfg80211_registered_device *rdev;
 	int ret;

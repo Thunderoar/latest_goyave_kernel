@@ -1372,9 +1372,10 @@ static inline void lowpan_netlink_fini(void)
 }
 
 static int lowpan_device_event(struct notifier_block *unused,
-			       unsigned long event, void *ptr)
+				unsigned long event,
+				void *ptr)
 {
-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct net_device *dev = ptr;
 	LIST_HEAD(del_list);
 	struct lowpan_dev_record *entry, *tmp;
 

@@ -998,11 +998,13 @@ int msg_to_mpoad(struct k_message *mesg, struct mpoa_client *mpc)
 }
 
 static int mpoa_event_listener(struct notifier_block *mpoa_notifier,
-			       unsigned long event, void *ptr)
+			       unsigned long event, void *dev_ptr)
 {
-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct net_device *dev;
 	struct mpoa_client *mpc;
 	struct lec_priv *priv;
+
+	dev = dev_ptr;
 
 	if (!net_eq(dev_net(dev), &init_net))
 		return NOTIFY_DONE;
