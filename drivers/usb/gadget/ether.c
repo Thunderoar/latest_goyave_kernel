@@ -92,8 +92,6 @@ static inline bool has_rndis(void)
 #endif
 }
 
-#include <linux/module.h>
-
 /*-------------------------------------------------------------------------*/
 
 /*
@@ -107,7 +105,7 @@ static inline bool has_rndis(void)
 #include "u_gether.h"
 #ifdef	USB_ETH_RNDIS
 #include "f_rndis.c"
-#include "rndis.h"
+#include "rndis.c"
 #endif
 
 #include "u_eem.h"
