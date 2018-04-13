@@ -454,6 +454,8 @@ static struct firmware_priv *to_firmware_priv(struct device *dev)
 
 static void fw_load_abort(struct firmware_buf *buf)
 {
+	struct firmware_priv *fw_priv;
+
 	list_del_init(&buf->pending_list);
 	set_bit(FW_STATUS_ABORT, &buf->status);
 	complete_all(&buf->completion);
