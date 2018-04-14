@@ -29,6 +29,9 @@
 /* For automatically allocated device IDs */
 static DEFINE_IDA(platform_devid_ida);
 
+#define to_platform_driver(drv)	(container_of((drv), struct platform_driver, \
+				 driver))
+
 struct device platform_bus = {
 	.init_name	= "platform",
 };
@@ -516,13 +519,11 @@ static void platform_drv_shutdown(struct device *_dev)
 }
 
 /**
- * __platform_driver_register - register a driver for platform-level devices
+ * platform_driver_register - register a driver for platform-level devices
  * @drv: platform driver structure
  */
-int __platform_driver_register(struct platform_driver *drv,
-				struct module *owner)
+int platform_driver_register(struct platform_driver *drv)
 {
-	drv->driver.owner = owner;
 	drv->driver.bus = &platform_bus_type;
 	if (drv->probe)
 		drv->driver.probe = platform_drv_probe;
@@ -533,7 +534,7 @@ int __platform_driver_register(struct platform_driver *drv,
 
 	return driver_register(&drv->driver);
 }
-EXPORT_SYMBOL_GPL(__platform_driver_register);
+EXPORT_SYMBOL_GPL(platform_driver_register);
 
 /**
  * platform_driver_unregister - unregister a driver for platform-level devices
@@ -566,36 +567,17 @@ EXPORT_SYMBOL_GPL(platform_driver_unregister);
  * Returns zero if the driver registered and bound to a device, else returns
  * a negative error code and with the driver not registered.
  */
-int __init_or_module __platform_driver_probe(struct platform_driver *drv,
-		int (*probe)(struct platform_device *), struct module *module)
+int __init_or_module platform_driver_probe(struct platform_driver *drv,
+		int (*probe)(struct platform_device *))
 {
 	int retval, code;
-
-	if (drv->driver.probe_type == PROBE_PREFER_ASYNCHRONOUS) {
-		pr_err("%s: drivers registered with %s can not be probed asynchronously\n",
-			 drv->driver.name, __func__);
-		return -EINVAL;
-	}
-
-	/*
-	 * We have to run our probes synchronously because we check if
-	 * we find any devices to bind to and exit with error if there
-	 * are any.
-	 */
-	drv->driver.probe_type = PROBE_FORCE_SYNCHRONOUS;
-
-	/*
-	 * Prevent driver from requesting probe deferral to avoid further
-	 * futile probe attempts.
-	 */
-	drv->prevent_deferred_probe = true;
 
 	/* make sure driver won't have bind/unbind attributes */
 	drv->driver.suppress_bind_attrs = true;
 
 	/* temporary section violation during probe() */
 	drv->probe = probe;
-	retval = code = __platform_driver_register(drv, module);
+	retval = code = platform_driver_register(drv);
 
 	/*
 	 * Fixup that section violation, being paranoid about code scanning
@@ -614,8 +596,7 @@ int __init_or_module __platform_driver_probe(struct platform_driver *drv,
 		platform_driver_unregister(drv);
 	return retval;
 }
-EXPORT_SYMBOL_GPL(__platform_driver_probe);
-
+EXPORT_SYMBOL_GPL(platform_driver_probe);
 
 /**
  * platform_create_bundle - register driver and create corresponding device
@@ -635,7 +616,7 @@ struct platform_device * __init_or_module platform_create_bundle(
 			struct platform_driver *driver,
 			int (*probe)(struct platform_device *),
 			struct resource *res, unsigned int n_res,
-			const void *data, size_t size, struct module *module)
+			const void *data, size_t size)
 {
 	struct platform_device *pdev;
 	int error;
@@ -658,7 +639,7 @@ struct platform_device * __init_or_module platform_create_bundle(
 	if (error)
 		goto err_pdev_put;
 
-	error = __platform_driver_probe(driver, probe, module);
+	error = platform_driver_probe(driver, probe);
 	if (error)
 		goto err_pdev_del;
 
