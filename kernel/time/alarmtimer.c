@@ -369,15 +369,7 @@ void alarm_init(struct alarm *alarm, enum alarmtimer_type type,
 	alarm->type = type;
 	alarm->state = ALARMTIMER_STATE_INACTIVE;
 }
-EXPORT_SYMBOL_GPL(alarm_init);
 
-	alarm.time = rtc_ktime_to_tm(now);
-	alarm.enabled = 1;
-	if (rtc->ops && rtc->ops->set_alarm)
-		rtc->ops->set_alarm(rtc->dev.parent, &alarm);
-	wake_unlock(&alarm_wake_lock);
-	return;
-}
 /**
  * alarm_start - Sets an absolute alarm to fire
  * @alarm: ptr to alarm to set
@@ -913,10 +905,6 @@ static int __init alarmtimer_init(void)
 		timerqueue_init_head(&alarm_bases[i].timerqueue);
 		spin_lock_init(&alarm_bases[i].lock);
 	}
-
-	INIT_WORK(&work, set_real_alarm);
-	wake_lock_init(&alarm_wake_lock, WAKE_LOCK_SUSPEND,
-			"alarmtimer");
 
 	error = alarmtimer_rtc_interface_setup();
 	if (error)
