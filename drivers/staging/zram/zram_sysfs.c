@@ -19,9 +19,29 @@
 
 #include "zram_drv.h"
 
-static inline struct zram *dev_to_zram(struct device *dev)
+static u64 zram_stat64_read(struct zram *zram, u64 *v)
 {
-	return (struct zram *)dev_to_disk(dev)->private_data;
+	u64 val;
+
+	spin_lock(&zram->stat64_lock);
+	val = *v;
+	spin_unlock(&zram->stat64_lock);
+
+	return val;
+}
+
+static struct zram *dev_to_zram(struct device *dev)
+{
+	int i;
+	struct zram *zram = NULL;
+
+	for (i = 0; i < zram_get_num_devices(); i++) {
+		zram = &zram_devices[i];
+		if (disk_to_dev(zram->disk) == dev)
+			break;
+	}
+
+	return zram;
 }
 
 static ssize_t disksize_show(struct device *dev,
@@ -105,7 +125,7 @@ static ssize_t num_reads_show(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 
 	return sprintf(buf, "%llu\n",
-			(u64)atomic64_read(&zram->stats.num_reads));
+		zram_stat64_read(zram, &zram->stats.num_reads));
 }
 
 static ssize_t num_writes_show(struct device *dev,
@@ -114,7 +134,7 @@ static ssize_t num_writes_show(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 
 	return sprintf(buf, "%llu\n",
-			(u64)atomic64_read(&zram->stats.num_writes));
+		zram_stat64_read(zram, &zram->stats.num_writes));
 }
 
 static ssize_t invalid_io_show(struct device *dev,
@@ -123,7 +143,7 @@ static ssize_t invalid_io_show(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 
 	return sprintf(buf, "%llu\n",
-			(u64)atomic64_read(&zram->stats.invalid_io));
+		zram_stat64_read(zram, &zram->stats.invalid_io));
 }
 
 static ssize_t notify_free_show(struct device *dev,
@@ -132,7 +152,7 @@ static ssize_t notify_free_show(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 
 	return sprintf(buf, "%llu\n",
-			(u64)atomic64_read(&zram->stats.notify_free));
+		zram_stat64_read(zram, &zram->stats.notify_free));
 }
 
 static ssize_t zero_pages_show(struct device *dev,
@@ -158,7 +178,7 @@ static ssize_t compr_data_size_show(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 
 	return sprintf(buf, "%llu\n",
-			(u64)atomic64_read(&zram->stats.compr_size));
+		zram_stat64_read(zram, &zram->stats.compr_size));
 }
 
 static ssize_t mem_used_total_show(struct device *dev,
@@ -217,6 +237,7 @@ static ssize_t mem_free_percent(void)
 
 	return (mem_used_pages >= total_zram_pages) ? 0 : ((total_zram_pages - mem_used_pages)*100/total_zram_pages);
 }
+
 
 static ssize_t mem_free_total(void)
 {
