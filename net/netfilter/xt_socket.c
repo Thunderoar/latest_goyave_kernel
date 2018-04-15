@@ -270,6 +270,52 @@ extract_icmp6_fields(const struct sk_buff *skb,
 	return 0;
 }
 
+struct sock*
+xt_socket_get6_sk(const struct sk_buff *skb, struct xt_action_param *par)
+{
+	struct ipv6hdr *iph = ipv6_hdr(skb);
+	struct udphdr _hdr, *hp = NULL;
+	struct sock *sk;
+	struct in6_addr *daddr = NULL, *saddr = NULL;
+	__be16 uninitialized_var(dport), uninitialized_var(sport);
+	int thoff = 0, uninitialized_var(tproto);
+
+	tproto = ipv6_find_hdr(skb, &thoff, -1, NULL, NULL);
+	if (tproto < 0) {
+		pr_debug("unable to find transport header in IPv6 packet, dropping\n");
+		return NF_DROP;
+	}
+
+	if (tproto == IPPROTO_UDP || tproto == IPPROTO_TCP) {
+		hp = skb_header_pointer(skb, thoff,
+					sizeof(_hdr), &_hdr);
+		if (hp == NULL)
+			return NULL;
+
+		saddr = &iph->saddr;
+		sport = hp->source;
+		daddr = &iph->daddr;
+		dport = hp->dest;
+
+	} else if (tproto == IPPROTO_ICMPV6) {
+		if (extract_icmp6_fields(skb, thoff, &tproto, &saddr, &daddr,
+					 &sport, &dport))
+			return NULL;
+	} else {
+		return NULL;
+	}
+
+	sk = nf_tproxy_get_sock_v6(dev_net(skb->dev), tproto,
+				   saddr, daddr, sport, dport, par->in, NFT_LOOKUP_ANY);
+	pr_debug("proto %hhd %pI6:%hu -> %pI6:%hu "
+		 "(orig %pI6:%hu) sock %p\n",
+		 tproto, saddr, ntohs(sport),
+		 daddr, ntohs(dport),
+		 &iph->daddr, hp ? ntohs(hp->dest) : 0, sk);
+	return sk;
+}
+EXPORT_SYMBOL(xt_socket_get6_sk);
+
 static bool
 socket_mt6_v1_v2(const struct sk_buff *skb, struct xt_action_param *par)
 {
@@ -314,7 +360,6 @@ socket_mt6_v1_v2(const struct sk_buff *skb, struct xt_action_param *par)
 		 &iph->daddr, hp ? ntohs(hp->dest) : 0, sk);
 	return sk;
 }
-EXPORT_SYMBOL(xt_socket_get6_sk);
 
 static bool
 socket_mt6_v1(const struct sk_buff *skb, struct xt_action_param *par)

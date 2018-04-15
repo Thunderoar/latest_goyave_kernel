@@ -222,6 +222,21 @@ void cfg80211_assoc_timeout(struct net_device *dev, struct cfg80211_bss *bss)
 }
 EXPORT_SYMBOL(cfg80211_assoc_timeout);
 
+void cfg80211_send_assoc_timeout(struct net_device *dev, const u8 *addr)
+{
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	struct wiphy *wiphy = wdev->wiphy;
+	struct cfg80211_registered_device *rdev = wiphy_to_dev(wiphy);
+
+	trace_cfg80211_send_assoc_timeout(dev, addr);
+	wdev_lock(wdev);
+
+	nl80211_send_assoc_timeout(rdev, dev, addr, GFP_KERNEL);
+	if (wdev->sme_state == CFG80211_SME_CONNECTING)
+		__cfg80211_connect_result(dev, addr, NULL, 0, NULL, 0,
+					  WLAN_STATUS_UNSPECIFIED_FAILURE,
+					  false, NULL);
+
 	wdev_unlock(wdev);
 }
 EXPORT_SYMBOL(cfg80211_send_assoc_timeout);

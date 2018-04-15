@@ -143,41 +143,23 @@ static inline u8 ip_tunnel_ecn_encap(u8 tos, const struct iphdr *iph,
 	return INET_ECN_encapsulate(tos, inner);
 }
 
-static inline void tunnel_ip_select_ident(struct sk_buff *skb,
-					  const struct iphdr  *old_iph,
-					  struct dst_entry *dst)
+static inline void iptunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct iphdr *iph = ip_hdr(skb);
+	int err;
+	int pkt_len = skb->len - skb_transport_offset(skb);
+	struct pcpu_tstats *tstats = this_cpu_ptr(dev->tstats);
 
-	/* Use inner packet iph-id if possible. */
-	if (skb->protocol == htons(ETH_P_IP) && old_iph->id)
-		iph->id	= old_iph->id;
-	else
-		__ip_select_ident(iph, dst,
-				  (skb_shinfo(skb)->gso_segs ?: 1) - 1);
-}
+	nf_reset(skb);
 
-int iptunnel_xmit(struct net *net, struct rtable *rt,
-		  struct sk_buff *skb,
-		  __be32 src, __be32 dst, __u8 proto,
-		  __u8 tos, __u8 ttl, __be16 df);
-
-static inline void iptunnel_xmit_stats(int err,
-				       struct net_device_stats *err_stats,
-				       struct pcpu_tstats __percpu *stats)
-{
-	if (err > 0) {
-		struct pcpu_tstats *tstats = this_cpu_ptr(stats);
-
+	err = ip_local_out(skb);
+	if (likely(net_xmit_eval(err) == 0)) {
 		u64_stats_update_begin(&tstats->syncp);
-		tstats->tx_bytes += err;
+		tstats->tx_bytes += pkt_len;
 		tstats->tx_packets++;
 		u64_stats_update_end(&tstats->syncp);
-	} else if (err < 0) {
-		err_stats->tx_errors++;
-		err_stats->tx_aborted_errors++;
 	} else {
-		err_stats->tx_dropped++;
+		dev->stats.tx_errors++;
+		dev->stats.tx_aborted_errors++;
 	}
 }
 

@@ -1029,6 +1029,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct rtable *rt;
 	const struct iphdr *old_iph;
+	struct iphdr *iph;
 	struct vxlanhdr *vxh;
 	struct udphdr *uh;
 	struct flowi4 fl4;
@@ -1037,7 +1038,6 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 	u32 vni;
 	__be16 df = 0;
 	__u8 tos, ttl;
-	int err;
 
 	dst_port = rdst->remote_port ? rdst->remote_port : vxlan->dst_port;
 	vni = rdst->remote_vni;
@@ -1105,6 +1105,13 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		vxlan_encap_bypass(skb, vxlan, dst_vxlan);
 		return;
 	}
+
+	memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
+	IPCB(skb)->flags &= ~(IPSKB_XFRM_TUNNEL_SIZE | IPSKB_XFRM_TRANSFORMED |
+			      IPSKB_REROUTED);
+	skb_dst_drop(skb);
+	skb_dst_set(skb, &rt->dst);
+
 	vxh = (struct vxlanhdr *) __skb_push(skb, sizeof(*vxh));
 	vxh->vx_flags = htonl(VXLAN_FLAGS);
 	vxh->vx_vni = htonl(vni << 8);
@@ -1119,19 +1126,28 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 	uh->len = htons(skb->len);
 	uh->check = 0;
 
+	__skb_push(skb, sizeof(*iph));
+	skb_reset_network_header(skb);
+	iph		= ip_hdr(skb);
+	iph->version	= 4;
+	iph->ihl	= sizeof(struct iphdr) >> 2;
+	iph->frag_off	= df;
+	iph->protocol	= IPPROTO_UDP;
+	iph->tos	= ip_tunnel_ecn_encap(tos, old_iph, skb);
+	iph->daddr	= dst;
+	iph->saddr	= fl4.saddr;
+	iph->ttl	= ttl ? : ip4_dst_hoplimit(&rt->dst);
+	__ip_select_ident(iph, skb_shinfo(skb)->gso_segs ?: 1);
+
+	nf_reset(skb);
+
 	vxlan_set_owner(dev, skb);
 
 	if (handle_offloads(skb))
 		goto drop;
 
-	tos = ip_tunnel_ecn_encap(tos, old_iph, skb);
-	ttl = ttl ? : ip4_dst_hoplimit(&rt->dst);
-
-	err = iptunnel_xmit(dev_net(dev), rt, skb, fl4.saddr, dst,
-			    IPPROTO_UDP, tos, ttl, df);
-	iptunnel_xmit_stats(err, &dev->stats, dev->tstats);
-
-	return;
+	iptunnel_xmit(skb, dev);
+	return NETDEV_TX_OK;
 
 drop:
 	dev->stats.tx_dropped++;
