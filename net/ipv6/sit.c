@@ -694,14 +694,9 @@ static const struct tnl_ptk_info tpi = {
 
 static int ipip_rcv(struct sk_buff *skb)
 {
-	const struct iphdr *iph;
+	const struct iphdr *iph = ip_hdr(skb);
 	struct ip_tunnel *tunnel;
 	int hdr_len;
-
-	if (iptunnel_pull_header(skb, 0, tpi.proto))
-		goto drop;
-
-	iph = ip_hdr(skb);
 
 	tunnel = ipip6_tunnel_lookup(dev_net(skb->dev), skb->dev,
 				     iph->saddr, iph->daddr);
