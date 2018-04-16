@@ -68,6 +68,14 @@
  * are handled as text/data or they can be discarded (which
  * often happens at runtime)
  */
+#ifdef CONFIG_HOTPLUG
+#define DEV_KEEP(sec)    *(.dev##sec)
+#define DEV_DISCARD(sec)
+#else
+#define DEV_KEEP(sec)
+#define DEV_DISCARD(sec) *(.dev##sec)
+#endif
+
 #ifdef CONFIG_HOTPLUG_CPU
 #define CPU_KEEP(sec)    *(.cpu##sec)
 #define CPU_DISCARD(sec)
