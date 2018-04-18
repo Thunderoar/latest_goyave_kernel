@@ -1535,8 +1535,6 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 		err = mmc_deselect_cards(host);
 	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
 
-	if (!err)
-		mmc_power_off(host);
 out:
 	mmc_release_host(host);
 	return err;
@@ -1572,8 +1570,6 @@ static int mmc_resume(struct mmc_host *host)
 	BUG_ON(!host->card);
 
 	mmc_claim_host(host);
-	mmc_power_up(host);
-	mmc_select_voltage(host, host->ocr);
 	err = mmc_init_card(host, host->ocr, host->card);
 	mmc_release_host(host);
 	printk("%s: mmc_resume err=%x\n", mmc_hostname(host),err);
