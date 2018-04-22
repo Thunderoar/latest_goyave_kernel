@@ -261,9 +261,9 @@ static void addrconf_del_rs_timer(struct inet6_dev *idev)
 		__in6_dev_put(idev);
 }
 
-static void addrconf_del_dad_timer(struct inet6_ifaddr *ifp)
+static void addrconf_del_dad_work(struct inet6_ifaddr *ifp)
 {
-	if (del_timer(&ifp->dad_timer))
+	if (cancel_delayed_work(&ifp->dad_work))
 		__in6_ifa_put(ifp);
 }
 
@@ -275,12 +275,12 @@ static void addrconf_mod_rs_timer(struct inet6_dev *idev,
 	mod_timer(&idev->rs_timer, jiffies + when);
 }
 
-static void addrconf_mod_dad_timer(struct inet6_ifaddr *ifp,
-				   unsigned long when)
+static void addrconf_mod_dad_work(struct inet6_ifaddr *ifp,
+				   unsigned long delay)
 {
-	if (!timer_pending(&ifp->dad_timer))
+	if (!delayed_work_pending(&ifp->dad_work))
 		in6_ifa_hold(ifp);
-	mod_timer(&ifp->dad_timer, jiffies + when);
+	mod_delayed_work(addrconf_wq, &ifp->dad_work, delay);
 }
 
 static int snmp6_alloc_dev(struct inet6_dev *idev)
@@ -775,8 +775,9 @@ void inet6_ifa_finish_destroy(struct inet6_ifaddr *ifp)
 
 	in6_dev_put(ifp->idev);
 
-	if (del_timer(&ifp->dad_timer))
-		pr_notice("Timer is still running, when freeing ifa=%p\n", ifp);
+	if (cancel_delayed_work(&ifp->dad_work))
+		pr_notice("delayed DAD work was pending while freeing ifa=%p\n",
+			  ifp);
 
 	if (ifp->state != INET6_IFADDR_STATE_DEAD) {
 		pr_warn("Freeing alive inet6 address %p\n", ifp);
@@ -868,8 +869,7 @@ ipv6_add_addr(struct inet6_dev *idev, const struct in6_addr *addr, int pfxlen,
 
 	spin_lock_init(&ifa->lock);
 	spin_lock_init(&ifa->state_lock);
-	setup_timer(&ifa->dad_timer, addrconf_dad_timer,
-		    (unsigned long)ifa);
+	INIT_DELAYED_WORK(&ifa->dad_work, addrconf_dad_work);
 	INIT_HLIST_NODE(&ifa->addr_lst);
 	ifa->scope = scope;
 	ifa->prefix_len = pfxlen;
@@ -995,7 +995,7 @@ static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 	}
 	write_unlock_bh(&idev->lock);
 
-	addrconf_del_dad_timer(ifp);
+	addrconf_del_dad_work(ifp);
 
 	ipv6_ifa_notify(RTM_DELADDR, ifp);
 
@@ -1450,8 +1450,8 @@ try_nextdev:
 }
 EXPORT_SYMBOL(ipv6_dev_get_saddr);
 
-static int __ipv6_get_lladdr(struct inet6_dev *idev, struct in6_addr *addr,
-			     unsigned char banned_flags)
+int __ipv6_get_lladdr(struct inet6_dev *idev, struct in6_addr *addr,
+		      unsigned char banned_flags)
 {
 	struct inet6_ifaddr *ifp;
 	int err = -EADDRNOTAVAIL;
@@ -1618,7 +1618,7 @@ static void addrconf_dad_stop(struct inet6_ifaddr *ifp, int dad_failed)
 {
 	if (ifp->flags&IFA_F_PERMANENT) {
 		spin_lock_bh(&ifp->lock);
-		addrconf_del_dad_timer(ifp);
+		addrconf_del_dad_work(ifp);
 		ifp->flags |= IFA_F_TENTATIVE;
 		if (dad_failed)
 			ifp->flags |= IFA_F_DADFAILED;
@@ -3103,7 +3103,7 @@ static int addrconf_ifdown(struct net_device *dev, int how)
 		hlist_for_each_entry_rcu(ifa, h, addr_lst) {
 			if (ifa->idev == idev) {
 				hlist_del_init_rcu(&ifa->addr_lst);
-				addrconf_del_dad_timer(ifa);
+				addrconf_del_dad_work(ifa);
 				goto restart;
 			}
 		}
@@ -3143,7 +3143,7 @@ static int addrconf_ifdown(struct net_device *dev, int how)
 	while (!list_empty(&idev->addr_list)) {
 		ifa = list_first_entry(&idev->addr_list,
 				       struct inet6_ifaddr, if_list);
-		addrconf_del_dad_timer(ifa);
+		addrconf_del_dad_work(ifa);
 
 		list_del(&ifa->if_list);
 
@@ -3238,7 +3238,7 @@ static void addrconf_dad_kick(struct inet6_ifaddr *ifp)
 		rand_num = net_random() % (idev->cnf.rtr_solicit_delay ? : 1);
 
 	ifp->dad_probes = idev->cnf.dad_transmits;
-	addrconf_mod_dad_timer(ifp, rand_num);
+	addrconf_mod_dad_work(ifp, rand_num);
 }
 
 static void addrconf_dad_begin(struct inet6_ifaddr *ifp)
@@ -3316,19 +3316,46 @@ static void addrconf_dad_work(struct work_struct *w)
 	struct inet6_dev *idev = ifp->idev;
 	struct in6_addr mcaddr;
 
+	enum {
+		DAD_PROCESS,
+		DAD_BEGIN,
+		DAD_ABORT,
+	} action = DAD_PROCESS;
+
+	rtnl_lock();
+
+	spin_lock_bh(&ifp->state_lock);
+	if (ifp->state == INET6_IFADDR_STATE_PREDAD) {
+		action = DAD_BEGIN;
+		ifp->state = INET6_IFADDR_STATE_DAD;
+	} else if (ifp->state == INET6_IFADDR_STATE_ERRDAD) {
+		action = DAD_ABORT;
+		ifp->state = INET6_IFADDR_STATE_POSTDAD;
+	}
+	spin_unlock_bh(&ifp->state_lock);
+
+	if (action == DAD_BEGIN) {
+		addrconf_dad_begin(ifp);
+		goto out;
+	} else if (action == DAD_ABORT) {
+		in6_ifa_hold(ifp);
+		addrconf_dad_stop(ifp, 1);
+		goto out;
+	}
+
 	if (!ifp->dad_probes && addrconf_dad_end(ifp))
 		goto out;
 
-	write_lock(&idev->lock);
+	write_lock_bh(&idev->lock);
 	if (idev->dead || !(idev->if_flags & IF_READY)) {
-		write_unlock(&idev->lock);
+		write_unlock_bh(&idev->lock);
 		goto out;
 	}
 
 	spin_lock(&ifp->lock);
 	if (ifp->state == INET6_IFADDR_STATE_DEAD) {
 		spin_unlock(&ifp->lock);
-		write_unlock(&idev->lock);
+		write_unlock_bh(&idev->lock);
 		goto out;
 	}
 
@@ -3339,7 +3366,7 @@ static void addrconf_dad_work(struct work_struct *w)
 
 		ifp->flags &= ~(IFA_F_TENTATIVE|IFA_F_OPTIMISTIC|IFA_F_DADFAILED);
 		spin_unlock(&ifp->lock);
-		write_unlock(&idev->lock);
+		write_unlock_bh(&idev->lock);
 
 		addrconf_dad_completed(ifp);
 
@@ -3347,9 +3374,9 @@ static void addrconf_dad_work(struct work_struct *w)
 	}
 
 	ifp->dad_probes--;
-	addrconf_mod_dad_timer(ifp, ifp->idev->nd_parms->retrans_time);
+	addrconf_mod_dad_work(ifp, ifp->idev->nd_parms->retrans_time);
 	spin_unlock(&ifp->lock);
-	write_unlock(&idev->lock);
+	write_unlock_bh(&idev->lock);
 
 	/* send a neighbour solicitation for our addr */
 	addrconf_addr_solict_mult(&ifp->addr, &mcaddr);
@@ -3365,7 +3392,7 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 	struct in6_addr lladdr;
 	bool send_rs, send_mld;
 
-	addrconf_del_dad_timer(ifp);
+	addrconf_del_dad_work(ifp);
 
 	/*
 	 *	Configure the address for reception. Now it is valid.
