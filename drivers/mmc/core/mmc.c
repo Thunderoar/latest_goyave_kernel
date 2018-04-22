@@ -330,12 +330,9 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	}
 
 	card->ext_csd.rev = ext_csd[EXT_CSD_REV];
-	if (card->ext_csd.rev > 7) {
-		pr_err("%s: unrecognised EXT_CSD revision %d\n",
-			mmc_hostname(card->host), card->ext_csd.rev);
-		err = -EINVAL;
-		goto out;
-	}
+	if (card->ext_csd.rev > 7) /* Support beyond EXT_CSD revision device of JESD84-B50 */
+		pr_err("%s: EXT_CSD revision is over than 7 (%d)\n",
+				mmc_hostname(card->host), card->ext_csd.rev);
 
 	card->ext_csd.raw_sectors[0] = ext_csd[EXT_CSD_SEC_CNT + 0];
 	card->ext_csd.raw_sectors[1] = ext_csd[EXT_CSD_SEC_CNT + 1];
@@ -1106,9 +1103,11 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	}
 
 	/*
-	 * Enable power_off_notification byte in the ext_csd register
+	 * If the host supports the power_off_notify capability then
+	 * set the notification byte in the ext_csd register of device
 	 */
-	if (card->ext_csd.rev >= 6) {
+	if ((host->caps2 & MMC_CAP2_POWEROFF_NOTIFY) &&
+	    (card->ext_csd.rev >= 6)) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				 EXT_CSD_POWER_OFF_NOTIFICATION,
 				 EXT_CSD_POWER_ON,
@@ -1511,11 +1510,12 @@ static void mmc_detect(struct mmc_host *host)
 	}
 }
 
-static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
+/*
+ * Suspend callback from host.
+ */
+static int mmc_suspend(struct mmc_host *host)
 {
 	int err = 0;
-	unsigned int notify_type = is_suspend ? EXT_CSD_POWER_OFF_SHORT :
-					EXT_CSD_POWER_OFF_LONG;
 
 	BUG_ON(!host);
 	BUG_ON(!host->card);
@@ -1526,11 +1526,10 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	if (err)
 		goto out;
 
-	if (mmc_can_poweroff_notify(host->card) &&
-		((host->caps2 & MMC_CAP2_FULL_PWR_CYCLE) || !is_suspend))
-		err = mmc_poweroff_notify(host->card, notify_type);
-	else if (mmc_can_sleep(host->card))
-		err = mmc_sleep(host);
+	if (mmc_can_poweroff_notify(host->card))
+		err = mmc_poweroff_notify(host->card, EXT_CSD_POWER_OFF_SHORT);
+	else if (mmc_card_can_sleep(host))
+		err = mmc_card_sleep(host);
 	else if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
 	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
@@ -1538,22 +1537,6 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 out:
 	mmc_release_host(host);
 	return err;
-}
-
-/*
- * Suspend callback from host.
- */
-static int mmc_suspend(struct mmc_host *host)
-{
-	return _mmc_suspend(host, true);
-}
-
-/*
- * Shutdown callback
- */
-static int mmc_shutdown(struct mmc_host *host)
-{
-	return _mmc_suspend(host, false);
 }
 
 /*
@@ -1629,7 +1612,6 @@ static const struct mmc_bus_ops mmc_ops = {
 	.resume = NULL,
 	.power_restore = mmc_power_restore,
 	.alive = mmc_alive,
-	.shutdown = mmc_shutdown,
 };
 
 static const struct mmc_bus_ops mmc_ops_unsafe = {
@@ -1641,7 +1623,6 @@ static const struct mmc_bus_ops mmc_ops_unsafe = {
 	.resume = mmc_resume,
 	.power_restore = mmc_power_restore,
 	.alive = mmc_alive,
-	.shutdown = mmc_shutdown,
 };
 
 static void mmc_attach_bus_ops(struct mmc_host *host)

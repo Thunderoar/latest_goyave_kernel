@@ -1866,7 +1866,7 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	 */
 	if (((ctrl & SDHCI_CTRL_UHS_MASK) == SDHCI_CTRL_UHS_SDR50) &&
 	    (host->flags & SDHCI_SDR50_NEEDS_TUNING ||
-	     host->flags & SDHCI_SDR104_NEEDS_TUNING))
+	     host->flags & SDHCI_HS200_NEEDS_TUNING))
 		requires_tuning_nonuhs = true;
 
 	if (((ctrl & SDHCI_CTRL_UHS_MASK) == SDHCI_CTRL_UHS_SDR104) ||
@@ -2069,7 +2069,8 @@ static void sdhci_card_event(struct mmc_host *mmc)
 	spin_lock_irqsave(&host->lock, flags);
 
 	/* Check host->mrq first in case we are runtime suspended */
-	if (host->mrq && !sdhci_do_get_cd(host)) {
+	if (host->mrq &&
+	    !(sdhci_readl(host, SDHCI_PRESENT_STATE) & SDHCI_CARD_PRESENT)) {
 		pr_err("%s: Card removed during transfer!\n",
 			mmc_hostname(host->mmc));
 		pr_err("%s: Resetting controller.\n",
@@ -2997,13 +2998,9 @@ int sdhci_add_host(struct sdhci_host *host)
 		mmc->caps |= MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25;
 
 	/* SDR104 supports also implies SDR50 support */
-	if (caps[1] & SDHCI_SUPPORT_SDR104) {
+	if (caps[1] & SDHCI_SUPPORT_SDR104)
 		mmc->caps |= MMC_CAP_UHS_SDR104 | MMC_CAP_UHS_SDR50;
-		/* SD3.0: SDR104 is supported so (for eMMC) the caps2
-		 * field can be promoted to support HS200.
-		 */
-		mmc->caps2 |= MMC_CAP2_HS200;
-	} else if (caps[1] & SDHCI_SUPPORT_SDR50)
+	else if (caps[1] & SDHCI_SUPPORT_SDR50)
 		mmc->caps |= MMC_CAP_UHS_SDR50;
 
 	if (caps[1] & SDHCI_SUPPORT_DDR50)
@@ -3013,9 +3010,9 @@ int sdhci_add_host(struct sdhci_host *host)
 	if (caps[1] & SDHCI_USE_SDR50_TUNING)
 		host->flags |= SDHCI_SDR50_NEEDS_TUNING;
 
-	/* Does the host need tuning for SDR104 / HS200? */
+	/* Does the host need tuning for HS200? */
 	if (mmc->caps2 & MMC_CAP2_HS200)
-		host->flags |= SDHCI_SDR104_NEEDS_TUNING;
+		host->flags |= SDHCI_HS200_NEEDS_TUNING;
 
 	/* Driver Type(s) (A, C, D) supported by the host */
 	if (caps[1] & SDHCI_DRIVER_TYPE_A)

@@ -39,7 +39,7 @@
 #include "dw_mmc.h"
 
 /* Common flag combinations */
-#define DW_MCI_DATA_ERROR_FLAGS	(SDMMC_INT_DRTO | SDMMC_INT_DCRC | \
+#define DW_MCI_DATA_ERROR_FLAGS	(SDMMC_INT_DTO | SDMMC_INT_DCRC | \
 				 SDMMC_INT_HTO | SDMMC_INT_SBE  | \
 				 SDMMC_INT_EBE)
 #define DW_MCI_CMD_ERROR_FLAGS	(SDMMC_INT_RTO | SDMMC_INT_RCRC | \
@@ -1093,7 +1093,7 @@ static void dw_mci_tasklet_func(unsigned long priv)
 			status = host->data_status;
 
 			if (status & DW_MCI_DATA_ERROR_FLAGS) {
-				if (status & SDMMC_INT_DRTO) {
+				if (status & SDMMC_INT_DTO) {
 					data->error = -ETIMEDOUT;
 				} else if (status & SDMMC_INT_DCRC) {
 					data->error = -EILSEQ;
@@ -1991,6 +1991,19 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 #endif /* CONFIG_MMC_DW_IDMAC */
 	}
 
+	host->vmmc = devm_regulator_get(mmc_dev(mmc), "vmmc");
+	if (IS_ERR(host->vmmc)) {
+		pr_info("%s: no vmmc regulator found\n", mmc_hostname(mmc));
+		host->vmmc = NULL;
+	} else {
+		ret = regulator_enable(host->vmmc);
+		if (ret) {
+			dev_err(host->dev,
+				"failed to enable regulator: %d\n", ret);
+			goto err_setup_bus;
+		}
+	}
+
 	if (dw_mci_get_cd(mmc))
 		set_bit(DW_MMC_CARD_PRESENT, &slot->flags);
 	else
@@ -2117,7 +2130,6 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	struct device_node *np = dev->of_node;
 	const struct dw_mci_drv_data *drv_data = host->drv_data;
 	int idx, ret;
-	u32 clock_frequency;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata) {
@@ -2143,9 +2155,6 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 				"value of FIFOTH register as default\n");
 
 	of_property_read_u32(np, "card-detect-delay", &pdata->detect_delay_ms);
-
-	if (!of_property_read_u32(np, "clock-frequency", &clock_frequency))
-		pdata->bus_hz = clock_frequency;
 
 	if (drv_data && drv_data->parse_dt) {
 		ret = drv_data->parse_dt(host);
@@ -2204,23 +2213,18 @@ int dw_mci_probe(struct dw_mci *host)
 	host->ciu_clk = devm_clk_get(host->dev, "ciu");
 	if (IS_ERR(host->ciu_clk)) {
 		dev_dbg(host->dev, "ciu clock not available\n");
-		host->bus_hz = host->pdata->bus_hz;
 	} else {
 		ret = clk_prepare_enable(host->ciu_clk);
 		if (ret) {
 			dev_err(host->dev, "failed to enable ciu clock\n");
 			goto err_clk_biu;
 		}
-
-		if (host->pdata->bus_hz) {
-			ret = clk_set_rate(host->ciu_clk, host->pdata->bus_hz);
-			if (ret)
-				dev_warn(host->dev,
-					 "Unable to set bus rate to %ul\n",
-					 host->pdata->bus_hz);
-		}
-		host->bus_hz = clk_get_rate(host->ciu_clk);
 	}
+
+	if (IS_ERR(host->ciu_clk))
+		host->bus_hz = host->pdata->bus_hz;
+	else
+		host->bus_hz = clk_get_rate(host->ciu_clk);
 
 	if (drv_data && drv_data->setup_clock) {
 		ret = drv_data->setup_clock(host);
@@ -2231,29 +2235,11 @@ int dw_mci_probe(struct dw_mci *host)
 		}
 	}
 
-	host->vmmc = devm_regulator_get(host->dev, "vmmc");
-	if (IS_ERR(host->vmmc)) {
-		ret = PTR_ERR(host->vmmc);
-		if (ret == -EPROBE_DEFER)
-			goto err_clk_ciu;
-
-		dev_info(host->dev, "no vmmc regulator found: %d\n", ret);
-		host->vmmc = NULL;
-	} else {
-		ret = regulator_enable(host->vmmc);
-		if (ret) {
-			if (ret != -EPROBE_DEFER)
-				dev_err(host->dev,
-					"regulator_enable fail: %d\n", ret);
-			goto err_clk_ciu;
-		}
-	}
-
 	if (!host->bus_hz) {
 		dev_err(host->dev,
 			"Platform data must supply bus speed\n");
 		ret = -ENODEV;
-		goto err_regulator;
+		goto err_clk_ciu;
 	}
 
 	host->quirks = host->pdata->quirks;
@@ -2400,7 +2386,6 @@ err_dmaunmap:
 	if (host->use_dma && host->dma_ops->exit)
 		host->dma_ops->exit(host);
 
-err_regulator:
 	if (host->vmmc)
 		regulator_disable(host->vmmc);
 

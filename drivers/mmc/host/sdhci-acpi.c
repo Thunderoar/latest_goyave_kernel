@@ -189,10 +189,8 @@ static int sdhci_acpi_add_own_cd(struct device *dev, int gpio,
 		goto out;
 
 	irq = gpio_to_irq(gpio);
-	if (irq < 0) {
-		err = irq;
+	if (irq < 0)
 		goto out_free;
-	}
 
 	flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
 	err = devm_request_irq(dev, irq, sdhci_acpi_sd_cd, flags, "sd_cd", mmc);

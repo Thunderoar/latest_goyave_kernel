@@ -205,7 +205,7 @@ static const struct of_device_id sdhci_tegra_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, sdhci_tegra_dt_match);
 
-static int sdhci_tegra_parse_dt(struct device *dev)
+static void sdhci_tegra_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	struct sdhci_host *host = dev_get_drvdata(dev);
@@ -213,7 +213,7 @@ static int sdhci_tegra_parse_dt(struct device *dev)
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
 
 	tegra_host->power_gpio = of_get_named_gpio(np, "power-gpios", 0);
-	return mmc_of_parse(host->mmc);
+	mmc_of_parse(host->mmc);
 }
 
 static int sdhci_tegra_probe(struct platform_device *pdev)
@@ -231,7 +231,7 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 		return -EINVAL;
 	soc_data = match->data;
 
-	host = sdhci_pltfm_init(pdev, soc_data->pdata, 0);
+	host = sdhci_pltfm_init(pdev, soc_data->pdata);
 	if (IS_ERR(host))
 		return PTR_ERR(host);
 	pltfm_host = sdhci_priv(host);
@@ -245,9 +245,7 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 	tegra_host->soc_data = soc_data;
 	pltfm_host->priv = tegra_host;
 
-	rc = sdhci_tegra_parse_dt(&pdev->dev);
-	if (rc)
-		goto err_parse_dt;
+	sdhci_tegra_parse_dt(&pdev->dev);
 
 	if (gpio_is_valid(tegra_host->power_gpio)) {
 		rc = gpio_request(tegra_host->power_gpio, "sdhci_power");
@@ -281,7 +279,6 @@ err_clk_get:
 	if (gpio_is_valid(tegra_host->power_gpio))
 		gpio_free(tegra_host->power_gpio);
 err_power_req:
-err_parse_dt:
 err_alloc_tegra_host:
 	sdhci_pltfm_free(pdev);
 	return rc;

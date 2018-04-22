@@ -25,7 +25,7 @@
 #include "dw_mmc.h"
 
 int dw_mci_pltfm_register(struct platform_device *pdev,
-			  const struct dw_mci_drv_data *drv_data)
+				const struct dw_mci_drv_data *drv_data)
 {
 	struct dw_mci *host;
 	struct resource	*regs;
@@ -35,6 +35,10 @@ int dw_mci_pltfm_register(struct platform_device *pdev,
 	if (!host)
 		return -ENOMEM;
 
+	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!regs)
+		return -ENXIO;
+
 	host->irq = platform_get_irq(pdev, 0);
 	if (host->irq < 0)
 		return host->irq;
@@ -43,8 +47,6 @@ int dw_mci_pltfm_register(struct platform_device *pdev,
 	host->dev = &pdev->dev;
 	host->irq_flags = 0;
 	host->pdata = pdev->dev.platform_data;
-
-	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	host->regs = devm_ioremap_resource(&pdev->dev, regs);
 	if (IS_ERR(host->regs))
 		return PTR_ERR(host->regs);
@@ -56,7 +58,8 @@ int dw_mci_pltfm_register(struct platform_device *pdev,
 	}
 
 	platform_set_drvdata(pdev, host);
-	return dw_mci_probe(host);
+	ret = dw_mci_probe(host);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(dw_mci_pltfm_register);
 
@@ -80,16 +83,26 @@ EXPORT_SYMBOL_GPL(dw_mci_pltfm_remove);
  */
 static int dw_mci_pltfm_suspend(struct device *dev)
 {
+	int ret;
 	struct dw_mci *host = dev_get_drvdata(dev);
 
-	return dw_mci_suspend(host);
+	ret = dw_mci_suspend(host);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 static int dw_mci_pltfm_resume(struct device *dev)
 {
+	int ret;
 	struct dw_mci *host = dev_get_drvdata(dev);
 
-	return dw_mci_resume(host);
+	ret = dw_mci_resume(host);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 #else
 #define dw_mci_pltfm_suspend	NULL

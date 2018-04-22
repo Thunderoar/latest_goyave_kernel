@@ -122,38 +122,15 @@ static int mmc_bus_remove(struct device *dev)
 	return 0;
 }
 
-static void mmc_bus_shutdown(struct device *dev)
-{
-	struct mmc_driver *drv = to_mmc_driver(dev->driver);
-	struct mmc_card *card = mmc_dev_to_card(dev);
-	struct mmc_host *host = card->host;
-	int ret;
-
-	drv->shutdown(card);
-
-	if (host->bus_ops->shutdown) {
-		ret = host->bus_ops->shutdown(host);
-		if (ret)
-			pr_warn("%s: error %d during shutdown\n",
-				mmc_hostname(host), ret);
-	}
-}
-
 #ifdef CONFIG_PM_SLEEP
 static int mmc_bus_suspend(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = mmc_dev_to_card(dev);
-	struct mmc_host *host = card->host;
-	int ret;
+	int ret = 0;
 
-	if (dev->driver && drv->suspend) {
+	if (dev->driver && drv->suspend)
 		ret = drv->suspend(card);
-		if (ret)
-			return ret;
-	}
-
-	ret = host->bus_ops->suspend(host);
 	return ret;
 }
 
@@ -161,17 +138,10 @@ static int mmc_bus_resume(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = mmc_dev_to_card(dev);
-	struct mmc_host *host = card->host;
-	int ret;
-
-	ret = host->bus_ops->resume(host);
-	if (ret)
-		pr_warn("%s: error %d during resume (card was removed?)\n",
-			mmc_hostname(host), ret);
+	int ret = 0;
 
 	if (dev->driver && drv->resume)
 		ret = drv->resume(card);
-
 	return ret;
 }
 #endif
@@ -194,7 +164,7 @@ static int mmc_runtime_resume(struct device *dev)
 
 static int mmc_runtime_idle(struct device *dev)
 {
-	return 0;
+	return pm_runtime_suspend(dev);
 }
 
 #endif /* !CONFIG_PM_RUNTIME */
@@ -212,7 +182,6 @@ static struct bus_type mmc_bus_type = {
 	.uevent		= mmc_bus_uevent,
 	.probe		= mmc_bus_probe,
 	.remove		= mmc_bus_remove,
-	.shutdown	= mmc_bus_shutdown,
 	.pm		= &mmc_bus_pm_ops,
 };
 
