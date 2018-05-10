@@ -9,9 +9,6 @@
 #include "bcache.h"
 #include "btree.h"
 #include "debug.h"
-#include "writeback.h"
-
-#include <trace/events/bcache.h>
 
 static struct workqueue_struct *dirty_wq;
 
@@ -39,7 +36,7 @@ static void __update_writeback_rate(struct cached_dev *dc)
 
 	int change = 0;
 	int64_t error;
-	int64_t dirty = bcache_dev_sectors_dirty(&dc->disk);
+	int64_t dirty = atomic_long_read(&dc->disk.sectors_dirty);
 	int64_t derivative = dirty - dc->disk.sectors_dirty_last;
 
 	dc->disk.sectors_dirty_last = dirty;
@@ -112,31 +109,6 @@ static bool dirty_pred(struct keybuf *buf, struct bkey *k)
 	return KEY_DIRTY(k);
 }
 
-static bool dirty_full_stripe_pred(struct keybuf *buf, struct bkey *k)
-{
-	uint64_t stripe;
-	unsigned nr_sectors = KEY_SIZE(k);
-	struct cached_dev *dc = container_of(buf, struct cached_dev,
-					     writeback_keys);
-	unsigned stripe_size = 1 << dc->disk.stripe_size_bits;
-
-	if (!KEY_DIRTY(k))
-		return false;
-
-	stripe = KEY_START(k) >> dc->disk.stripe_size_bits;
-	while (1) {
-		if (atomic_read(dc->disk.stripe_sectors_dirty + stripe) !=
-		    stripe_size)
-			return false;
-
-		if (nr_sectors <= stripe_size)
-			return true;
-
-		nr_sectors -= stripe_size;
-		stripe++;
-	}
-}
-
 static void dirty_init(struct keybuf_key *w)
 {
 	struct dirty_io *io = w->private;
@@ -181,22 +153,7 @@ static void refill_dirty(struct closure *cl)
 		searched_from_start = true;
 	}
 
-	if (dc->partial_stripes_expensive) {
-		uint64_t i;
-
-		for (i = 0; i < dc->disk.nr_stripes; i++)
-			if (atomic_read(dc->disk.stripe_sectors_dirty + i) ==
-			    1 << dc->disk.stripe_size_bits)
-				goto full_stripes;
-
-		goto normal_refill;
-full_stripes:
-		bch_refill_keybuf(dc->disk.c, buf, &end,
-				  dirty_full_stripe_pred);
-	} else {
-normal_refill:
-		bch_refill_keybuf(dc->disk.c, buf, &end, dirty_pred);
-	}
+	bch_refill_keybuf(dc->disk.c, buf, &end);
 
 	if (bkey_cmp(&buf->last_scanned, &end) >= 0 && searched_from_start) {
 		/* Searched the entire btree  - delay awhile */
@@ -228,8 +185,10 @@ void bch_writeback_queue(struct cached_dev *dc)
 	}
 }
 
-void bch_writeback_add(struct cached_dev *dc)
+void bch_writeback_add(struct cached_dev *dc, unsigned sectors)
 {
+	atomic_long_add(sectors, &dc->disk.sectors_dirty);
+
 	if (!atomic_read(&dc->has_dirty) &&
 	    !atomic_xchg(&dc->has_dirty, 1)) {
 		atomic_inc(&dc->count);
@@ -245,34 +204,6 @@ void bch_writeback_add(struct cached_dev *dc)
 		if (dc->writeback_percent)
 			schedule_delayed_work(&dc->writeback_rate_update,
 				      dc->writeback_rate_update_seconds * HZ);
-	}
-}
-
-void bcache_dev_sectors_dirty_add(struct cache_set *c, unsigned inode,
-				  uint64_t offset, int nr_sectors)
-{
-	struct bcache_device *d = c->devices[inode];
-	unsigned stripe_size, stripe_offset;
-	uint64_t stripe;
-
-	if (!d)
-		return;
-
-	stripe_size = 1 << d->stripe_size_bits;
-	stripe = offset >> d->stripe_size_bits;
-	stripe_offset = offset & (stripe_size - 1);
-
-	while (nr_sectors) {
-		int s = min_t(unsigned, abs(nr_sectors),
-			      stripe_size - stripe_offset);
-
-		if (nr_sectors < 0)
-			s = -s;
-
-		atomic_add(s, d->stripe_sectors_dirty + stripe);
-		nr_sectors -= s;
-		stripe_offset = 0;
-		stripe++;
 	}
 }
 
@@ -309,11 +240,9 @@ static void write_dirty_finish(struct closure *cl)
 		for (i = 0; i < KEY_PTRS(&w->key); i++)
 			atomic_inc(&PTR_BUCKET(dc->disk.c, &w->key, i)->pin);
 
+		pr_debug("clearing %s", pkey(&w->key));
 		bch_btree_insert(&op, dc->disk.c);
 		closure_sync(&op.cl);
-
-		if (op.insert_collision)
-			trace_bcache_writeback_collision(&w->key);
 
 		atomic_long_inc(op.insert_collision
 				? &dc->disk.c->writeback_keys_failed
@@ -348,6 +277,7 @@ static void write_dirty(struct closure *cl)
 	io->bio.bi_bdev		= io->dc->bdev;
 	io->bio.bi_end_io	= dirty_endio;
 
+	trace_bcache_write_dirty(&io->bio);
 	closure_bio_submit(&io->bio, cl, &io->dc->disk);
 
 	continue_at(cl, write_dirty_finish, system_wq);
@@ -368,6 +298,7 @@ static void read_dirty_submit(struct closure *cl)
 {
 	struct dirty_io *io = container_of(cl, struct dirty_io, cl);
 
+	trace_bcache_read_dirty(&io->bio);
 	closure_bio_submit(&io->bio, cl, &io->dc->disk);
 
 	continue_at(cl, write_dirty, system_wq);
@@ -419,7 +350,7 @@ static void read_dirty(struct closure *cl)
 		if (bch_bio_alloc_pages(&io->bio, GFP_KERNEL))
 			goto err_free;
 
-		trace_bcache_writeback(&w->key);
+		pr_debug("%s", pkey(&w->key));
 
 		down(&dc->in_flight);
 		closure_call(&io->cl, read_dirty_submit, NULL, cl);
@@ -441,50 +372,13 @@ err:
 	continue_at(cl, refill_dirty, dirty_wq);
 }
 
-/* Init */
-
-static int bch_btree_sectors_dirty_init(struct btree *b, struct btree_op *op,
-					struct cached_dev *dc)
-{
-	struct bkey *k;
-	struct btree_iter iter;
-
-	bch_btree_iter_init(b, &iter, &KEY(dc->disk.id, 0, 0));
-	while ((k = bch_btree_iter_next_filter(&iter, b, bch_ptr_bad)))
-		if (!b->level) {
-			if (KEY_INODE(k) > dc->disk.id)
-				break;
-
-			if (KEY_DIRTY(k))
-				bcache_dev_sectors_dirty_add(b->c, dc->disk.id,
-							     KEY_START(k),
-							     KEY_SIZE(k));
-		} else {
-			btree(sectors_dirty_init, k, b, op, dc);
-			if (KEY_INODE(k) > dc->disk.id)
-				break;
-
-			cond_resched();
-		}
-
-	return 0;
-}
-
-void bch_sectors_dirty_init(struct cached_dev *dc)
-{
-	struct btree_op op;
-
-	bch_btree_op_init_stack(&op);
-	btree_root(sectors_dirty_init, dc->disk.c, &op, dc);
-}
-
 void bch_cached_dev_writeback_init(struct cached_dev *dc)
 {
 	sema_init(&dc->in_flight, 64);
 	closure_init_unlocked(&dc->writeback);
 	init_rwsem(&dc->writeback_lock);
 
-	bch_keybuf_init(&dc->writeback_keys);
+	bch_keybuf_init(&dc->writeback_keys, dirty_pred);
 
 	dc->writeback_metadata		= true;
 	dc->writeback_running		= true;

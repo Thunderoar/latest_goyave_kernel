@@ -96,8 +96,13 @@ typedef unsigned long pgtable_t;
 
 #define virt_addr_valid(kaddr)  pfn_valid(__pa(kaddr) >> PAGE_SHIFT)
 
-/* Default Permissions for stack/heaps pages (Non Executable) */
+/* Default Permissions for page, used in mmap.c */
+#ifdef CONFIG_ARC_STACK_NONEXEC
 #define VM_DATA_DEFAULT_FLAGS   (VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE)
+#else
+#define VM_DATA_DEFAULT_FLAGS   (VM_READ | VM_WRITE | VM_EXEC | \
+				 VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC)
+#endif
 
 #define WANT_PAGE_VIRTUAL   1
 

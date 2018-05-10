@@ -24,7 +24,6 @@ struct pt_regs
 	unsigned long gprs[NUM_GPRS];
 	unsigned long orig_gpr2;
 	unsigned int int_code;
-	unsigned int int_parm;
 	unsigned long int_parm_long;
 };
 

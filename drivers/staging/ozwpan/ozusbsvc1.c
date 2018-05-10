@@ -22,6 +22,7 @@
 #include "ozhcd.h"
 #include "oztrace.h"
 #include "ozusbsvc.h"
+#include "ozevent.h"
 /*------------------------------------------------------------------------------
  */
 #define MAX_ISOC_FIXED_DATA	(253-sizeof(struct oz_isoc_fixed))
@@ -189,6 +190,10 @@ int oz_usb_control_req(void *hpd, u8 req_id, struct usb_ctrlrequest *setup,
 	unsigned windex = le16_to_cpu(setup->wIndex);
 	unsigned wlength = le16_to_cpu(setup->wLength);
 	int rc = 0;
+	oz_event_log(OZ_EVT_CTRL_REQ, setup->bRequest, req_id,
+		(void *)(((unsigned long)(setup->wValue))<<16 |
+			((unsigned long)setup->wIndex)),
+		setup->bRequestType);
 	if ((setup->bRequestType & USB_TYPE_MASK) == USB_TYPE_STANDARD) {
 		switch (setup->bRequest) {
 		case USB_REQ_GET_DESCRIPTOR:
@@ -309,11 +314,7 @@ static void oz_usb_handle_ep_data(struct oz_usb_ctx *usb_ctx,
 			struct oz_multiple_fixed *body =
 				(struct oz_multiple_fixed *)data_hdr;
 			u8 *data = body->data;
-			unsigned int n;
-			if (!body->unit_size ||
-				len < sizeof(struct oz_multiple_fixed) - 1)
-				break;
-			n = (len - (sizeof(struct oz_multiple_fixed) - 1))
+			int n = (len - sizeof(struct oz_multiple_fixed)+1)
 				/ body->unit_size;
 			while (n--) {
 				oz_hcd_data_ind(usb_ctx->hport, body->endpoint,
@@ -375,15 +376,10 @@ void oz_usb_rx(struct oz_pd *pd, struct oz_elt *elt)
 	case OZ_GET_DESC_RSP: {
 			struct oz_get_desc_rsp *body =
 				(struct oz_get_desc_rsp *)usb_hdr;
-			u16 offs, total_size;
-			u8 data_len;
-
-			if (elt->length < sizeof(struct oz_get_desc_rsp) - 1)
-				break;
-			data_len = elt->length -
-					(sizeof(struct oz_get_desc_rsp) - 1);
-			offs = le16_to_cpu(get_unaligned(&body->offset));
-			total_size =
+			int data_len = elt->length -
+					sizeof(struct oz_get_desc_rsp) + 1;
+			u16 offs = le16_to_cpu(get_unaligned(&body->offset));
+			u16 total_size =
 				le16_to_cpu(get_unaligned(&body->total_size));
 			oz_trace("USB_REQ_GET_DESCRIPTOR - cnf\n");
 			oz_hcd_get_desc_cnf(usb_ctx->hport, body->req_id,

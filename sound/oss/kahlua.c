@@ -178,6 +178,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 
 err_out_free:
+	pci_set_drvdata(pdev, NULL);
 	kfree(hw_config);
 	return 1;
 }
@@ -186,6 +187,7 @@ static void remove_one(struct pci_dev *pdev)
 {
 	struct address_info *hw_config = pci_get_drvdata(pdev);
 	sb_dsp_unload(hw_config, 0);
+	pci_set_drvdata(pdev, NULL);
 	kfree(hw_config);
 }
 

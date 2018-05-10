@@ -38,6 +38,7 @@
 #include <linux/v4l2-dv-timings.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>
+#include <media/v4l2-chip-ident.h>
 #include <media/adv7604.h>
 
 static int debug;
@@ -642,6 +643,12 @@ static void adv7604_inv_register(struct v4l2_subdev *sd)
 static int adv7604_g_register(struct v4l2_subdev *sd,
 					struct v4l2_dbg_register *reg)
 {
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+
+	if (!v4l2_chip_match_i2c_client(client, &reg->match))
+		return -EINVAL;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 	reg->size = 1;
 	switch (reg->reg >> 8) {
 	case 0:
@@ -694,6 +701,12 @@ static int adv7604_g_register(struct v4l2_subdev *sd,
 static int adv7604_s_register(struct v4l2_subdev *sd,
 					const struct v4l2_dbg_register *reg)
 {
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+
+	if (!v4l2_chip_match_i2c_client(client, &reg->match))
+		return -EINVAL;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 	switch (reg->reg >> 8) {
 	case 0:
 		io_write(sd, reg->reg & 0xff, reg->val & 0xff);
@@ -969,6 +982,14 @@ static int adv7604_s_ctrl(struct v4l2_ctrl *ctrl)
 		return 0;
 	}
 	return -EINVAL;
+}
+
+static int adv7604_g_chip_ident(struct v4l2_subdev *sd,
+					struct v4l2_dbg_chip_ident *chip)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+
+	return v4l2_chip_ident_i2c_client(client, chip, V4L2_IDENT_ADV7604, 0);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -1766,6 +1787,7 @@ static const struct v4l2_subdev_core_ops adv7604_core_ops = {
 	.s_ctrl = v4l2_subdev_s_ctrl,
 	.queryctrl = v4l2_subdev_queryctrl,
 	.querymenu = v4l2_subdev_querymenu,
+	.g_chip_ident = adv7604_g_chip_ident,
 	.interrupt_service_routine = adv7604_isr,
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 	.g_register = adv7604_g_register,
@@ -1946,7 +1968,7 @@ static int adv7604_probe(struct i2c_client *client,
 	v4l_dbg(1, debug, client, "detecting adv7604 client on address 0x%x\n",
 			client->addr << 1);
 
-	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
+	state = kzalloc(sizeof(struct adv7604_state), GFP_KERNEL);
 	if (!state) {
 		v4l_err(client, "Could not allocate adv7604_state memory!\n");
 		return -ENOMEM;
@@ -1955,7 +1977,8 @@ static int adv7604_probe(struct i2c_client *client,
 	/* platform data */
 	if (!pdata) {
 		v4l_err(client, "No platform data!\n");
-		return -ENODEV;
+		err = -ENODEV;
+		goto err_state;
 	}
 	memcpy(&state->pdata, pdata, sizeof(state->pdata));
 
@@ -1968,7 +1991,8 @@ static int adv7604_probe(struct i2c_client *client,
 	if (adv_smbus_read_byte_data_check(client, 0xfb, false) != 0x68) {
 		v4l2_info(sd, "not an adv7604 on address 0x%x\n",
 				client->addr << 1);
-		return -ENODEV;
+		err = -ENODEV;
+		goto err_state;
 	}
 
 	/* control handlers */
@@ -2069,6 +2093,8 @@ err_i2c:
 	adv7604_unregister_clients(state);
 err_hdl:
 	v4l2_ctrl_handler_free(hdl);
+err_state:
+	kfree(state);
 	return err;
 }
 
@@ -2085,6 +2111,7 @@ static int adv7604_remove(struct i2c_client *client)
 	media_entity_cleanup(&sd->entity);
 	adv7604_unregister_clients(to_state(sd));
 	v4l2_ctrl_handler_free(sd->ctrl_handler);
+	kfree(to_state(sd));
 	return 0;
 }
 

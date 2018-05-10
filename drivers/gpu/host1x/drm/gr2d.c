@@ -84,7 +84,7 @@ static struct host1x_bo *host1x_bo_lookup(struct drm_device *drm,
 
 	gem = drm_gem_object_lookup(drm, file, handle);
 	if (!gem)
-		return NULL;
+		return 0;
 
 	mutex_lock(&drm->struct_mutex);
 	drm_gem_object_unreference(gem);
@@ -135,10 +135,8 @@ static int gr2d_submit(struct host1x_drm_context *context,
 			goto fail;
 
 		bo = host1x_bo_lookup(drm, file, cmdbuf.handle);
-		if (!bo) {
-			err = -ENOENT;
+		if (!bo)
 			goto fail;
-		}
 
 		host1x_job_add_gather(job, bo, cmdbuf.words, cmdbuf.offset);
 		num_cmdbufs--;
@@ -160,10 +158,8 @@ static int gr2d_submit(struct host1x_drm_context *context,
 		reloc->cmdbuf = cmdbuf;
 		reloc->target = target;
 
-		if (!reloc->target || !reloc->cmdbuf) {
-			err = -ENOENT;
+		if (!reloc->target || !reloc->cmdbuf)
 			goto fail;
-		}
 	}
 
 	err = copy_from_user(job->waitchk, waitchks,
@@ -285,7 +281,7 @@ static int gr2d_probe(struct platform_device *pdev)
 	if (!gr2d->channel)
 		return -ENOMEM;
 
-	*syncpts = host1x_syncpt_request(dev, false);
+	*syncpts = host1x_syncpt_request(dev, 0);
 	if (!(*syncpts)) {
 		host1x_channel_free(gr2d->channel);
 		return -ENOMEM;

@@ -2035,6 +2035,7 @@ static int abx500_chargalg_remove(struct platform_device *pdev)
 	destroy_workqueue(di->chargalg_wq);
 
 	power_supply_unregister(&di->chargalg_psy);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

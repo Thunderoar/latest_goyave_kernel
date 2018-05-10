@@ -27,5 +27,3 @@ obj-$(CONFIG_INTEL_POWERCLAMP)	+= intel_powerclamp.o
 # Added for different sprd thm
 obj-$(CONFIG_THERMAL_SC2713S)		+= sprd_thm.o sprd_2713s_thm.o
 obj-$(CONFIG_THERMAL_SC2713)		+= sprd_thm.o sprd_2713_thm.o
-obj-$(CONFIG_TI_SOC_THERMAL)	+= ti-soc-thermal/
-obj-$(CONFIG_X86_PKG_TEMP_THERMAL)	+= x86_pkg_temp_thermal.o

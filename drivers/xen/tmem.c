@@ -5,8 +5,6 @@
  * Author: Dan Magenheimer
  */
 
-#define pr_fmt(fmt) "xen:" KBUILD_MODNAME ": " fmt
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -390,8 +388,8 @@ static int xen_tmem_init(void)
 				return PTR_ERR(old_ops);
 			s = " (WARNING: frontswap_ops overridden)";
 		}
-		pr_info("frontswap enabled, RAM provided by Xen Transcendent Memory%s\n",
-			s);
+		printk(KERN_INFO "frontswap enabled, RAM provided by "
+				 "Xen Transcendent Memory%s\n", s);
 	}
 #endif
 #ifdef CONFIG_CLEANCACHE
@@ -402,8 +400,8 @@ static int xen_tmem_init(void)
 			cleancache_register_ops(&tmem_cleancache_ops);
 		if (old_ops)
 			s = " (WARNING: cleancache_ops overridden)";
-		pr_info("cleancache enabled, RAM provided by Xen Transcendent Memory%s\n",
-			s);
+		printk(KERN_INFO "cleancache enabled, RAM provided by "
+				 "Xen Transcendent Memory%s\n", s);
 	}
 #endif
 #ifdef CONFIG_XEN_SELFBALLOONING

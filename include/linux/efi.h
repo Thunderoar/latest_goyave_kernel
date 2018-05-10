@@ -287,20 +287,20 @@ typedef struct {
 
 typedef struct {
 	efi_table_hdr_t hdr;
-	void *get_time;
-	void *set_time;
-	void *get_wakeup_time;
-	void *set_wakeup_time;
-	void *set_virtual_address_map;
-	void *convert_pointer;
-	void *get_variable;
-	void *get_next_variable;
-	void *set_variable;
-	void *get_next_high_mono_count;
-	void *reset_system;
-	void *update_capsule;
-	void *query_capsule_caps;
-	void *query_variable_info;
+	unsigned long get_time;
+	unsigned long set_time;
+	unsigned long get_wakeup_time;
+	unsigned long set_wakeup_time;
+	unsigned long set_virtual_address_map;
+	unsigned long convert_pointer;
+	unsigned long get_variable;
+	unsigned long get_next_variable;
+	unsigned long set_variable;
+	unsigned long get_next_high_mono_count;
+	unsigned long reset_system;
+	unsigned long update_capsule;
+	unsigned long query_capsule_caps;
+	unsigned long query_variable_info;
 } efi_runtime_services_t;
 
 typedef efi_status_t efi_get_time_t (efi_time_t *tm, efi_time_cap_t *tc);
@@ -594,8 +594,8 @@ extern u64 efi_mem_attribute (unsigned long phys_addr, unsigned long size);
 extern int __init efi_uart_console_only (void);
 extern void efi_initialize_iomem_resources(struct resource *code_resource,
 		struct resource *data_resource, struct resource *bss_resource);
-extern void efi_get_time(struct timespec *now);
-extern int efi_set_rtc_mmss(const struct timespec *now);
+extern unsigned long efi_get_time(void);
+extern int efi_set_rtc_mmss(unsigned long nowtime);
 extern void efi_reserve_boot_services(void);
 extern struct efi_memory_map memmap;
 
@@ -769,10 +769,8 @@ struct efivars {
  * and we use a page for reading/writing.
  */
 
-#define EFI_VAR_NAME_LEN	1024
-
 struct efi_variable {
-	efi_char16_t  VariableName[EFI_VAR_NAME_LEN/sizeof(efi_char16_t)];
+	efi_char16_t  VariableName[1024/sizeof(efi_char16_t)];
 	efi_guid_t    VendorGuid;
 	unsigned long DataSize;
 	__u8          Data[1024];
@@ -834,10 +832,7 @@ int efivar_entry_iter(int (*func)(struct efivar_entry *, void *),
 struct efivar_entry *efivar_entry_find(efi_char16_t *name, efi_guid_t guid,
 				       struct list_head *head, bool remove);
 
-bool efivar_validate(efi_guid_t vendor, efi_char16_t *var_name, u8 *data,
-		     unsigned long data_size);
-bool efivar_variable_is_removable(efi_guid_t vendor, const char *name,
-				  size_t len);
+bool efivar_validate(struct efi_variable *var, u8 *data, unsigned long len);
 
 extern struct work_struct efivar_work;
 void efivar_run_worker(void);

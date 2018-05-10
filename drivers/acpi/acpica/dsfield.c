@@ -360,7 +360,6 @@ acpi_ds_get_field_names(struct acpi_create_field_info *info,
 			 */
 			info->resource_buffer = NULL;
 			info->connection_node = NULL;
-			info->pin_number_index = 0;
 
 			/*
 			 * A Connection() is either an actual resource descriptor (buffer)
@@ -438,7 +437,6 @@ acpi_ds_get_field_names(struct acpi_create_field_info *info,
 			}
 
 			info->field_bit_position += info->field_bit_length;
-			info->pin_number_index++;	/* Index relative to previous Connection() */
 			break;
 
 		default:
@@ -565,25 +563,21 @@ acpi_ds_init_field_objects(union acpi_parse_object *op,
 	 */
 	switch (walk_state->opcode) {
 	case AML_FIELD_OP:
-
 		arg = acpi_ps_get_arg(op, 2);
 		type = ACPI_TYPE_LOCAL_REGION_FIELD;
 		break;
 
 	case AML_BANK_FIELD_OP:
-
 		arg = acpi_ps_get_arg(op, 4);
 		type = ACPI_TYPE_LOCAL_BANK_FIELD;
 		break;
 
 	case AML_INDEX_FIELD_OP:
-
 		arg = acpi_ps_get_arg(op, 3);
 		type = ACPI_TYPE_LOCAL_INDEX_FIELD;
 		break;
 
 	default:
-
 		return_ACPI_STATUS(AE_BAD_PARAMETER);
 	}
 

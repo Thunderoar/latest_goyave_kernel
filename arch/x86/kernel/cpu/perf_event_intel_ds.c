@@ -50,8 +50,7 @@ union intel_x86_pebs_dse {
 #define OP_LH (P(OP, LOAD) | P(LVL, HIT))
 #define SNOOP_NONE_MISS (P(SNOOP, NONE) | P(SNOOP, MISS))
 
-/* Version for Sandy Bridge and later */
-static u64 pebs_data_source[] = {
+static const u64 pebs_data_source[] = {
 	P(OP, LOAD) | P(LVL, MISS) | P(LVL, L3) | P(SNOOP, NA),/* 0x00:ukn L3 */
 	OP_LH | P(LVL, L1)  | P(SNOOP, NONE),	/* 0x01: L1 local */
 	OP_LH | P(LVL, LFB) | P(SNOOP, NONE),	/* 0x02: LFB hit */
@@ -69,14 +68,6 @@ static u64 pebs_data_source[] = {
 	OP_LH | P(LVL, IO)  | P(SNOOP, NONE), /* 0x0e: I/O */
 	OP_LH | P(LVL, UNC) | P(SNOOP, NONE), /* 0x0f: uncached */
 };
-
-/* Patch up minor differences in the bits */
-void __init intel_pmu_pebs_data_source_nhm(void)
-{
-	pebs_data_source[0x05] = OP_LH | P(LVL, L3)  | P(SNOOP, HIT);
-	pebs_data_source[0x06] = OP_LH | P(LVL, L3)  | P(SNOOP, HITM);
-	pebs_data_source[0x07] = OP_LH | P(LVL, L3)  | P(SNOOP, HITM);
-}
 
 static u64 precise_store_data(u64 status)
 {
@@ -114,19 +105,6 @@ static u64 precise_store_data(u64 status)
 		val |= P(LOCK, LOCKED);
 
 	return val;
-}
-
-static u64 precise_store_data_hsw(u64 status)
-{
-	union perf_mem_data_src dse;
-
-	dse.val = 0;
-	dse.mem_op = PERF_MEM_OP_STORE;
-	dse.mem_lvl = PERF_MEM_LVL_NA;
-	if (status & 1)
-		dse.mem_lvl = PERF_MEM_LVL_L1;
-	/* Nothing else supported. Sorry. */
-	return dse.val;
 }
 
 static u64 load_latency_data(u64 status)
@@ -185,22 +163,6 @@ struct pebs_record_nhm {
 	u64 r8,  r9,  r10, r11;
 	u64 r12, r13, r14, r15;
 	u64 status, dla, dse, lat;
-};
-
-/*
- * Same as pebs_record_nhm, with two additional fields.
- */
-struct pebs_record_hsw {
-	struct pebs_record_nhm nhm;
-	/*
-	 * Real IP of the event. In the Intel documentation this
-	 * is called eventingrip.
-	 */
-	u64 real_ip;
-	/*
-	 * TSX tuning information field: abort cycles and abort flags.
-	 */
-	u64 tsx_tuning;
 };
 
 void init_debug_store_on_cpu(int cpu)
@@ -586,42 +548,6 @@ struct event_constraint intel_ivb_pebs_event_constraints[] = {
         EVENT_CONSTRAINT_END
 };
 
-struct event_constraint intel_hsw_pebs_event_constraints[] = {
-	INTEL_UEVENT_CONSTRAINT(0x01c0, 0x2), /* INST_RETIRED.PRECDIST */
-	INTEL_PST_HSW_CONSTRAINT(0x01c2, 0xf), /* UOPS_RETIRED.ALL */
-	INTEL_UEVENT_CONSTRAINT(0x02c2, 0xf), /* UOPS_RETIRED.RETIRE_SLOTS */
-	INTEL_EVENT_CONSTRAINT(0xc4, 0xf),    /* BR_INST_RETIRED.* */
-	INTEL_UEVENT_CONSTRAINT(0x01c5, 0xf), /* BR_MISP_RETIRED.CONDITIONAL */
-	INTEL_UEVENT_CONSTRAINT(0x04c5, 0xf), /* BR_MISP_RETIRED.ALL_BRANCHES */
-	INTEL_UEVENT_CONSTRAINT(0x20c5, 0xf), /* BR_MISP_RETIRED.NEAR_TAKEN */
-	INTEL_PLD_CONSTRAINT(0x01cd, 0x8),    /* MEM_TRANS_RETIRED.* */
-	/* MEM_UOPS_RETIRED.STLB_MISS_LOADS */
-	INTEL_UEVENT_CONSTRAINT(0x11d0, 0xf),
-	/* MEM_UOPS_RETIRED.STLB_MISS_STORES */
-	INTEL_UEVENT_CONSTRAINT(0x12d0, 0xf),
-	INTEL_UEVENT_CONSTRAINT(0x21d0, 0xf), /* MEM_UOPS_RETIRED.LOCK_LOADS */
-	INTEL_UEVENT_CONSTRAINT(0x41d0, 0xf), /* MEM_UOPS_RETIRED.SPLIT_LOADS */
-	/* MEM_UOPS_RETIRED.SPLIT_STORES */
-	INTEL_UEVENT_CONSTRAINT(0x42d0, 0xf),
-	INTEL_UEVENT_CONSTRAINT(0x81d0, 0xf), /* MEM_UOPS_RETIRED.ALL_LOADS */
-	INTEL_PST_HSW_CONSTRAINT(0x82d0, 0xf), /* MEM_UOPS_RETIRED.ALL_STORES */
-	INTEL_UEVENT_CONSTRAINT(0x01d1, 0xf), /* MEM_LOAD_UOPS_RETIRED.L1_HIT */
-	INTEL_UEVENT_CONSTRAINT(0x02d1, 0xf), /* MEM_LOAD_UOPS_RETIRED.L2_HIT */
-	INTEL_UEVENT_CONSTRAINT(0x04d1, 0xf), /* MEM_LOAD_UOPS_RETIRED.L3_HIT */
-	/* MEM_LOAD_UOPS_RETIRED.HIT_LFB */
-	INTEL_UEVENT_CONSTRAINT(0x40d1, 0xf),
-	/* MEM_LOAD_UOPS_LLC_HIT_RETIRED.XSNP_MISS */
-	INTEL_UEVENT_CONSTRAINT(0x01d2, 0xf),
-	/* MEM_LOAD_UOPS_LLC_HIT_RETIRED.XSNP_HIT */
-	INTEL_UEVENT_CONSTRAINT(0x02d2, 0xf),
-	/* MEM_LOAD_UOPS_LLC_MISS_RETIRED.LOCAL_DRAM */
-	INTEL_UEVENT_CONSTRAINT(0x01d3, 0xf),
-	INTEL_UEVENT_CONSTRAINT(0x04c8, 0xf), /* HLE_RETIRED.Abort */
-	INTEL_UEVENT_CONSTRAINT(0x04c9, 0xf), /* RTM_RETIRED.Abort */
-
-	EVENT_CONSTRAINT_END
-};
-
 struct event_constraint *intel_pebs_constraints(struct perf_event *event)
 {
 	struct event_constraint *c;
@@ -662,12 +588,6 @@ void intel_pmu_pebs_disable(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 
 	cpuc->pebs_enabled &= ~(1ULL << hwc->idx);
-
-	if (event->hw.constraint->flags & PERF_X86_EVENT_PEBS_LDLAT)
-		cpuc->pebs_enabled &= ~(1ULL << (hwc->idx + 32));
-	else if (event->hw.constraint->flags & PERF_X86_EVENT_PEBS_ST)
-		cpuc->pebs_enabled &= ~(1ULL << 63);
-
 	if (cpuc->enabled)
 		wrmsrl(MSR_IA32_PEBS_ENABLE, cpuc->pebs_enabled);
 
@@ -777,7 +697,6 @@ static void __intel_pmu_pebs_event(struct perf_event *event,
 	 */
 	struct cpu_hw_events *cpuc = &__get_cpu_var(cpu_hw_events);
 	struct pebs_record_nhm *pebs = __pebs;
-	struct pebs_record_hsw *pebs_hsw = __pebs;
 	struct perf_sample_data data;
 	struct pt_regs regs;
 	u64 sample_type;
@@ -787,8 +706,7 @@ static void __intel_pmu_pebs_event(struct perf_event *event,
 		return;
 
 	fll = event->hw.flags & PERF_X86_EVENT_PEBS_LDLAT;
-	fst = event->hw.flags & (PERF_X86_EVENT_PEBS_ST |
-				 PERF_X86_EVENT_PEBS_ST_HSW);
+	fst = event->hw.flags & PERF_X86_EVENT_PEBS_ST;
 
 	perf_sample_data_init(&data, 0, event->hw.last_period);
 
@@ -799,6 +717,9 @@ static void __intel_pmu_pebs_event(struct perf_event *event,
 	 * if PEBS-LL or PreciseStore
 	 */
 	if (fll || fst) {
+		if (sample_type & PERF_SAMPLE_ADDR)
+			data.addr = pebs->dla;
+
 		/*
 		 * Use latency for weight (only avail with PEBS-LL)
 		 */
@@ -811,9 +732,6 @@ static void __intel_pmu_pebs_event(struct perf_event *event,
 		if (sample_type & PERF_SAMPLE_DATA_SRC) {
 			if (fll)
 				data.data_src.val = load_latency_data(pebs->dse);
-			else if (event->hw.flags & PERF_X86_EVENT_PEBS_ST_HSW)
-				data.data_src.val =
-					precise_store_data_hsw(pebs->dse);
 			else
 				data.data_src.val = precise_store_data(pebs->dse);
 		}
@@ -835,17 +753,10 @@ static void __intel_pmu_pebs_event(struct perf_event *event,
 	regs.bp = pebs->bp;
 	regs.sp = pebs->sp;
 
-	if (event->attr.precise_ip > 1 && x86_pmu.intel_cap.pebs_format >= 2) {
-		regs.ip = pebs_hsw->real_ip;
-		regs.flags |= PERF_EFLAGS_EXACT;
-	} else if (event->attr.precise_ip > 1 && intel_pmu_pebs_fixup_ip(&regs))
+	if (event->attr.precise_ip > 1 && intel_pmu_pebs_fixup_ip(&regs))
 		regs.flags |= PERF_EFLAGS_EXACT;
 	else
 		regs.flags &= ~PERF_EFLAGS_EXACT;
-
-	if ((event->attr.sample_type & PERF_SAMPLE_ADDR) &&
-		x86_pmu.intel_cap.pebs_format >= 1)
-		data.addr = pebs->dla;
 
 	if (has_branch_stack(event))
 		data.br_stack = &cpuc->lbr_stack;
@@ -895,22 +806,35 @@ static void intel_pmu_drain_pebs_core(struct pt_regs *iregs)
 	__intel_pmu_pebs_event(event, iregs, at);
 }
 
-static void __intel_pmu_drain_pebs_nhm(struct pt_regs *iregs, void *at,
-					void *top)
+static void intel_pmu_drain_pebs_nhm(struct pt_regs *iregs)
 {
 	struct cpu_hw_events *cpuc = &__get_cpu_var(cpu_hw_events);
 	struct debug_store *ds = cpuc->ds;
+	struct pebs_record_nhm *at, *top;
 	struct perf_event *event = NULL;
 	u64 status = 0;
-	int bit;
+	int bit, n;
+
+	if (!x86_pmu.pebs_active)
+		return;
+
+	at  = (struct pebs_record_nhm *)(unsigned long)ds->pebs_buffer_base;
+	top = (struct pebs_record_nhm *)(unsigned long)ds->pebs_index;
 
 	ds->pebs_index = ds->pebs_buffer_base;
 
-	for (; at < top; at += x86_pmu.pebs_record_size) {
-		struct pebs_record_nhm *p = at;
+	n = top - at;
+	if (n <= 0)
+		return;
 
-		for_each_set_bit(bit, (unsigned long *)&p->status,
-				 x86_pmu.max_pebs_events) {
+	/*
+	 * Should not happen, we program the threshold at 1 and do not
+	 * set a reset value.
+	 */
+	WARN_ONCE(n > x86_pmu.max_pebs_events, "Unexpected number of pebs records %d\n", n);
+
+	for ( ; at < top; at++) {
+		for_each_set_bit(bit, (unsigned long *)&at->status, x86_pmu.max_pebs_events) {
 			event = cpuc->events[bit];
 			if (!test_bit(bit, cpuc->active_mask))
 				continue;
@@ -931,61 +855,6 @@ static void __intel_pmu_drain_pebs_nhm(struct pt_regs *iregs, void *at,
 
 		__intel_pmu_pebs_event(event, iregs, at);
 	}
-}
-
-static void intel_pmu_drain_pebs_nhm(struct pt_regs *iregs)
-{
-	struct cpu_hw_events *cpuc = &__get_cpu_var(cpu_hw_events);
-	struct debug_store *ds = cpuc->ds;
-	struct pebs_record_nhm *at, *top;
-	int n;
-
-	if (!x86_pmu.pebs_active)
-		return;
-
-	at  = (struct pebs_record_nhm *)(unsigned long)ds->pebs_buffer_base;
-	top = (struct pebs_record_nhm *)(unsigned long)ds->pebs_index;
-
-	ds->pebs_index = ds->pebs_buffer_base;
-
-	n = top - at;
-	if (n <= 0)
-		return;
-
-	/*
-	 * Should not happen, we program the threshold at 1 and do not
-	 * set a reset value.
-	 */
-	WARN_ONCE(n > x86_pmu.max_pebs_events,
-		  "Unexpected number of pebs records %d\n", n);
-
-	return __intel_pmu_drain_pebs_nhm(iregs, at, top);
-}
-
-static void intel_pmu_drain_pebs_hsw(struct pt_regs *iregs)
-{
-	struct cpu_hw_events *cpuc = &__get_cpu_var(cpu_hw_events);
-	struct debug_store *ds = cpuc->ds;
-	struct pebs_record_hsw *at, *top;
-	int n;
-
-	if (!x86_pmu.pebs_active)
-		return;
-
-	at  = (struct pebs_record_hsw *)(unsigned long)ds->pebs_buffer_base;
-	top = (struct pebs_record_hsw *)(unsigned long)ds->pebs_index;
-
-	n = top - at;
-	if (n <= 0)
-		return;
-	/*
-	 * Should not happen, we program the threshold at 1 and do not
-	 * set a reset value.
-	 */
-	WARN_ONCE(n > x86_pmu.max_pebs_events,
-		  "Unexpected number of pebs records %d\n", n);
-
-	return __intel_pmu_drain_pebs_nhm(iregs, at, top);
 }
 
 /*
@@ -1017,12 +886,6 @@ void intel_ds_init(void)
 			printk(KERN_CONT "PEBS fmt1%c, ", pebs_type);
 			x86_pmu.pebs_record_size = sizeof(struct pebs_record_nhm);
 			x86_pmu.drain_pebs = intel_pmu_drain_pebs_nhm;
-			break;
-
-		case 2:
-			pr_cont("PEBS fmt2%c, ", pebs_type);
-			x86_pmu.pebs_record_size = sizeof(struct pebs_record_hsw);
-			x86_pmu.drain_pebs = intel_pmu_drain_pebs_hsw;
 			break;
 
 		default:

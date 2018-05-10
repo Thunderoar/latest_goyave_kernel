@@ -446,19 +446,7 @@ static u32 tcm_vhost_tpg_get_inst_index(struct se_portal_group *se_tpg)
 
 static void tcm_vhost_release_cmd(struct se_cmd *se_cmd)
 {
-	struct tcm_vhost_cmd *tv_cmd = container_of(se_cmd,
-				struct tcm_vhost_cmd, tvc_se_cmd);
-
-	if (tv_cmd->tvc_sgl_count) {
-		u32 i;
-		for (i = 0; i < tv_cmd->tvc_sgl_count; i++)
-			put_page(sg_page(&tv_cmd->tvc_sgl[i]));
-
-		kfree(tv_cmd->tvc_sgl);
-        }
-
-	tcm_vhost_put_inflight(tv_cmd->inflight);
-	kfree(tv_cmd);
+	return;
 }
 
 static int tcm_vhost_shutdown_session(struct se_session *se_sess)
@@ -569,13 +557,19 @@ static void vhost_scsi_free_cmd(struct tcm_vhost_cmd *tv_cmd)
 	struct se_cmd *se_cmd = &tv_cmd->tvc_se_cmd;
 
 	/* TODO locking against target/backend threads? */
-	transport_generic_free_cmd(se_cmd, 0);
+	transport_generic_free_cmd(se_cmd, 1);
 
-}
+	if (tv_cmd->tvc_sgl_count) {
+		u32 i;
+		for (i = 0; i < tv_cmd->tvc_sgl_count; i++)
+			put_page(sg_page(&tv_cmd->tvc_sgl[i]));
 
-static int vhost_scsi_check_stop_free(struct se_cmd *se_cmd)
-{
-	return target_put_sess_cmd(se_cmd->se_sess, se_cmd);
+		kfree(tv_cmd->tvc_sgl);
+	}
+
+	tcm_vhost_put_inflight(tv_cmd->inflight);
+
+	kfree(tv_cmd);
 }
 
 static void tcm_vhost_do_evt_work(struct vhost_scsi *vs,
@@ -826,23 +820,6 @@ static int vhost_scsi_map_iov_to_sgl(struct tcm_vhost_cmd *tv_cmd,
 	return 0;
 }
 
-static int vhost_scsi_to_tcm_attr(int attr)
-{
-	switch (attr) {
-	case VIRTIO_SCSI_S_SIMPLE:
-		return MSG_SIMPLE_TAG;
-	case VIRTIO_SCSI_S_ORDERED:
-		return MSG_ORDERED_TAG;
-	case VIRTIO_SCSI_S_HEAD:
-		return MSG_HEAD_TAG;
-	case VIRTIO_SCSI_S_ACA:
-		return MSG_ACA_TAG;
-	default:
-		break;
-	}
-	return MSG_SIMPLE_TAG;
-}
-
 static void tcm_vhost_submission_work(struct work_struct *work)
 {
 	struct tcm_vhost_cmd *tv_cmd =
@@ -870,7 +847,7 @@ static void tcm_vhost_submission_work(struct work_struct *work)
 			tv_cmd->tvc_cdb, &tv_cmd->tvc_sense_buf[0],
 			tv_cmd->tvc_lun, tv_cmd->tvc_exp_data_len,
 			tv_cmd->tvc_task_attr, tv_cmd->tvc_data_direction,
-			TARGET_SCF_ACK_KREF, sg_ptr, tv_cmd->tvc_sgl_count,
+			0, sg_ptr, tv_cmd->tvc_sgl_count,
 			sg_bidi_ptr, sg_no_bidi);
 	if (rc < 0) {
 		transport_send_check_condition_and_sense(se_cmd,
@@ -1040,7 +1017,7 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs,
 		if (data_direction != DMA_NONE) {
 			ret = vhost_scsi_map_iov_to_sgl(tv_cmd,
 					&vq->iov[data_first], data_num,
-					data_direction == DMA_FROM_DEVICE);
+					data_direction == DMA_TO_DEVICE);
 			if (unlikely(ret)) {
 				vq_err(vq, "Failed to map iov to sgl\n");
 				goto err_free;
@@ -1094,7 +1071,7 @@ static void tcm_vhost_send_evt(struct vhost_scsi *vs, struct tcm_vhost_tpg *tpg,
 		 * lun[4-7] need to be zero according to virtio-scsi spec.
 		 */
 		evt->event.lun[0] = 0x01;
-		evt->event.lun[1] = tpg->tport_tpgt;
+		evt->event.lun[1] = tpg->tport_tpgt & 0xFF;
 		if (lun->unpacked_lun >= 256)
 			evt->event.lun[2] = lun->unpacked_lun >> 8 | 0x40 ;
 		evt->event.lun[3] = lun->unpacked_lun & 0xFF;
@@ -1173,7 +1150,6 @@ static int vhost_scsi_set_endpoint(
 	struct vhost_scsi *vs,
 	struct vhost_scsi_target *t)
 {
-	struct se_portal_group *se_tpg;
 	struct tcm_vhost_tport *tv_tport;
 	struct tcm_vhost_tpg *tv_tpg;
 	struct tcm_vhost_tpg **vs_tpg;
@@ -1221,21 +1197,6 @@ static int vhost_scsi_set_endpoint(
 				ret = -EEXIST;
 				goto out;
 			}
-			/*
-			 * In order to ensure individual vhost-scsi configfs
-			 * groups cannot be removed while in use by vhost ioctl,
-			 * go ahead and take an explicit se_tpg->tpg_group.cg_item
-			 * dependency now.
-			 */
-			se_tpg = &tv_tpg->se_tpg;
-			ret = configfs_depend_item(se_tpg->se_tpg_tfo->tf_subsys,
-						   &se_tpg->tpg_group.cg_item);
-			if (ret) {
-				pr_warn("configfs_depend_item() failed: %d\n", ret);
-				kfree(vs_tpg);
-				mutex_unlock(&tv_tpg->tv_tpg_mutex);
-				goto out;
-			}
 			tv_tpg->tv_tpg_vhost_count++;
 			tv_tpg->vhost_scsi = vs;
 			vs_tpg[tv_tpg->tport_tpgt] = tv_tpg;
@@ -1279,7 +1240,6 @@ static int vhost_scsi_clear_endpoint(
 	struct vhost_scsi *vs,
 	struct vhost_scsi_target *t)
 {
-	struct se_portal_group *se_tpg;
 	struct tcm_vhost_tport *tv_tport;
 	struct tcm_vhost_tpg *tv_tpg;
 	struct vhost_virtqueue *vq;
@@ -1328,13 +1288,6 @@ static int vhost_scsi_clear_endpoint(
 		vs->vs_tpg[target] = NULL;
 		match = true;
 		mutex_unlock(&tv_tpg->tv_tpg_mutex);
-		/*
-		 * Release se_tpg->tpg_group.cg_item configfs dependency now
-		 * to allow vhost-scsi WWPN se_tpg->tpg_group shutdown to occur.
-		 */
-		se_tpg = &tv_tpg->se_tpg;
-		configfs_undepend_item(se_tpg->se_tpg_tfo->tf_subsys,
-				       &se_tpg->tpg_group.cg_item);
 	}
 	if (match) {
 		for (i = 0; i < VHOST_SCSI_MAX_VQ; i++) {
@@ -1900,12 +1853,12 @@ static struct se_portal_group *tcm_vhost_make_tpg(struct se_wwn *wwn,
 			struct tcm_vhost_tport, tport_wwn);
 
 	struct tcm_vhost_tpg *tpg;
-	u16 tpgt;
+	unsigned long tpgt;
 	int ret;
 
 	if (strstr(name, "tpgt_") != name)
 		return ERR_PTR(-EINVAL);
-	if (kstrtou16(name + 5, 10, &tpgt) || tpgt >= VHOST_SCSI_MAX_TARGET)
+	if (kstrtoul(name + 5, 10, &tpgt) || tpgt > UINT_MAX)
 		return ERR_PTR(-EINVAL);
 
 	tpg = kzalloc(sizeof(struct tcm_vhost_tpg), GFP_KERNEL);
@@ -2055,7 +2008,6 @@ static struct target_core_fabric_ops tcm_vhost_ops = {
 	.tpg_release_fabric_acl		= tcm_vhost_release_fabric_acl,
 	.tpg_get_inst_index		= tcm_vhost_tpg_get_inst_index,
 	.release_cmd			= tcm_vhost_release_cmd,
-	.check_stop_free		= vhost_scsi_check_stop_free,
 	.shutdown_session		= tcm_vhost_shutdown_session,
 	.close_session			= tcm_vhost_close_session,
 	.sess_get_index			= tcm_vhost_sess_get_index,

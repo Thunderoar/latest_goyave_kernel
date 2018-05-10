@@ -1146,6 +1146,7 @@ err_unmap_reg:
 err:
 	kfree(cp);
 	cpg = NULL;
+	platform_set_drvdata(pdev, NULL);
 	return ret;
 }
 

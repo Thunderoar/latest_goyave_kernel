@@ -116,7 +116,7 @@ static int omap_rng_probe(struct platform_device *pdev)
 	};
 
 	omap_rng_ops.priv = (unsigned long)priv;
-	platform_set_drvdata(pdev, priv);
+	dev_set_drvdata(&pdev->dev, priv);
 
 	priv->mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	priv->base = devm_ioremap_resource(&pdev->dev, priv->mem_res);
@@ -124,15 +124,10 @@ static int omap_rng_probe(struct platform_device *pdev)
 		ret = PTR_ERR(priv->base);
 		goto err_ioremap;
 	}
-	platform_set_drvdata(pdev, priv);
+	dev_set_drvdata(&pdev->dev, priv);
 
 	pm_runtime_enable(&pdev->dev);
-	ret = pm_runtime_get_sync(&pdev->dev);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to runtime_get device: %d\n", ret);
-		pm_runtime_put_noidle(&pdev->dev);
-		goto err_ioremap;
-	}
+	pm_runtime_get_sync(&pdev->dev);
 
 	ret = hwrng_register(&omap_rng_ops);
 	if (ret)
@@ -156,7 +151,7 @@ err_ioremap:
 
 static int __exit omap_rng_remove(struct platform_device *pdev)
 {
-	struct omap_rng_private_data *priv = platform_get_drvdata(pdev);
+	struct omap_rng_private_data *priv = dev_get_drvdata(&pdev->dev);
 
 	hwrng_unregister(&omap_rng_ops);
 
@@ -187,15 +182,8 @@ static int omap_rng_suspend(struct device *dev)
 static int omap_rng_resume(struct device *dev)
 {
 	struct omap_rng_private_data *priv = dev_get_drvdata(dev);
-	int ret;
 
-	ret = pm_runtime_get_sync(dev);
-	if (ret < 0) {
-		dev_err(dev, "Failed to runtime_get device: %d\n", ret);
-		pm_runtime_put_noidle(dev);
-		return ret;
-	}
-
+	pm_runtime_get_sync(dev);
 	omap_rng_write_reg(priv, RNG_MASK_REG, 0x1);
 
 	return 0;

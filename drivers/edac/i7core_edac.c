@@ -704,7 +704,7 @@ static ssize_t i7core_inject_section_store(struct device *dev,
 	if (pvt->inject.enable)
 		disable_inject(mci);
 
-	rc = kstrtoul(data, 10, &value);
+	rc = strict_strtoul(data, 10, &value);
 	if ((rc < 0) || (value > 3))
 		return -EIO;
 
@@ -741,7 +741,7 @@ struct i7core_pvt *pvt = mci->pvt_info;
 	if (pvt->inject.enable)
 		disable_inject(mci);
 
-	rc = kstrtoul(data, 10, &value);
+	rc = strict_strtoul(data, 10, &value);
 	if ((rc < 0) || (value > 7))
 		return -EIO;
 
@@ -781,7 +781,7 @@ static ssize_t i7core_inject_eccmask_store(struct device *dev,
 	if (pvt->inject.enable)
 		disable_inject(mci);
 
-	rc = kstrtoul(data, 10, &value);
+	rc = strict_strtoul(data, 10, &value);
 	if (rc < 0)
 		return -EIO;
 
@@ -830,7 +830,7 @@ static ssize_t i7core_inject_store_##param(			\
 	if (!strcasecmp(data, "any") || !strcasecmp(data, "any\n"))\
 		value = -1;					\
 	else {							\
-		rc = kstrtoul(data, 10, &value);		\
+		rc = strict_strtoul(data, 10, &value);		\
 		if ((rc < 0) || (value >= limit))		\
 			return -EIO;				\
 	}							\
@@ -934,7 +934,7 @@ static ssize_t i7core_inject_enable_store(struct device *dev,
 	if (!pvt->pci_ch[pvt->inject.channel][0])
 		return 0;
 
-	rc = kstrtoul(data, 10, &enable);
+	rc = strict_strtoul(data, 10, &enable);
 	if ((rc < 0))
 		return 0;
 
@@ -1334,19 +1334,14 @@ static int i7core_get_onedevice(struct pci_dev **prev,
 	 * is at addr 8086:2c40, instead of 8086:2c41. So, we need
 	 * to probe for the alternate address in case of failure
 	 */
-	if (dev_descr->dev_id == PCI_DEVICE_ID_INTEL_I7_NONCORE && !pdev) {
-		pci_dev_get(*prev);	/* pci_get_device will put it */
+	if (dev_descr->dev_id == PCI_DEVICE_ID_INTEL_I7_NONCORE && !pdev)
 		pdev = pci_get_device(PCI_VENDOR_ID_INTEL,
 				      PCI_DEVICE_ID_INTEL_I7_NONCORE_ALT, *prev);
-	}
 
-	if (dev_descr->dev_id == PCI_DEVICE_ID_INTEL_LYNNFIELD_NONCORE &&
-	    !pdev) {
-		pci_dev_get(*prev);	/* pci_get_device will put it */
+	if (dev_descr->dev_id == PCI_DEVICE_ID_INTEL_LYNNFIELD_NONCORE && !pdev)
 		pdev = pci_get_device(PCI_VENDOR_ID_INTEL,
 				      PCI_DEVICE_ID_INTEL_LYNNFIELD_NONCORE_ALT,
 				      *prev);
-	}
 
 	if (!pdev) {
 		if (*prev) {
@@ -1878,7 +1873,7 @@ static int i7core_mce_check_error(struct notifier_block *nb, unsigned long val,
 
 	i7_dev = get_i7core_dev(mce->socketid);
 	if (!i7_dev)
-		return NOTIFY_DONE;
+		return NOTIFY_BAD;
 
 	mci = i7_dev->mci;
 	pvt = mci->pvt_info;

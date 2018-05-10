@@ -32,14 +32,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define CH7xxx_REG_DID		0x4b
 
 #define CH7011_VID		0x83 /* 7010 as well */
-#define CH7010B_VID		0x05
 #define CH7009A_VID		0x84
 #define CH7009B_VID		0x85
 #define CH7301_VID		0x95
 
 #define CH7xxx_VID		0x84
 #define CH7xxx_DID		0x17
-#define CH7010_DID		0x16
 
 #define CH7xxx_NUM_REGS		0x4c
 
@@ -89,18 +87,9 @@ static struct ch7xxx_id_struct {
 	char *name;
 } ch7xxx_ids[] = {
 	{ CH7011_VID, "CH7011" },
-	{ CH7010B_VID, "CH7010B" },
 	{ CH7009A_VID, "CH7009A" },
 	{ CH7009B_VID, "CH7009B" },
 	{ CH7301_VID, "CH7301" },
-};
-
-static struct ch7xxx_did_struct {
-	uint8_t did;
-	char *name;
-} ch7xxx_dids[] = {
-	{ CH7xxx_DID, "CH7XXX" },
-	{ CH7010_DID, "CH7010B" },
 };
 
 struct ch7xxx_priv {
@@ -114,18 +103,6 @@ static char *ch7xxx_get_id(uint8_t vid)
 	for (i = 0; i < ARRAY_SIZE(ch7xxx_ids); i++) {
 		if (ch7xxx_ids[i].vid == vid)
 			return ch7xxx_ids[i].name;
-	}
-
-	return NULL;
-}
-
-static char *ch7xxx_get_did(uint8_t did)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(ch7xxx_dids); i++) {
-		if (ch7xxx_dids[i].did == did)
-			return ch7xxx_dids[i].name;
 	}
 
 	return NULL;
@@ -202,7 +179,7 @@ static bool ch7xxx_init(struct intel_dvo_device *dvo,
 	/* this will detect the CH7xxx chip on the specified i2c bus */
 	struct ch7xxx_priv *ch7xxx;
 	uint8_t vendor, device;
-	char *name, *devid;
+	char *name;
 
 	ch7xxx = kzalloc(sizeof(struct ch7xxx_priv), GFP_KERNEL);
 	if (ch7xxx == NULL)
@@ -227,8 +204,7 @@ static bool ch7xxx_init(struct intel_dvo_device *dvo,
 	if (!ch7xxx_readb(dvo, CH7xxx_REG_DID, &device))
 		goto out;
 
-	devid = ch7xxx_get_did(device);
-	if (!devid) {
+	if (device != CH7xxx_DID) {
 		DRM_DEBUG_KMS("ch7xxx not detected; got 0x%02x from %s "
 				"slave %d.\n",
 			  vendor, adapter->name, dvo->slave_addr);

@@ -30,7 +30,7 @@
 
 /* number of supported soundcards */
 #ifdef CONFIG_SND_DYNAMIC_MINORS
-#define SNDRV_CARDS CONFIG_SND_MAX_CARDS
+#define SNDRV_CARDS 32
 #else
 #define SNDRV_CARDS 8		/* don't change - minor numbers */
 #endif

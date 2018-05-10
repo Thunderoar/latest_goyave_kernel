@@ -1351,11 +1351,22 @@ static void remove_one(struct pci_dev *pdev)
 	t1_sw_reset(pdev);
 }
 
-static struct pci_driver cxgb_pci_driver = {
+static struct pci_driver driver = {
 	.name     = DRV_NAME,
 	.id_table = t1_pci_tbl,
 	.probe    = init_one,
 	.remove   = remove_one,
 };
 
-module_pci_driver(cxgb_pci_driver);
+static int __init t1_init_module(void)
+{
+	return pci_register_driver(&driver);
+}
+
+static void __exit t1_cleanup_module(void)
+{
+	pci_unregister_driver(&driver);
+}
+
+module_init(t1_init_module);
+module_exit(t1_cleanup_module);

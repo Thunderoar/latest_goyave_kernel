@@ -173,7 +173,6 @@ struct ata_port_operations ahci_ops = {
 	.em_store		= ahci_led_store,
 	.sw_activity_show	= ahci_activity_show,
 	.sw_activity_store	= ahci_activity_store,
-	.transmit_led_message	= ahci_transmit_led_message,
 #ifdef CONFIG_PM
 	.port_suspend		= ahci_port_suspend,
 	.port_resume		= ahci_port_resume,
@@ -487,8 +486,8 @@ void ahci_save_initial_config(struct device *dev,
 		}
 	}
 
-	/* fabricate port_map from cap.nr_ports for < AHCI 1.3 */
-	if (!port_map && vers < 0x10300) {
+	/* fabricate port_map from cap.nr_ports */
+	if (!port_map) {
 		port_map = (1 << ahci_nr_ports(cap)) - 1;
 		dev_warn(dev, "forcing PORTS_IMPL to 0x%x\n", port_map);
 
@@ -775,7 +774,7 @@ static void ahci_start_port(struct ata_port *ap)
 
 			/* EM Transmit bit maybe busy during init */
 			for (i = 0; i < EM_MAX_RETRY; i++) {
-				rc = ap->ops->transmit_led_message(ap,
+				rc = ahci_transmit_led_message(ap,
 							       emp->led_state,
 							       4);
 				if (rc == -EBUSY)
@@ -916,7 +915,7 @@ static void ahci_sw_activity_blink(unsigned long arg)
 			led_message |= (1 << 16);
 	}
 	spin_unlock_irqrestore(ap->lock, flags);
-	ap->ops->transmit_led_message(ap, led_message, 4);
+	ahci_transmit_led_message(ap, led_message, 4);
 }
 
 static void ahci_init_sw_activity(struct ata_link *link)
@@ -1045,7 +1044,7 @@ static ssize_t ahci_led_store(struct ata_port *ap, const char *buf,
 	if (emp->blink_policy)
 		state &= ~EM_MSG_LED_VALUE_ACTIVITY;
 
-	return ap->ops->transmit_led_message(ap, state, size);
+	return ahci_transmit_led_message(ap, state, size);
 }
 
 static ssize_t ahci_activity_store(struct ata_device *dev, enum sw_activity val)
@@ -1064,7 +1063,7 @@ static ssize_t ahci_activity_store(struct ata_device *dev, enum sw_activity val)
 		/* set the LED to OFF */
 		port_led_state &= EM_MSG_LED_VALUE_OFF;
 		port_led_state |= (ap->port_no | (link->pmp << 8));
-		ap->ops->transmit_led_message(ap, port_led_state, 4);
+		ahci_transmit_led_message(ap, port_led_state, 4);
 	} else {
 		link->flags |= ATA_LFLAG_SW_ACTIVITY;
 		if (val == BLINK_OFF) {
@@ -1072,7 +1071,7 @@ static ssize_t ahci_activity_store(struct ata_device *dev, enum sw_activity val)
 			port_led_state &= EM_MSG_LED_VALUE_OFF;
 			port_led_state |= (ap->port_no | (link->pmp << 8));
 			port_led_state |= EM_MSG_LED_VALUE_ON; /* check this */
-			ap->ops->transmit_led_message(ap, port_led_state, 4);
+			ahci_transmit_led_message(ap, port_led_state, 4);
 		}
 	}
 	emp->blink_policy = val;
@@ -1245,15 +1244,6 @@ static int ahci_exec_polled_cmd(struct ata_port *ap, int pmp,
 	ata_tf_to_fis(tf, pmp, is_cmd, fis);
 	ahci_fill_cmd_slot(pp, 0, cmd_fis_len | flags | (pmp << 12));
 
-	/* set port value for softreset of Port Multiplier */
-	if (pp->fbs_enabled && pp->fbs_last_dev != pmp) {
-		tmp = readl(port_mmio + PORT_FBS);
-		tmp &= ~(PORT_FBS_DEV_MASK | PORT_FBS_DEC);
-		tmp |= pmp << PORT_FBS_DEV_OFFSET;
-		writel(tmp, port_mmio + PORT_FBS);
-		pp->fbs_last_dev = pmp;
-	}
-
 	/* issue & wait */
 	writel(1, port_mmio + PORT_CMD_ISSUE);
 
@@ -1276,11 +1266,9 @@ int ahci_do_softreset(struct ata_link *link, unsigned int *class,
 {
 	struct ata_port *ap = link->ap;
 	struct ahci_host_priv *hpriv = ap->host->private_data;
-	struct ahci_port_priv *pp = ap->private_data;
 	const char *reason = NULL;
 	unsigned long now, msecs;
 	struct ata_taskfile tf;
-	bool fbs_disabled = false;
 	int rc;
 
 	DPRINTK("ENTER\n");
@@ -1289,16 +1277,6 @@ int ahci_do_softreset(struct ata_link *link, unsigned int *class,
 	rc = ahci_kick_engine(ap);
 	if (rc && rc != -EOPNOTSUPP)
 		ata_link_warn(link, "failed to reset engine (errno=%d)\n", rc);
-
-	/*
-	 * According to AHCI-1.2 9.3.9: if FBS is enable, software shall
-	 * clear PxFBS.EN to '0' prior to issuing software reset to devices
-	 * that is attached to port multiplier.
-	 */
-	if (!ata_is_host_link(link) && pp->fbs_enabled) {
-		ahci_disable_fbs(ap);
-		fbs_disabled = true;
-	}
 
 	ata_tf_init(link->device, &tf);
 
@@ -1339,10 +1317,6 @@ int ahci_do_softreset(struct ata_link *link, unsigned int *class,
 		goto fail;
 	} else
 		*class = ahci_dev_classify(ap);
-
-	/* re-enable FBS if disabled before */
-	if (fbs_disabled)
-		ahci_enable_fbs(ap);
 
 	DPRINTK("EXIT, class=%u\n", *class);
 	return 0;
@@ -1438,7 +1412,7 @@ static int ahci_hardreset(struct ata_link *link, unsigned int *class,
 
 	/* clear D2H reception area to properly wait for D2H FIS */
 	ata_tf_init(link->device, &tf);
-	tf.command = ATA_BUSY;
+	tf.command = 0x80;
 	ata_tf_to_fis(&tf, 0, 0, d2h_fis);
 
 	rc = sata_link_hardreset(link, timing, deadline, &online,
@@ -1694,7 +1668,8 @@ static void ahci_handle_port_interrupt(struct ata_port *ap,
 	if (unlikely(resetting))
 		status &= ~PORT_IRQ_BAD_PMP;
 
-	if (sata_lpm_ignore_phy_events(&ap->link)) {
+	/* if LPM is enabled, PHYRDY doesn't mean anything */
+	if (ap->link.lpm_policy > ATA_LPM_MAX_POWER) {
 		status &= ~PORT_IRQ_PHYRDY;
 		ahci_scr_write(&ap->link, SCR_ERROR, SERR_PHYRDY_CHG);
 	}
@@ -2257,16 +2232,6 @@ static int ahci_port_start(struct ata_port *ap)
 	pp = devm_kzalloc(dev, sizeof(*pp), GFP_KERNEL);
 	if (!pp)
 		return -ENOMEM;
-
-	if (ap->host->n_ports > 1) {
-		pp->irq_desc = devm_kzalloc(dev, 8, GFP_KERNEL);
-		if (!pp->irq_desc) {
-			devm_kfree(dev, pp);
-			return -ENOMEM;
-		}
-		snprintf(pp->irq_desc, 8,
-			 "%s%d", dev_driver_string(dev), ap->port_no);
-	}
 
 	/* check FBS capability */
 	if ((hpriv->cap & HOST_CAP_FBS) && sata_pmp_supported(ap)) {

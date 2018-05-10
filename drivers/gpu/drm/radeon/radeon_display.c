@@ -153,13 +153,7 @@ static void dce5_crtc_load_lut(struct drm_crtc *crtc)
 		NI_OUTPUT_CSC_OVL_MODE(NI_OUTPUT_CSC_BYPASS)));
 	/* XXX match this to the depth of the crtc fmt block, move to modeset? */
 	WREG32(0x6940 + radeon_crtc->crtc_offset, 0);
-	if (ASIC_IS_DCE8(rdev)) {
-		/* XXX this only needs to be programmed once per crtc at startup,
-		 * not sure where the best place for it is
-		 */
-		WREG32(CIK_ALPHA_CONTROL + radeon_crtc->crtc_offset,
-		       CIK_CURSOR_ALPHA_BLND_ENA);
-	}
+
 }
 
 static void legacy_crtc_load_lut(struct drm_crtc *crtc)
@@ -518,14 +512,6 @@ static void radeon_crtc_init(struct drm_device *dev, int index)
 	radeon_crtc->crtc_id = index;
 	rdev->mode_info.crtcs[index] = radeon_crtc;
 
-	if (rdev->family >= CHIP_BONAIRE) {
-		radeon_crtc->max_cursor_width = CIK_CURSOR_WIDTH;
-		radeon_crtc->max_cursor_height = CIK_CURSOR_HEIGHT;
-	} else {
-		radeon_crtc->max_cursor_width = CURSOR_WIDTH;
-		radeon_crtc->max_cursor_height = CURSOR_HEIGHT;
-	}
-
 #if 0
 	radeon_crtc->mode_set.crtc = &radeon_crtc->base;
 	radeon_crtc->mode_set.connectors = (struct drm_connector **)(radeon_crtc + 1);
@@ -544,7 +530,7 @@ static void radeon_crtc_init(struct drm_device *dev, int index)
 		radeon_legacy_init_crtc(dev, radeon_crtc);
 }
 
-static const char *encoder_names[38] = {
+static const char *encoder_names[37] = {
 	"NONE",
 	"INTERNAL_LVDS",
 	"INTERNAL_TMDS1",
@@ -581,8 +567,7 @@ static const char *encoder_names[38] = {
 	"INTERNAL_UNIPHY2",
 	"NUTMEG",
 	"TRAVIS",
-	"INTERNAL_VCE",
-	"INTERNAL_UNIPHY3",
+	"INTERNAL_VCE"
 };
 
 static const char *hpd_names[6] = {
@@ -703,10 +688,6 @@ int radeon_ddc_get_modes(struct radeon_connector *radeon_connector)
 	struct radeon_device *rdev = dev->dev_private;
 	int ret = 0;
 
-	/* don't leak the edid if we already fetched it in detect() */
-	if (radeon_connector->edid)
-		goto got_edid;
-
 	/* on hw with routers, select right port */
 	if (radeon_connector->router.ddc_valid)
 		radeon_router_select_ddc_port(radeon_connector);
@@ -746,10 +727,8 @@ int radeon_ddc_get_modes(struct radeon_connector *radeon_connector)
 			radeon_connector->edid = radeon_bios_get_hardcoded_edid(rdev);
 	}
 	if (radeon_connector->edid) {
-got_edid:
 		drm_mode_connector_update_edid_property(&radeon_connector->base, radeon_connector->edid);
 		ret = drm_add_edid_modes(&radeon_connector->base, radeon_connector->edid);
-		drm_edid_to_eld(&radeon_connector->base, radeon_connector->edid);
 		return ret;
 	}
 	drm_mode_connector_update_edid_property(&radeon_connector->base, NULL);

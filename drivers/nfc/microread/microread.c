@@ -501,13 +501,9 @@ static void microread_target_discovered(struct nfc_hci_dev *hdev, u8 gate,
 		targets->sens_res =
 			 be16_to_cpu(*(u16 *)&skb->data[MICROREAD_EMCF_A_ATQA]);
 		targets->sel_res = skb->data[MICROREAD_EMCF_A_SAK];
-		targets->nfcid1_len = skb->data[MICROREAD_EMCF_A_LEN];
-		if (targets->nfcid1_len > sizeof(targets->nfcid1)) {
-			r = -EINVAL;
-			goto exit_free;
-		}
 		memcpy(targets->nfcid1, &skb->data[MICROREAD_EMCF_A_UID],
-		       targets->nfcid1_len);
+		       skb->data[MICROREAD_EMCF_A_LEN]);
+		targets->nfcid1_len = skb->data[MICROREAD_EMCF_A_LEN];
 		break;
 	case MICROREAD_GATE_ID_MREAD_ISO_A_3:
 		targets->supported_protocols =
@@ -515,13 +511,9 @@ static void microread_target_discovered(struct nfc_hci_dev *hdev, u8 gate,
 		targets->sens_res =
 			 be16_to_cpu(*(u16 *)&skb->data[MICROREAD_EMCF_A3_ATQA]);
 		targets->sel_res = skb->data[MICROREAD_EMCF_A3_SAK];
-		targets->nfcid1_len = skb->data[MICROREAD_EMCF_A3_LEN];
-		if (targets->nfcid1_len > sizeof(targets->nfcid1)) {
-			r = -EINVAL;
-			goto exit_free;
-		}
 		memcpy(targets->nfcid1, &skb->data[MICROREAD_EMCF_A3_UID],
-		       targets->nfcid1_len);
+		       skb->data[MICROREAD_EMCF_A3_LEN]);
+		targets->nfcid1_len = skb->data[MICROREAD_EMCF_A3_LEN];
 		break;
 	case MICROREAD_GATE_ID_MREAD_ISO_B:
 		targets->supported_protocols = NFC_PROTO_ISO14443_B_MASK;
@@ -658,7 +650,7 @@ int microread_probe(void *phy_id, struct nfc_phy_ops *phy_ops, char *llc_name,
 {
 	struct microread_info *info;
 	unsigned long quirks = 0;
-	u32 protocols;
+	u32 protocols, se;
 	struct nfc_hci_init_data init_data;
 	int r;
 
@@ -686,8 +678,10 @@ int microread_probe(void *phy_id, struct nfc_phy_ops *phy_ops, char *llc_name,
 		    NFC_PROTO_ISO14443_B_MASK |
 		    NFC_PROTO_NFC_DEP_MASK;
 
+	se = NFC_SE_UICC | NFC_SE_EMBEDDED;
+
 	info->hdev = nfc_hci_allocate_device(&microread_hci_ops, &init_data,
-					     quirks, protocols, llc_name,
+					     quirks, protocols, se, llc_name,
 					     phy_headroom +
 					     MICROREAD_CMDS_HEADROOM,
 					     phy_tailroom +

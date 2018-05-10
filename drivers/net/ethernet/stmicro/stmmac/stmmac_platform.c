@@ -171,6 +171,8 @@ static int stmmac_pltfr_remove(struct platform_device *pdev)
 	if (priv->plat->exit)
 		priv->plat->exit(pdev);
 
+	platform_set_drvdata(pdev, NULL);
+
 	return ret;
 }
 

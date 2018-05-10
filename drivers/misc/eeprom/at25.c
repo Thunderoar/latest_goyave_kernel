@@ -371,10 +371,11 @@ static int at25_probe(struct spi_device *spi)
 		if (np) {
 			err = at25_np_to_chip(&spi->dev, np, &chip);
 			if (err)
-				return err;
+				goto fail;
 		} else {
 			dev_err(&spi->dev, "Error: no chip description\n");
-			return -ENODEV;
+			err = -ENODEV;
+			goto fail;
 		}
 	} else
 		chip = *(struct spi_eeprom *)spi->dev.platform_data;
@@ -388,7 +389,8 @@ static int at25_probe(struct spi_device *spi)
 		addrlen = 3;
 	else {
 		dev_dbg(&spi->dev, "unsupported address type\n");
-		return -EINVAL;
+		err = -EINVAL;
+		goto fail;
 	}
 
 	/* Ping the chip ... the status register is pretty portable,
@@ -398,12 +400,14 @@ static int at25_probe(struct spi_device *spi)
 	sr = spi_w8r8(spi, AT25_RDSR);
 	if (sr < 0 || sr & AT25_SR_nRDY) {
 		dev_dbg(&spi->dev, "rdsr --> %d (%02x)\n", sr, sr);
-		return -ENXIO;
+		err = -ENXIO;
+		goto fail;
 	}
 
-	at25 = devm_kzalloc(&spi->dev, sizeof(struct at25_data), GFP_KERNEL);
-	if (!at25)
-		return -ENOMEM;
+	if (!(at25 = kzalloc(sizeof *at25, GFP_KERNEL))) {
+		err = -ENOMEM;
+		goto fail;
+	}
 
 	mutex_init(&at25->lock);
 	at25->chip = chip;
@@ -435,7 +439,7 @@ static int at25_probe(struct spi_device *spi)
 
 	err = sysfs_create_bin_file(&spi->dev.kobj, &at25->bin);
 	if (err)
-		return err;
+		goto fail;
 
 	if (chip.setup)
 		chip.setup(&at25->mem, chip.context);
@@ -449,6 +453,10 @@ static int at25_probe(struct spi_device *spi)
 		(chip.flags & EE_READONLY) ? " (readonly)" : "",
 		at25->chip.page_size);
 	return 0;
+fail:
+	dev_dbg(&spi->dev, "probe err %d\n", err);
+	kfree(at25);
+	return err;
 }
 
 static int at25_remove(struct spi_device *spi)
@@ -457,6 +465,7 @@ static int at25_remove(struct spi_device *spi)
 
 	at25 = spi_get_drvdata(spi);
 	sysfs_remove_bin_file(&spi->dev.kobj, &at25->bin);
+	kfree(at25);
 	return 0;
 }
 

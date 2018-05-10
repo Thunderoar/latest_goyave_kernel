@@ -58,12 +58,14 @@ struct Qdisc {
 				      * multiqueue device.
 				      */
 #define TCQ_F_WARN_NONWC	(1 << 16)
-	u32			limit;
+	int			padded;
 	const struct Qdisc_ops	*ops;
 	struct qdisc_size_table	__rcu *stab;
 	struct list_head	list;
 	u32			handle;
 	u32			parent;
+	atomic_t		refcnt;
+	struct gnet_stats_rate_est	rate_est;
 	int			(*reshape_fail)(struct sk_buff *skb,
 					struct Qdisc *q);
 
@@ -74,9 +76,8 @@ struct Qdisc {
 	 */
 	struct Qdisc		*__parent;
 	struct netdev_queue	*dev_queue;
-
-	struct gnet_stats_rate_est64	rate_est;
 	struct Qdisc		*next_sched;
+
 	struct sk_buff		*gso_skb;
 	/*
 	 * For performance sake on SMP, we put highly modified fields at the end
@@ -87,10 +88,8 @@ struct Qdisc {
 	unsigned int		__state;
 	struct gnet_stats_queue	qstats;
 	struct rcu_head		rcu_head;
-	int			padded;
-	atomic_t		refcnt;
-
-	spinlock_t		busylock ____cacheline_aligned_in_smp;
+	spinlock_t		busylock;
+	u32			limit;
 };
 
 static inline bool qdisc_is_running(const struct Qdisc *qdisc)
@@ -680,7 +679,7 @@ static inline struct sk_buff *skb_act_clone(struct sk_buff *skb, gfp_t gfp_mask,
 #endif
 
 struct psched_ratecfg {
-	u64	rate_bytes_ps; /* bytes per second */
+	u64	rate_bps;
 	u32	mult;
 	u16	overhead;
 	u8	linklayer;
@@ -704,7 +703,7 @@ static inline void psched_ratecfg_getrate(struct tc_ratespec *res,
 					  const struct psched_ratecfg *r)
 {
 	memset(res, 0, sizeof(*res));
-	res->rate = r->rate_bytes_ps;
+	res->rate = r->rate_bps >> 3;
 	res->overhead = r->overhead;
 	res->linklayer = (r->linklayer & TC_LINKLAYER_MASK);
 }

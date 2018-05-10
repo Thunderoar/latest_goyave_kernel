@@ -528,8 +528,6 @@ struct e1000_dev_spec_82575 {
 	bool global_device_reset;
 	bool eee_disable;
 	bool clear_semaphore_once;
-	struct e1000_sfp_flags eth_flags;
-	bool module_plugged;
 };
 
 struct e1000_hw {

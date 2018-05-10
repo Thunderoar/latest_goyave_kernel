@@ -632,17 +632,8 @@ static int davinci_config_channel_size(struct davinci_audio_dev *dev,
 {
 	u32 fmt;
 	u32 tx_rotate = (word_length / 4) & 0x7;
+	u32 rx_rotate = (32 - word_length) / 4;
 	u32 mask = (1ULL << word_length) - 1;
-	/*
-	 * For captured data we should not rotate, inversion and masking is
-	 * enoguh to get the data to the right position:
-	 * Format	  data from bus		after reverse (XRBUF)
-	 * S16_LE:	|LSB|MSB|xxx|xxx|	|xxx|xxx|MSB|LSB|
-	 * S24_3LE:	|LSB|DAT|MSB|xxx|	|xxx|MSB|DAT|LSB|
-	 * S24_LE:	|LSB|DAT|MSB|xxx|	|xxx|MSB|DAT|LSB|
-	 * S32_LE:	|LSB|DAT|DAT|MSB|	|MSB|DAT|DAT|LSB|
-	 */
-	u32 rx_rotate = 0;
 
 	/*
 	 * if s BCLK-to-LRCLK ratio has been configured via the set_clkdiv()
@@ -1033,7 +1024,7 @@ static struct snd_platform_data *davinci_mcasp_set_pdata_from_of(
 	struct device_node *np = pdev->dev.of_node;
 	struct snd_platform_data *pdata = NULL;
 	const struct of_device_id *match =
-			of_match_device(mcasp_dt_ids, &pdev->dev);
+			of_match_device(of_match_ptr(mcasp_dt_ids), &pdev->dev);
 
 	const u32 *of_serial_dir32;
 	u8 *of_serial_dir;
@@ -1266,7 +1257,7 @@ static struct platform_driver davinci_mcasp_driver = {
 	.driver		= {
 		.name	= "davinci-mcasp",
 		.owner	= THIS_MODULE,
-		.of_match_table = mcasp_dt_ids,
+		.of_match_table = of_match_ptr(mcasp_dt_ids),
 	},
 };
 

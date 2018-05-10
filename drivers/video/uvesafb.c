@@ -24,6 +24,9 @@
 #ifdef CONFIG_X86
 #include <video/vga.h>
 #endif
+#ifdef CONFIG_MTRR
+#include <asm/mtrr.h>
+#endif
 #include "edid.h"
 
 static struct cb_id uvesafb_cn_id = {
@@ -816,8 +819,8 @@ static int uvesafb_vbe_init(struct fb_info *info)
 	if (par->pmi_setpal || par->ypan) {
 		if (__supported_pte_mask & _PAGE_NX) {
 			par->pmi_setpal = par->ypan = 0;
-			printk(KERN_WARNING "uvesafb: NX protection is active, "
-					    "better not use the PMI.\n");
+			printk(KERN_WARNING "uvesafb: NX protection is actively."
+				"We have better not to use the PMI.\n");
 		} else {
 			uvesafb_vbe_getpmi(task, par);
 		}
@@ -1537,30 +1540,67 @@ static void uvesafb_init_info(struct fb_info *info, struct vbe_mode_ib *mode)
 
 static void uvesafb_init_mtrr(struct fb_info *info)
 {
-	struct uvesafb_par *par = info->par;
-
+#ifdef CONFIG_MTRR
 	if (mtrr && !(info->fix.smem_start & (PAGE_SIZE - 1))) {
 		int temp_size = info->fix.smem_len;
+		unsigned int type = 0;
 
-		int rc;
+		switch (mtrr) {
+		case 1:
+			type = MTRR_TYPE_UNCACHABLE;
+			break;
+		case 2:
+			type = MTRR_TYPE_WRBACK;
+			break;
+		case 3:
+			type = MTRR_TYPE_WRCOMB;
+			break;
+		case 4:
+			type = MTRR_TYPE_WRTHROUGH;
+			break;
+		default:
+			type = 0;
+			break;
+		}
 
-		/* Find the largest power-of-two */
-		temp_size = roundup_pow_of_two(temp_size);
+		if (type) {
+			int rc;
 
-		/* Try and find a power of two to add */
-		do {
-			rc = arch_phys_wc_add(info->fix.smem_start, temp_size);
-			temp_size >>= 1;
-		} while (temp_size >= PAGE_SIZE && rc == -EINVAL);
+			/* Find the largest power-of-two */
+			temp_size = roundup_pow_of_two(temp_size);
 
-		if (rc >= 0)
-			par->mtrr_handle = rc;
+			/* Try and find a power of two to add */
+			do {
+				rc = mtrr_add(info->fix.smem_start,
+					      temp_size, type, 1);
+				temp_size >>= 1;
+			} while (temp_size >= PAGE_SIZE && rc == -EINVAL);
+		}
 	}
+#endif /* CONFIG_MTRR */
 }
 
 static void uvesafb_ioremap(struct fb_info *info)
 {
-	info->screen_base = ioremap_wc(info->fix.smem_start, info->fix.smem_len);
+#ifdef CONFIG_X86
+	switch (mtrr) {
+	case 1: /* uncachable */
+		info->screen_base = ioremap_nocache(info->fix.smem_start, info->fix.smem_len);
+		break;
+	case 2: /* write-back */
+		info->screen_base = ioremap_cache(info->fix.smem_start, info->fix.smem_len);
+		break;
+	case 3: /* write-combining */
+		info->screen_base = ioremap_wc(info->fix.smem_start, info->fix.smem_len);
+		break;
+	case 4: /* write-through */
+	default:
+		info->screen_base = ioremap(info->fix.smem_start, info->fix.smem_len);
+		break;
+	}
+#else
+	info->screen_base = ioremap(info->fix.smem_start, info->fix.smem_len);
+#endif /* CONFIG_X86 */
 }
 
 static ssize_t uvesafb_show_vbe_ver(struct device *dev,
@@ -1811,7 +1851,6 @@ static int uvesafb_remove(struct platform_device *dev)
 		unregister_framebuffer(info);
 		release_region(0x3c0, 32);
 		iounmap(info->screen_base);
-		arch_phys_wc_del(par->mtrr_handle);
 		release_mem_region(info->fix.smem_start, info->fix.smem_len);
 		fb_destroy_modedb(info->monspecs.modedb);
 		fb_dealloc_cmap(&info->cmap);
@@ -1890,9 +1929,6 @@ static int uvesafb_setup(char *options)
 				"uvesafb: unrecognized option %s\n", this_opt);
 		}
 	}
-
-	if (mtrr != 3 && mtrr != 1)
-		pr_warn("uvesafb: mtrr should be set to 0 or 3; %d is unsupported", mtrr);
 
 	return 0;
 }

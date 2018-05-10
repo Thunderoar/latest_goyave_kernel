@@ -21,11 +21,11 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/sched.h>
-#include <linux/sched_clock.h>
 #include <linux/clocksource.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 
+#include <asm/sched_clock.h>
 #include <asm/localtimer.h>
 #include <asm/mach/time.h>
 

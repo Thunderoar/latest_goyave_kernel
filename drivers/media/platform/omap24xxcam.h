@@ -29,7 +29,6 @@
 
 #include <media/videobuf-dma-sg.h>
 #include <media/v4l2-int-device.h>
-#include <media/v4l2-device.h>
 
 /*
  *
@@ -462,8 +461,6 @@ struct omap24xxcam_device {
 	 * opening and releasing is synchronised by this.
 	 */
 	struct mutex mutex;
-
-	struct v4l2_device v4l2_dev;
 
 	/*** general driver state information ***/
 	atomic_t users;

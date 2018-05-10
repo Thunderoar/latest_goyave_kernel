@@ -21,8 +21,7 @@
 
 #include <linux/kthread.h>
 
-#define CPU_HOTPLUG_DISABLE_WQ		0
-#define HOTPLUG_ENABLED			0
+#define CPU_HOTPLUG_DISABLE_WQ
 #ifdef CPU_HOTPLUG_DISABLE_WQ
 #define HOTPLUG_DISABLE_ACTION_NONE     0
 #define HOTPLUG_DISABLE_ACTION_ACTIVE   1
@@ -228,7 +227,7 @@ static void __cpuinit sprd_plugin_one_cpu_ss(struct work_struct *work)
 {
 	int cpuid;
 
-#if HOTPLUG_ENABLED
+#ifdef CONFIG_HOTPLUG_CPU
 #ifdef CPU_HOTPLUG_DISABLE_WQ
 	if (HOTPLUG_DISABLE_ACTION_ACTIVE == atomic_read(&hotplug_disable_state)) {
 		unsigned int cpu;
@@ -258,7 +257,7 @@ static void sprd_unplug_one_cpu_ss()
 {
 	unsigned int cpuid = 0;
 
-#if HOTPLUG_ENABLED
+#ifdef CONFIG_HOTPLUG_CPU
 	if (num_online_cpus() > 1) {
 		if (!g_sd_tuners->cpu_hotplug_disable) {
 			cpuid = cpumask_next(0, cpu_online_mask);
@@ -1113,7 +1112,7 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 	/* plug-in all offline cpu mandatory if we didn't
 	 * enbale CPU_DYNAMIC_HOTPLUG
          */
-#if HOTPLUG_ENABLED
+#ifdef CONFIG_HOTPLUG_CPU
 	if (sd_tuners->cpu_hotplug_disable) {
 #ifdef CPU_HOTPLUG_DISABLE_WQ
 		atomic_set(&hotplug_disable_state, HOTPLUG_DISABLE_ACTION_ACTIVE);

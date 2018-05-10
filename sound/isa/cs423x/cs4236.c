@@ -504,6 +504,7 @@ static int snd_cs423x_isa_remove(struct device *pdev,
 				 unsigned int dev)
 {
 	snd_card_free(dev_get_drvdata(pdev));
+	dev_set_drvdata(pdev, NULL);
 	return 0;
 }
 
@@ -599,6 +600,7 @@ static int snd_cs423x_pnpbios_detect(struct pnp_dev *pdev,
 static void snd_cs423x_pnp_remove(struct pnp_dev *pdev)
 {
 	snd_card_free(pnp_get_drvdata(pdev));
+	pnp_set_drvdata(pdev, NULL);
 }
 
 #ifdef CONFIG_PM

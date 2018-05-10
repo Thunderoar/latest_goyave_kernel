@@ -275,9 +275,6 @@ static int xhci_stop_device(struct xhci_hcd *xhci, int slot_id, int suspend)
 
 	ret = 0;
 	virt_dev = xhci->devs[slot_id];
-	if (!virt_dev)
-		return -ENODEV;
-
 	cmd = xhci_alloc_command(xhci, false, true, GFP_NOIO);
 	if (!cmd) {
 		xhci_dbg(xhci, "Couldn't allocate command structure.\n");
@@ -465,19 +462,15 @@ void xhci_test_and_clear_bit(struct xhci_hcd *xhci, __le32 __iomem **port_array,
 }
 
 /* Updates Link Status for super Speed port */
-static void xhci_hub_report_link_state(struct xhci_hcd *xhci,
-		u32 *status, u32 status_reg)
+static void xhci_hub_report_link_state(u32 *status, u32 status_reg)
 {
 	u32 pls = status_reg & PORT_PLS_MASK;
 
 	/* resume state is a xHCI internal state.
-	 * Do not report it to usb core, instead, pretend to be U3,
-	 * thus usb core knows it's not ready for transfer
+	 * Do not report it to usb core.
 	 */
-	if (pls == XDEV_RESUME) {
-		*status |= USB_SS_PORT_LS_U3;
+	if (pls == XDEV_RESUME)
 		return;
-	}
 
 	/* When the CAS bit is set then warm reset
 	 * should be performed on port
@@ -508,8 +501,7 @@ static void xhci_hub_report_link_state(struct xhci_hcd *xhci,
 		 * in which sometimes the port enters compliance mode
 		 * caused by a delay on the host-device negotiation.
 		 */
-		if ((xhci->quirks & XHCI_COMP_MODE_QUIRK) &&
-				(pls == USB_SS_PORT_LS_COMP_MOD))
+		if (pls == USB_SS_PORT_LS_COMP_MOD)
 			pls |= USB_PORT_STAT_CONNECTION;
 	}
 
@@ -694,7 +686,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		}
 		/* Update Port Link State for super speed ports*/
 		if (hcd->speed == HCD_USB3) {
-			xhci_hub_report_link_state(xhci, &status, temp);
+			xhci_hub_report_link_state(&status, temp);
 			/*
 			 * Verify if all USB3 Ports Have entered U0 already.
 			 * Delete Compliance Mode Timer if so.
@@ -875,18 +867,18 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		case USB_PORT_FEAT_U1_TIMEOUT:
 			if (hcd->speed != HCD_USB3)
 				goto error;
-			temp = xhci_readl(xhci, port_array[wIndex] + PORTPMSC);
+			temp = xhci_readl(xhci, port_array[wIndex] + 1);
 			temp &= ~PORT_U1_TIMEOUT_MASK;
 			temp |= PORT_U1_TIMEOUT(timeout);
-			xhci_writel(xhci, temp, port_array[wIndex] + PORTPMSC);
+			xhci_writel(xhci, temp, port_array[wIndex] + 1);
 			break;
 		case USB_PORT_FEAT_U2_TIMEOUT:
 			if (hcd->speed != HCD_USB3)
 				goto error;
-			temp = xhci_readl(xhci, port_array[wIndex] + PORTPMSC);
+			temp = xhci_readl(xhci, port_array[wIndex] + 1);
 			temp &= ~PORT_U2_TIMEOUT_MASK;
 			temp |= PORT_U2_TIMEOUT(timeout);
-			xhci_writel(xhci, temp, port_array[wIndex] + PORTPMSC);
+			xhci_writel(xhci, temp, port_array[wIndex] + 1);
 			break;
 		default:
 			goto error;
@@ -1051,10 +1043,10 @@ int xhci_bus_suspend(struct usb_hcd *hcd)
 	spin_lock_irqsave(&xhci->lock, flags);
 
 	if (hcd->self.root_hub->do_remote_wakeup) {
-		if (bus_state->resuming_ports ||	/* USB2 */
-		    bus_state->port_remote_wakeup) {	/* USB3 */
+		if (bus_state->resuming_ports) {
 			spin_unlock_irqrestore(&xhci->lock, flags);
-			xhci_dbg(xhci, "suspend failed because a port is resuming\n");
+			xhci_dbg(xhci, "suspend failed because "
+						"a port is resuming\n");
 			return -EBUSY;
 		}
 	}
@@ -1106,8 +1098,10 @@ int xhci_bus_suspend(struct usb_hcd *hcd)
 			__le32 __iomem *addr;
 			u32 tmp;
 
-			/* Get the port power control register address. */
-			addr = port_array[port_index] + PORTPMSC;
+			/* Add one to the port status register address to get
+			 * the port power control register address.
+			 */
+			addr = port_array[port_index] + 1;
 			tmp = xhci_readl(xhci, addr);
 			tmp |= PORT_RWE;
 			xhci_writel(xhci, tmp, addr);
@@ -1199,7 +1193,7 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 			/* Add one to the port status register address to get
 			 * the port power control register address.
 			 */
-			addr = port_array[port_index] + PORTPMSC;
+			addr = port_array[port_index] + 1;
 			tmp = xhci_readl(xhci, addr);
 			tmp &= ~PORT_RWE;
 			xhci_writel(xhci, tmp, addr);

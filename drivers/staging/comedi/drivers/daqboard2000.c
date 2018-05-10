@@ -14,6 +14,11 @@
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
  */
 /*
 Driver: daqboard2000
@@ -105,6 +110,7 @@ Configuration options: not applicable, uses PCI auto config
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/firmware.h>
 
 #include "../comedidev.h"
 
@@ -518,8 +524,7 @@ static int daqboard2000_writeCPLD(struct comedi_device *dev, int data)
 }
 
 static int initialize_daqboard2000(struct comedi_device *dev,
-				   const u8 *cpld_array, size_t len,
-				   unsigned long context)
+				   const u8 *cpld_array, size_t len)
 {
 	struct daqboard2000_private *devpriv = dev->private;
 	int result = -EIO;
@@ -558,6 +563,22 @@ static int initialize_daqboard2000(struct comedi_device *dev,
 		}
 	}
 	return result;
+}
+
+static int daqboard2000_upload_firmware(struct comedi_device *dev)
+{
+	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
+	const struct firmware *fw;
+	int ret;
+
+	ret = request_firmware(&fw, DAQBOARD2000_FIRMWARE, &pcidev->dev);
+	if (ret)
+		return ret;
+
+	ret = initialize_daqboard2000(dev, fw->data, fw->size);
+	release_firmware(fw);
+
+	return ret;
 }
 
 static void daqboard2000_adcStopDmaTransfer(struct comedi_device *dev)
@@ -657,7 +678,7 @@ static const void *daqboard2000_find_boardinfo(struct comedi_device *dev,
 	const struct daq200_boardtype *board;
 	int i;
 
-	if (pcidev->subsystem_vendor != PCI_VENDOR_ID_IOTECH)
+	if (pcidev->subsystem_device != PCI_VENDOR_ID_IOTECH)
 		return NULL;
 
 	for (i = 0; i < ARRAY_SIZE(boardtypes); i++) {
@@ -703,9 +724,7 @@ static int daqboard2000_auto_attach(struct comedi_device *dev,
 
 	readl(devpriv->plx + 0x6c);
 
-	result = comedi_load_firmware(dev, &comedi_to_pci_dev(dev)->dev,
-				      DAQBOARD2000_FIRMWARE,
-				      initialize_daqboard2000, 0);
+	result = daqboard2000_upload_firmware(dev);
 	if (result < 0)
 		return result;
 
@@ -747,6 +766,7 @@ static void daqboard2000_detach(struct comedi_device *dev)
 {
 	struct daqboard2000_private *devpriv = dev->private;
 
+	comedi_spriv_free(dev, 2);
 	if (dev->irq)
 		free_irq(dev->irq, dev);
 	if (devpriv) {

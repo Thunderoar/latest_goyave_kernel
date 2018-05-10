@@ -329,7 +329,8 @@ static int ep93xx_keypad_probe(struct platform_device *pdev)
 	return 0;
 
 failed_free_irq:
-	free_irq(keypad->irq, keypad);
+	free_irq(keypad->irq, pdev);
+	platform_set_drvdata(pdev, NULL);
 failed_free_dev:
 	input_free_device(input_dev);
 failed_put_clk:
@@ -350,7 +351,9 @@ static int ep93xx_keypad_remove(struct platform_device *pdev)
 	struct ep93xx_keypad *keypad = platform_get_drvdata(pdev);
 	struct resource *res;
 
-	free_irq(keypad->irq, keypad);
+	free_irq(keypad->irq, pdev);
+
+	platform_set_drvdata(pdev, NULL);
 
 	if (keypad->enabled)
 		clk_disable(keypad->clk);

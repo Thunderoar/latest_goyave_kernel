@@ -83,7 +83,7 @@ static void handle_system_shutdown(char event_modifier)
 	switch (event_modifier) {
 	case EPOW_SHUTDOWN_NORMAL:
 		pr_emerg("Firmware initiated power off");
-		orderly_poweroff(true);
+		orderly_poweroff(1);
 		break;
 
 	case EPOW_SHUTDOWN_ON_UPS:
@@ -95,13 +95,13 @@ static void handle_system_shutdown(char event_modifier)
 		pr_emerg("Loss of system critical functions reported by "
 			"firmware");
 		pr_emerg("Check RTAS error log for details");
-		orderly_poweroff(true);
+		orderly_poweroff(1);
 		break;
 
 	case EPOW_SHUTDOWN_AMBIENT_TEMPERATURE_TOO_HIGH:
 		pr_emerg("Ambient temperature too high reported by firmware");
 		pr_emerg("Check RTAS error log for details");
-		orderly_poweroff(true);
+		orderly_poweroff(1);
 		break;
 
 	default:
@@ -162,7 +162,7 @@ void rtas_parse_epow_errlog(struct rtas_error_log *log)
 
 	case EPOW_SYSTEM_HALT:
 		pr_emerg("Firmware initiated power off");
-		orderly_poweroff(true);
+		orderly_poweroff(1);
 		break;
 
 	case EPOW_MAIN_ENCLOSURE:
@@ -187,8 +187,7 @@ static irqreturn_t ras_epow_interrupt(int irq, void *dev_id)
 	int state;
 	int critical;
 
-	status = rtas_get_sensor_fast(EPOW_SENSOR_TOKEN, EPOW_SENSOR_INDEX,
-				      &state);
+	status = rtas_get_sensor(EPOW_SENSOR_TOKEN, EPOW_SENSOR_INDEX, &state);
 
 	if (state > 3)
 		critical = 1;		/* Time Critical */

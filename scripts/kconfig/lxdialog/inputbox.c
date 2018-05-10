@@ -56,14 +56,14 @@ int dialog_inputbox(const char *title, const char *prompt, int height, int width
 		strcpy(instr, init);
 
 do_resize:
-	if (getmaxy(stdscr) <= (height - INPUTBOX_HEIGTH_MIN))
+	if (getmaxy(stdscr) <= (height - 2))
 		return -ERRDISPLAYTOOSMALL;
-	if (getmaxx(stdscr) <= (width - INPUTBOX_WIDTH_MIN))
+	if (getmaxx(stdscr) <= (width - 2))
 		return -ERRDISPLAYTOOSMALL;
 
 	/* center dialog box on screen */
-	x = (getmaxx(stdscr) - width) / 2;
-	y = (getmaxy(stdscr) - height) / 2;
+	x = (COLS - width) / 2;
+	y = (LINES - height) / 2;
 
 	draw_shadow(stdscr, y, x, height, width);
 

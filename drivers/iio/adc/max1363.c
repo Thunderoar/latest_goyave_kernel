@@ -660,7 +660,7 @@ static ssize_t max1363_monitor_store_freq(struct device *dev,
 	unsigned long val;
 	bool found = false;
 
-	ret = kstrtoul(buf, 10, &val);
+	ret = strict_strtoul(buf, 10, &val);
 	if (ret)
 		return -EINVAL;
 	for (i = 0; i < ARRAY_SIZE(max1363_monitor_speeds); i++)
@@ -1214,8 +1214,8 @@ static const struct max1363_chip_info max1363_chip_info_tbl[] = {
 		.num_modes = ARRAY_SIZE(max1238_mode_list),
 		.default_mode = s0to11,
 		.info = &max1238_info,
-		.channels = max1038_channels,
-		.num_channels = ARRAY_SIZE(max1038_channels),
+		.channels = max1238_channels,
+		.num_channels = ARRAY_SIZE(max1238_channels),
 	},
 	[max11605] = {
 		.bits = 8,
@@ -1224,8 +1224,8 @@ static const struct max1363_chip_info max1363_chip_info_tbl[] = {
 		.num_modes = ARRAY_SIZE(max1238_mode_list),
 		.default_mode = s0to11,
 		.info = &max1238_info,
-		.channels = max1038_channels,
-		.num_channels = ARRAY_SIZE(max1038_channels),
+		.channels = max1238_channels,
+		.num_channels = ARRAY_SIZE(max1238_channels),
 	},
 	[max11606] = {
 		.bits = 10,
@@ -1274,8 +1274,8 @@ static const struct max1363_chip_info max1363_chip_info_tbl[] = {
 		.num_modes = ARRAY_SIZE(max1238_mode_list),
 		.default_mode = s0to11,
 		.info = &max1238_info,
-		.channels = max1138_channels,
-		.num_channels = ARRAY_SIZE(max1138_channels),
+		.channels = max1238_channels,
+		.num_channels = ARRAY_SIZE(max1238_channels),
 	},
 	[max11611] = {
 		.bits = 10,
@@ -1284,8 +1284,8 @@ static const struct max1363_chip_info max1363_chip_info_tbl[] = {
 		.num_modes = ARRAY_SIZE(max1238_mode_list),
 		.default_mode = s0to11,
 		.info = &max1238_info,
-		.channels = max1138_channels,
-		.num_channels = ARRAY_SIZE(max1138_channels),
+		.channels = max1238_channels,
+		.num_channels = ARRAY_SIZE(max1238_channels),
 	},
 	[max11612] = {
 		.bits = 12,

@@ -73,36 +73,12 @@ static void radeon_hotplug_work_func(struct work_struct *work)
 	struct drm_mode_config *mode_config = &dev->mode_config;
 	struct drm_connector *connector;
 
-	/* we can race here at startup, some boards seem to trigger
-	 * hotplug irqs when they shouldn't. */
-	if (!rdev->mode_info.mode_config_initialized)
-		return;
-
-	mutex_lock(&mode_config->mutex);
 	if (mode_config->num_connector) {
 		list_for_each_entry(connector, &mode_config->connector_list, head)
 			radeon_connector_hotplug(connector);
 	}
-	mutex_unlock(&mode_config->mutex);
 	/* Just fire off a uevent and let userspace tell us what to do */
 	drm_helper_hpd_irq_event(dev);
-}
-
-/**
- * radeon_irq_reset_work_func - execute gpu reset
- *
- * @work: work struct
- *
- * Execute scheduled gpu reset (cayman+).
- * This function is called when the irq handler
- * thinks we need a gpu reset.
- */
-static void radeon_irq_reset_work_func(struct work_struct *work)
-{
-	struct radeon_device *rdev = container_of(work, struct radeon_device,
-						  reset_work);
-
-	radeon_gpu_reset(rdev);
 }
 
 /**
@@ -123,7 +99,6 @@ void radeon_driver_irq_preinstall_kms(struct drm_device *dev)
 	/* Disable *all* interrupts */
 	for (i = 0; i < RADEON_NUM_RINGS; i++)
 		atomic_set(&rdev->irq.ring_int[i], 0);
-	rdev->irq.dpm_thermal = false;
 	for (i = 0; i < RADEON_MAX_HPD_PINS; i++)
 		rdev->irq.hpd[i] = false;
 	for (i = 0; i < RADEON_MAX_CRTCS; i++) {
@@ -171,7 +146,6 @@ void radeon_driver_irq_uninstall_kms(struct drm_device *dev)
 	/* Disable *all* interrupts */
 	for (i = 0; i < RADEON_NUM_RINGS; i++)
 		atomic_set(&rdev->irq.ring_int[i], 0);
-	rdev->irq.dpm_thermal = false;
 	for (i = 0; i < RADEON_MAX_HPD_PINS; i++)
 		rdev->irq.hpd[i] = false;
 	for (i = 0; i < RADEON_MAX_CRTCS; i++) {

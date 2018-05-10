@@ -154,10 +154,10 @@ ext4_double_down_write_data_sem(struct inode *first, struct inode *second)
 {
 	if (first < second) {
 		down_write(&EXT4_I(first)->i_data_sem);
-		down_write_nested(&EXT4_I(second)->i_data_sem, I_DATA_SEM_OTHER);
+		down_write_nested(&EXT4_I(second)->i_data_sem, SINGLE_DEPTH_NESTING);
 	} else {
 		down_write(&EXT4_I(second)->i_data_sem);
-		down_write_nested(&EXT4_I(first)->i_data_sem, I_DATA_SEM_OTHER);
+		down_write_nested(&EXT4_I(first)->i_data_sem, SINGLE_DEPTH_NESTING);
 
 	}
 }
@@ -912,6 +912,7 @@ move_extent_per_page(struct file *o_filp, struct inode *donor_inode,
 	struct page *pagep[2] = {NULL, NULL};
 	handle_t *handle;
 	ext4_lblk_t orig_blk_offset;
+	long long offs = orig_page_offset << PAGE_CACHE_SHIFT;
 	unsigned long blocksize = orig_inode->i_sb->s_blocksize;
 	unsigned int w_flags = 0;
 	unsigned int tmp_data_size, data_size, replaced_size;
@@ -938,6 +939,8 @@ again:
 
 	orig_blk_offset = orig_page_offset * blocks_per_page +
 		data_offset_in_page;
+
+	offs = (long long)orig_blk_offset << orig_inode->i_blkbits;
 
 	/* Calculate data_size */
 	if ((orig_blk_offset + block_len_in_page - 1) ==
@@ -1112,13 +1115,6 @@ mext_check_arguments(struct inode *orig_inode,
 			"not be swapfile [ino:orig %lu, donor %lu]\n",
 			orig_inode->i_ino, donor_inode->i_ino);
 		return -EINVAL;
-	}
-
-	if (IS_NOQUOTA(orig_inode) || IS_NOQUOTA(donor_inode)) {
-		ext4_debug("ext4 move extent: The argument files should "
-			"not be quota files [ino:orig %lu, donor %lu]\n",
-			orig_inode->i_ino, donor_inode->i_ino);
-		return -EBUSY;
 	}
 
 	/* Ext4 move extent supports only extent based file */

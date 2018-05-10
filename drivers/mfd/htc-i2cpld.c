@@ -514,8 +514,8 @@ static int htcpld_setup_chips(struct platform_device *pdev)
 
 	/* Setup each chip's output GPIOs */
 	htcpld->nchips = pdata->num_chip;
-	htcpld->chip = devm_kzalloc(dev, sizeof(struct htcpld_chip) * htcpld->nchips,
-				    GFP_KERNEL);
+	htcpld->chip = kzalloc(sizeof(struct htcpld_chip) * htcpld->nchips,
+			       GFP_KERNEL);
 	if (!htcpld->chip) {
 		dev_warn(dev, "Unable to allocate memory for chips\n");
 		return -ENOMEM;
@@ -580,11 +580,12 @@ static int htcpld_core_probe(struct platform_device *pdev)
 		return -ENXIO;
 	}
 
-	htcpld = devm_kzalloc(dev, sizeof(struct htcpld_data), GFP_KERNEL);
+	htcpld = kzalloc(sizeof(struct htcpld_data), GFP_KERNEL);
 	if (!htcpld)
 		return -ENOMEM;
 
 	/* Find chained irq */
+	ret = -EINVAL;
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (res) {
 		int flags;
@@ -597,7 +598,7 @@ static int htcpld_core_probe(struct platform_device *pdev)
 					   flags, pdev->name, htcpld);
 		if (ret) {
 			dev_warn(dev, "Unable to setup chained irq handler: %d\n", ret);
-			return ret;
+			goto fail;
 		} else
 			device_init_wakeup(dev, 0);
 	}
@@ -608,7 +609,7 @@ static int htcpld_core_probe(struct platform_device *pdev)
 	/* Setup the htcpld chips */
 	ret = htcpld_setup_chips(pdev);
 	if (ret)
-		return ret;
+		goto fail;
 
 	/* Request the GPIO(s) for the int reset and set them up */
 	if (pdata->int_reset_gpio_hi) {
@@ -643,6 +644,10 @@ static int htcpld_core_probe(struct platform_device *pdev)
 
 	dev_info(dev, "Initialized successfully\n");
 	return 0;
+
+fail:
+	kfree(htcpld);
+	return ret;
 }
 
 /* The I2C Driver -- used internally */

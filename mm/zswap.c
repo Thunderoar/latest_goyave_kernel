@@ -46,11 +46,9 @@
 * statistics
 **********************************/
 /* Total bytes used by the compressed storage */
-u64 zswap_pool_total_size;
-/* Number of memory pages used by the compressed pool */
-u64 zswap_pool_pages;
+static u64 zswap_pool_total_size;
 /* The number of compressed pages currently stored in zswap */
-atomic_t zswap_stored_pages = ATOMIC_INIT(0);
+static atomic_t zswap_stored_pages = ATOMIC_INIT(0);
 
 /*
  * The statistics below are not protected from concurrent access for
@@ -300,7 +298,6 @@ static void zswap_free_entry(struct zswap_entry *entry)
 	zswap_entry_cache_free(entry);
 	atomic_dec(&zswap_stored_pages);
 	zswap_pool_total_size = zpool_get_total_size(zswap_pool);
-	zswap_pool_pages = zswap_pool_total_size >> PAGE_SHIFT;
 }
 
 /* caller must hold the tree lock */
@@ -731,7 +728,6 @@ static int zswap_frontswap_store(unsigned type, pgoff_t offset,
 	/* update stats */
 	atomic_inc(&zswap_stored_pages);
 	zswap_pool_total_size = zpool_get_total_size(zswap_pool);
-	zswap_pool_pages = zswap_pool_total_size >> PAGE_SHIFT;
 
 	return 0;
 
@@ -886,8 +882,6 @@ static int __init zswap_debugfs_init(void)
 			zswap_debugfs_root, &zswap_duplicate_entry);
 	debugfs_create_u64("pool_total_size", S_IRUGO,
 			zswap_debugfs_root, &zswap_pool_total_size);
-	debugfs_create_u64("pool_pages", S_IRUGO,
-			zswap_debugfs_root, &zswap_pool_pages);
 	debugfs_create_atomic_t("stored_pages", S_IRUGO,
 			zswap_debugfs_root, &zswap_stored_pages);
 

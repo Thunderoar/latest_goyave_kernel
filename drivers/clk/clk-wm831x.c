@@ -97,7 +97,7 @@ static int wm831x_fll_prepare(struct clk_hw *hw)
 	struct wm831x *wm831x = clkdata->wm831x;
 	int ret;
 
-	ret = wm831x_set_bits(wm831x, WM831X_FLL_CONTROL_1,
+	ret = wm831x_set_bits(wm831x, WM831X_FLL_CONTROL_2,
 			      WM831X_FLL_ENA, WM831X_FLL_ENA);
 	if (ret != 0)
 		dev_crit(wm831x->dev, "Failed to enable FLL: %d\n", ret);
@@ -114,9 +114,9 @@ static void wm831x_fll_unprepare(struct clk_hw *hw)
 	struct wm831x *wm831x = clkdata->wm831x;
 	int ret;
 
-	ret = wm831x_set_bits(wm831x, WM831X_FLL_CONTROL_1, WM831X_FLL_ENA, 0);
+	ret = wm831x_set_bits(wm831x, WM831X_FLL_CONTROL_2, WM831X_FLL_ENA, 0);
 	if (ret != 0)
-		dev_crit(wm831x->dev, "Failed to disable FLL: %d\n", ret);
+		dev_crit(wm831x->dev, "Failed to disaable FLL: %d\n", ret);
 }
 
 static unsigned long wm831x_fll_recalc_rate(struct clk_hw *hw,
@@ -248,7 +248,7 @@ static int wm831x_clkout_is_enabled(struct clk_hw *hw)
 	if (ret < 0) {
 		dev_err(wm831x->dev, "Unable to read CLOCK_CONTROL_1: %d\n",
 			ret);
-		return false;
+		return true;
 	}
 
 	return (ret & WM831X_CLKOUT_ENA) != 0;
@@ -299,8 +299,8 @@ static void wm831x_clkout_unprepare(struct clk_hw *hw)
 }
 
 static const char *wm831x_clkout_parents[] = {
-	"fll",
 	"xtal",
+	"fll",
 };
 
 static u8 wm831x_clkout_get_parent(struct clk_hw *hw)
@@ -318,9 +318,9 @@ static u8 wm831x_clkout_get_parent(struct clk_hw *hw)
 	}
 
 	if (ret & WM831X_CLKOUT_SRC)
-		return 1;
-	else
 		return 0;
+	else
+		return 1;
 }
 
 static int wm831x_clkout_set_parent(struct clk_hw *hw, u8 parent)
@@ -386,7 +386,7 @@ static int wm831x_clk_probe(struct platform_device *pdev)
 	if (IS_ERR(clkdata->clkout))
 		return PTR_ERR(clkdata->clkout);
 
-	platform_set_drvdata(pdev, clkdata);
+	dev_set_drvdata(&pdev->dev, clkdata);
 
 	return 0;
 }

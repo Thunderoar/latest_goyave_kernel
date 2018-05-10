@@ -66,46 +66,8 @@
 
 /* Power Management Commands, Responses, Notifications */
 
-/* Radio LP RX Energy Threshold measured in dBm */
-#define POWER_LPRX_RSSI_THRESHOLD	75
-#define POWER_LPRX_RSSI_THRESHOLD_MAX	94
-#define POWER_LPRX_RSSI_THRESHOLD_MIN	30
-
 /**
- * enum iwl_ltr_config_flags - masks for LTR config command flags
- * @LTR_CFG_FLAG_FEATURE_ENABLE: Feature operational status
- * @LTR_CFG_FLAG_HW_DIS_ON_SHADOW_REG_ACCESS: allow LTR change on shadow
- *	memory access
- * @LTR_CFG_FLAG_HW_EN_SHRT_WR_THROUGH: allow LTR msg send on ANY LTR
- *	reg change
- * @LTR_CFG_FLAG_HW_DIS_ON_D0_2_D3: allow LTR msg send on transition from
- *	D0 to D3
- * @LTR_CFG_FLAG_SW_SET_SHORT: fixed static short LTR register
- * @LTR_CFG_FLAG_SW_SET_LONG: fixed static short LONG register
- * @LTR_CFG_FLAG_DENIE_C10_ON_PD: allow going into C10 on PD
- */
-enum iwl_ltr_config_flags {
-	LTR_CFG_FLAG_FEATURE_ENABLE = BIT(0),
-	LTR_CFG_FLAG_HW_DIS_ON_SHADOW_REG_ACCESS = BIT(1),
-	LTR_CFG_FLAG_HW_EN_SHRT_WR_THROUGH = BIT(2),
-	LTR_CFG_FLAG_HW_DIS_ON_D0_2_D3 = BIT(3),
-	LTR_CFG_FLAG_SW_SET_SHORT = BIT(4),
-	LTR_CFG_FLAG_SW_SET_LONG = BIT(5),
-	LTR_CFG_FLAG_DENIE_C10_ON_PD = BIT(6),
-};
-
-/**
- * struct iwl_ltr_config_cmd - configures the LTR
- * @flags: See %enum iwl_ltr_config_flags
- */
-struct iwl_ltr_config_cmd {
-	__le32 flags;
-	__le32 static_long;
-	__le32 static_short;
-} __packed;
-
-/**
- * enum iwl_power_flags - masks for power table command flags
+ * enum iwl_scan_flags - masks for power table command flags
  * @POWER_FLAGS_POWER_SAVE_ENA_MSK: '1' Allow to save power by turning off
  *		receiver and transmitter. '0' - does not allow.
  * @POWER_FLAGS_POWER_MANAGEMENT_ENA_MSK: '0' Driver disables power management,
@@ -139,107 +101,20 @@ enum iwl_power_flags {
  * @tx_data_timeout:    Minimum time (usec) from last Tx packet for AM to
  *			PSM transition - legacy PM
  * @sleep_interval:	not in use
- * @skip_dtim_periods:	Number of DTIM periods to skip if Skip over DTIM flag
- *			is set. For example, if it is required to skip over
- *			one DTIM, this value need to be set to 2 (DTIM periods).
+ * @keep_alive_beacons:	not in use
  * @lprx_rssi_threshold: Signal strength up to which LP RX can be enabled.
  *			Default: 80dbm
  */
 struct iwl_powertable_cmd {
-	/* PM_POWER_TABLE_CMD_API_S_VER_6 */
+	/* PM_POWER_TABLE_CMD_API_S_VER_5 */
 	__le16 flags;
 	u8 keep_alive_seconds;
 	u8 debug_flags;
 	__le32 rx_data_timeout;
 	__le32 tx_data_timeout;
 	__le32 sleep_interval[IWL_POWER_VEC_SIZE];
-	__le32 skip_dtim_periods;
+	__le32 keep_alive_beacons;
 	__le32 lprx_rssi_threshold;
 } __packed;
-
-/**
- * struct iwl_beacon_filter_cmd
- * REPLY_BEACON_FILTERING_CMD = 0xd2 (command)
- * @id_and_color: MAC contex identifier
- * @bf_energy_delta: Used for RSSI filtering, if in 'normal' state. Send beacon
- *      to driver if delta in Energy values calculated for this and last
- *      passed beacon is greater than this threshold. Zero value means that
- *      the Energy change is ignored for beacon filtering, and beacon will
- *      not be forced to be sent to driver regardless of this delta. Typical
- *      energy delta 5dB.
- * @bf_roaming_energy_delta: Used for RSSI filtering, if in 'roaming' state.
- *      Send beacon to driver if delta in Energy values calculated for this
- *      and last passed beacon is greater than this threshold. Zero value
- *      means that the Energy change is ignored for beacon filtering while in
- *      Roaming state, typical energy delta 1dB.
- * @bf_roaming_state: Used for RSSI filtering. If absolute Energy values
- *      calculated for current beacon is less than the threshold, use
- *      Roaming Energy Delta Threshold, otherwise use normal Energy Delta
- *      Threshold. Typical energy threshold is -72dBm.
- * @bf_temperature_delta: Send Beacon to driver if delta in temperature values
- *      calculated for this and the last passed beacon is greater than  this
- *      threshold. Zero value means that the temperature changeis ignored for
- *      beacon filtering; beacons will not be  forced to be sent to driver
- *      regardless of whether its temerature has been changed.
- * @bf_enable_beacon_filter: 1, beacon filtering is enabled; 0, disabled.
- * @bf_filter_escape_timer: Send beacons to to driver if no beacons were passed
- *      for a specific period of time. Units: Beacons.
- * @ba_escape_timer: Fully receive and parse beacon if no beacons were passed
- *      for a longer period of time then this escape-timeout. Units: Beacons.
- * @ba_enable_beacon_abort: 1, beacon abort is enabled; 0, disabled.
- */
-struct iwl_beacon_filter_cmd {
-	u8 bf_energy_delta;
-	u8 bf_roaming_energy_delta;
-	u8 bf_roaming_state;
-	u8 bf_temperature_delta;
-	u8 bf_enable_beacon_filter;
-	u8 bf_debug_flag;
-	__le16 reserved1;
-	__le32 bf_escape_timer;
-	__le32 ba_escape_timer;
-	u8 ba_enable_beacon_abort;
-	u8 reserved2[3];
-} __packed;
-
-/* Beacon filtering and beacon abort */
-#define IWL_BF_ENERGY_DELTA_DEFAULT 5
-#define IWL_BF_ENERGY_DELTA_MAX 255
-#define IWL_BF_ENERGY_DELTA_MIN 0
-
-#define IWL_BF_ROAMING_ENERGY_DELTA_DEFAULT 1
-#define IWL_BF_ROAMING_ENERGY_DELTA_MAX 255
-#define IWL_BF_ROAMING_ENERGY_DELTA_MIN 0
-
-#define IWL_BF_ROAMING_STATE_DEFAULT 72
-#define IWL_BF_ROAMING_STATE_MAX 255
-#define IWL_BF_ROAMING_STATE_MIN 0
-
-#define IWL_BF_TEMPERATURE_DELTA_DEFAULT 5
-#define IWL_BF_TEMPERATURE_DELTA_MAX 255
-#define IWL_BF_TEMPERATURE_DELTA_MIN 0
-
-#define IWL_BF_ENABLE_BEACON_FILTER_DEFAULT 1
-
-#define IWL_BF_DEBUG_FLAG_DEFAULT 0
-
-#define IWL_BF_ESCAPE_TIMER_DEFAULT 50
-#define IWL_BF_ESCAPE_TIMER_MAX 1024
-#define IWL_BF_ESCAPE_TIMER_MIN 0
-
-#define IWL_BA_ESCAPE_TIMER_DEFAULT 3
-#define IWL_BA_ESCAPE_TIMER_MAX 1024
-#define IWL_BA_ESCAPE_TIMER_MIN 0
-
-#define IWL_BA_ENABLE_BEACON_ABORT_DEFAULT 1
-
-#define IWL_BF_CMD_CONFIG_DEFAULTS					\
-	.bf_energy_delta = IWL_BF_ENERGY_DELTA_DEFAULT,			\
-	.bf_roaming_energy_delta = IWL_BF_ROAMING_ENERGY_DELTA_DEFAULT,	\
-	.bf_roaming_state = IWL_BF_ROAMING_STATE_DEFAULT,		\
-	.bf_temperature_delta = IWL_BF_TEMPERATURE_DELTA_DEFAULT,	\
-	.bf_debug_flag = IWL_BF_DEBUG_FLAG_DEFAULT,			\
-	.bf_escape_timer = cpu_to_le32(IWL_BF_ESCAPE_TIMER_DEFAULT),	\
-	.ba_escape_timer = cpu_to_le32(IWL_BA_ESCAPE_TIMER_DEFAULT)
 
 #endif

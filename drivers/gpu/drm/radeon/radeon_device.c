@@ -95,9 +95,6 @@ static const char radeon_family_name[][16] = {
 	"VERDE",
 	"OLAND",
 	"HAINAN",
-	"BONAIRE",
-	"KAVERI",
-	"KABINI",
 	"LAST",
 };
 
@@ -229,94 +226,6 @@ void radeon_scratch_free(struct radeon_device *rdev, uint32_t reg)
 			return;
 		}
 	}
-}
-
-/*
- * GPU doorbell aperture helpers function.
- */
-/**
- * radeon_doorbell_init - Init doorbell driver information.
- *
- * @rdev: radeon_device pointer
- *
- * Init doorbell driver information (CIK)
- * Returns 0 on success, error on failure.
- */
-int radeon_doorbell_init(struct radeon_device *rdev)
-{
-	int i;
-
-	/* doorbell bar mapping */
-	rdev->doorbell.base = pci_resource_start(rdev->pdev, 2);
-	rdev->doorbell.size = pci_resource_len(rdev->pdev, 2);
-
-	/* limit to 4 MB for now */
-	if (rdev->doorbell.size > (4 * 1024 * 1024))
-		rdev->doorbell.size = 4 * 1024 * 1024;
-
-	rdev->doorbell.ptr = ioremap(rdev->doorbell.base, rdev->doorbell.size);
-	if (rdev->doorbell.ptr == NULL) {
-		return -ENOMEM;
-	}
-	DRM_INFO("doorbell mmio base: 0x%08X\n", (uint32_t)rdev->doorbell.base);
-	DRM_INFO("doorbell mmio size: %u\n", (unsigned)rdev->doorbell.size);
-
-	rdev->doorbell.num_pages = rdev->doorbell.size / PAGE_SIZE;
-
-	for (i = 0; i < rdev->doorbell.num_pages; i++) {
-		rdev->doorbell.free[i] = true;
-	}
-	return 0;
-}
-
-/**
- * radeon_doorbell_fini - Tear down doorbell driver information.
- *
- * @rdev: radeon_device pointer
- *
- * Tear down doorbell driver information (CIK)
- */
-void radeon_doorbell_fini(struct radeon_device *rdev)
-{
-	iounmap(rdev->doorbell.ptr);
-	rdev->doorbell.ptr = NULL;
-}
-
-/**
- * radeon_doorbell_get - Allocate a doorbell page
- *
- * @rdev: radeon_device pointer
- * @doorbell: doorbell page number
- *
- * Allocate a doorbell page for use by the driver (all asics).
- * Returns 0 on success or -EINVAL on failure.
- */
-int radeon_doorbell_get(struct radeon_device *rdev, u32 *doorbell)
-{
-	int i;
-
-	for (i = 0; i < rdev->doorbell.num_pages; i++) {
-		if (rdev->doorbell.free[i]) {
-			rdev->doorbell.free[i] = false;
-			*doorbell = i;
-			return 0;
-		}
-	}
-	return -EINVAL;
-}
-
-/**
- * radeon_doorbell_free - Free a doorbell page
- *
- * @rdev: radeon_device pointer
- * @doorbell: doorbell page number
- *
- * Free a doorbell page allocated for use by the driver (all asics)
- */
-void radeon_doorbell_free(struct radeon_device *rdev, u32 doorbell)
-{
-	if (doorbell < rdev->doorbell.num_pages)
-		rdev->doorbell.free[doorbell] = true;
 }
 
 /*
@@ -540,23 +449,6 @@ void radeon_gtt_location(struct radeon_device *rdev, struct radeon_mc *mc)
 /*
  * GPU helpers function.
  */
-
-/**
- * radeon_device_is_virtual - check if we are running is a virtual environment
- *
- * Check if the asic has been passed through to a VM (all asics).
- * Used at driver startup.
- * Returns true if virtual or false if not.
- */
-static bool radeon_device_is_virtual(void)
-{
-#ifdef CONFIG_X86
-	return boot_cpu_has(X86_FEATURE_HYPERVISOR);
-#else
-	return false;
-#endif
-}
-
 /**
  * radeon_card_posted - check if the hw has already been initialized
  *
@@ -569,10 +461,6 @@ static bool radeon_device_is_virtual(void)
 bool radeon_card_posted(struct radeon_device *rdev)
 {
 	uint32_t reg;
-
-	/* for pass through, always force asic_init */
-	if (radeon_device_is_virtual())
-		return false;
 
 	/* required for EFI mode on macbook2,1 which uses an r5xx asic */
 	if (efi_enabled(EFI_BOOT) &&
@@ -1257,23 +1145,14 @@ int radeon_device_init(struct radeon_device *rdev,
 	/* Registers mapping */
 	/* TODO: block userspace mapping of io register */
 	spin_lock_init(&rdev->mmio_idx_lock);
-	if (rdev->family >= CHIP_BONAIRE) {
-		rdev->rmmio_base = pci_resource_start(rdev->pdev, 5);
-		rdev->rmmio_size = pci_resource_len(rdev->pdev, 5);
-	} else {
-		rdev->rmmio_base = pci_resource_start(rdev->pdev, 2);
-		rdev->rmmio_size = pci_resource_len(rdev->pdev, 2);
-	}
+	rdev->rmmio_base = pci_resource_start(rdev->pdev, 2);
+	rdev->rmmio_size = pci_resource_len(rdev->pdev, 2);
 	rdev->rmmio = ioremap(rdev->rmmio_base, rdev->rmmio_size);
 	if (rdev->rmmio == NULL) {
 		return -ENOMEM;
 	}
 	DRM_INFO("register mmio base: 0x%08X\n", (uint32_t)rdev->rmmio_base);
 	DRM_INFO("register mmio size: %u\n", (unsigned)rdev->rmmio_size);
-
-	/* doorbell bar mapping */
-	if (rdev->family >= CHIP_BONAIRE)
-		radeon_doorbell_init(rdev);
 
 	/* io port mapping */
 	for (i = 0; i < DEVICE_COUNT_RESOURCE; i++) {
@@ -1361,8 +1240,6 @@ void radeon_device_fini(struct radeon_device *rdev)
 	rdev->rio_mem = NULL;
 	iounmap(rdev->rmmio);
 	rdev->rmmio = NULL;
-	if (rdev->family >= CHIP_BONAIRE)
-		radeon_doorbell_fini(rdev);
 	radeon_debugfs_remove_files(rdev);
 }
 

@@ -185,7 +185,8 @@ err_rmr:
 
 static int ohci_hcd_ppc_of_remove(struct platform_device *op)
 {
-	struct usb_hcd *hcd = platform_get_drvdata(op);
+	struct usb_hcd *hcd = dev_get_drvdata(&op->dev);
+	dev_set_drvdata(&op->dev, NULL);
 
 	dev_dbg(&op->dev, "stopping PPC-OF USB Controller\n");
 
@@ -202,7 +203,7 @@ static int ohci_hcd_ppc_of_remove(struct platform_device *op)
 
 static void ohci_hcd_ppc_of_shutdown(struct platform_device *op)
 {
-	struct usb_hcd *hcd = platform_get_drvdata(op);
+	struct usb_hcd *hcd = dev_get_drvdata(&op->dev);
 
         if (hcd->driver->shutdown)
                 hcd->driver->shutdown(hcd);

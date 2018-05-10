@@ -1786,6 +1786,8 @@ static int mv_u3d_remove(struct platform_device *dev)
 
 	clk_put(u3d->clk);
 
+	platform_set_drvdata(dev, NULL);
+
 	kfree(u3d);
 
 	return 0;
@@ -1995,6 +1997,7 @@ err_map_cap_regs:
 err_get_cap_regs:
 err_get_clk:
 	clk_put(u3d->clk);
+	platform_set_drvdata(dev, NULL);
 	kfree(u3d);
 err_alloc_private:
 err_pdata:
@@ -2050,7 +2053,7 @@ static SIMPLE_DEV_PM_OPS(mv_u3d_pm_ops, mv_u3d_suspend, mv_u3d_resume);
 
 static void mv_u3d_shutdown(struct platform_device *dev)
 {
-	struct mv_u3d *u3d = platform_get_drvdata(dev);
+	struct mv_u3d *u3d = dev_get_drvdata(&dev->dev);
 	u32 tmp;
 
 	tmp = ioread32(&u3d->op_regs->usbcmd);

@@ -17,7 +17,6 @@
 #include <linux/interrupt.h>
 
 #include "wil6210.h"
-#include "trace.h"
 
 /**
  * Theory of operation:
@@ -104,14 +103,14 @@ static void wil6210_mask_irq_pseudo(struct wil6210_priv *wil)
 	clear_bit(wil_status_irqen, &wil->status);
 }
 
-void wil6210_unmask_irq_tx(struct wil6210_priv *wil)
+static void wil6210_unmask_irq_tx(struct wil6210_priv *wil)
 {
 	iowrite32(WIL6210_IMC_TX, wil->csr +
 		  HOSTADDR(RGF_DMA_EP_TX_ICR) +
 		  offsetof(struct RGF_ICR, IMC));
 }
 
-void wil6210_unmask_irq_rx(struct wil6210_priv *wil)
+static void wil6210_unmask_irq_rx(struct wil6210_priv *wil)
 {
 	iowrite32(WIL6210_IMC_RX, wil->csr +
 		  HOSTADDR(RGF_DMA_EP_RX_ICR) +
@@ -169,7 +168,6 @@ static irqreturn_t wil6210_irq_rx(int irq, void *cookie)
 					 HOSTADDR(RGF_DMA_EP_RX_ICR) +
 					 offsetof(struct RGF_ICR, ICR));
 
-	trace_wil6210_irq_rx(isr);
 	wil_dbg_irq(wil, "ISR RX 0x%08x\n", isr);
 
 	if (!isr) {
@@ -182,14 +180,13 @@ static irqreturn_t wil6210_irq_rx(int irq, void *cookie)
 	if (isr & BIT_DMA_EP_RX_ICR_RX_DONE) {
 		wil_dbg_irq(wil, "RX done\n");
 		isr &= ~BIT_DMA_EP_RX_ICR_RX_DONE;
-		wil_dbg_txrx(wil, "NAPI schedule\n");
-		napi_schedule(&wil->napi_rx);
+		wil_rx_handle(wil);
 	}
 
 	if (isr)
 		wil_err(wil, "un-handled RX ISR bits 0x%08x\n", isr);
 
-	/* Rx IRQ will be enabled when NAPI processing finished */
+	wil6210_unmask_irq_rx(wil);
 
 	return IRQ_HANDLED;
 }
@@ -201,7 +198,6 @@ static irqreturn_t wil6210_irq_tx(int irq, void *cookie)
 					 HOSTADDR(RGF_DMA_EP_TX_ICR) +
 					 offsetof(struct RGF_ICR, ICR));
 
-	trace_wil6210_irq_tx(isr);
 	wil_dbg_irq(wil, "ISR TX 0x%08x\n", isr);
 
 	if (!isr) {
@@ -212,17 +208,23 @@ static irqreturn_t wil6210_irq_tx(int irq, void *cookie)
 	wil6210_mask_irq_tx(wil);
 
 	if (isr & BIT_DMA_EP_TX_ICR_TX_DONE) {
+		uint i;
 		wil_dbg_irq(wil, "TX done\n");
-		napi_schedule(&wil->napi_tx);
 		isr &= ~BIT_DMA_EP_TX_ICR_TX_DONE;
-		/* clear also all VRING interrupts */
-		isr &= ~(BIT(25) - 1UL);
+		for (i = 0; i < 24; i++) {
+			u32 mask = BIT_DMA_EP_TX_ICR_TX_DONE_N(i);
+			if (isr & mask) {
+				isr &= ~mask;
+				wil_dbg_irq(wil, "TX done(%i)\n", i);
+				wil_tx_complete(wil, i);
+			}
+		}
 	}
 
 	if (isr)
 		wil_err(wil, "un-handled TX ISR bits 0x%08x\n", isr);
 
-	/* Tx IRQ will be enabled when NAPI processing finished */
+	wil6210_unmask_irq_tx(wil);
 
 	return IRQ_HANDLED;
 }
@@ -254,7 +256,6 @@ static irqreturn_t wil6210_irq_misc(int irq, void *cookie)
 					 HOSTADDR(RGF_DMA_EP_MISC_ICR) +
 					 offsetof(struct RGF_ICR, ICR));
 
-	trace_wil6210_irq_misc(isr);
 	wil_dbg_irq(wil, "ISR MISC 0x%08x\n", isr);
 
 	if (!isr) {
@@ -300,7 +301,6 @@ static irqreturn_t wil6210_irq_misc_thread(int irq, void *cookie)
 	struct wil6210_priv *wil = cookie;
 	u32 isr = wil->isr_misc;
 
-	trace_wil6210_irq_misc_thread(isr);
 	wil_dbg_irq(wil, "Thread ISR MISC 0x%08x\n", isr);
 
 	if (isr & ISR_MISC_FW_ERROR) {
@@ -408,7 +408,6 @@ static irqreturn_t wil6210_hardirq(int irq, void *cookie)
 	if (wil6210_debug_irq_mask(wil, pseudo_cause))
 		return IRQ_NONE;
 
-	trace_wil6210_irq_pseudo(pseudo_cause);
 	wil_dbg_irq(wil, "Pseudo IRQ 0x%08x\n", pseudo_cause);
 
 	wil6210_mask_irq_pseudo(wil);

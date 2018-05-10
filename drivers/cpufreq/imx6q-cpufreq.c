@@ -68,6 +68,8 @@ static int imx6q_set_target(struct cpufreq_policy *policy,
 	if (freqs.old == freqs.new)
 		return 0;
 
+	cpufreq_notify_transition(policy, &freqs, CPUFREQ_PRECHANGE);
+
 	rcu_read_lock();
 	opp = opp_find_freq_ceil(cpu_dev, &freq_hz);
 	if (IS_ERR(opp)) {
@@ -84,16 +86,13 @@ static int imx6q_set_target(struct cpufreq_policy *policy,
 		freqs.old / 1000, volt_old / 1000,
 		freqs.new / 1000, volt / 1000);
 
-	cpufreq_notify_transition(policy, &freqs, CPUFREQ_PRECHANGE);
-
 	/* scaling up?  scale voltage before frequency */
 	if (freqs.new > freqs.old) {
 		ret = regulator_set_voltage_tol(arm_reg, volt, 0);
 		if (ret) {
 			dev_err(cpu_dev,
 				"failed to scale vddarm up: %d\n", ret);
-			freqs.new = freqs.old;
-			goto post_notify;
+			return ret;
 		}
 
 		/*
@@ -146,18 +145,15 @@ static int imx6q_set_target(struct cpufreq_policy *policy,
 	if (ret) {
 		dev_err(cpu_dev, "failed to set clock rate: %d\n", ret);
 		regulator_set_voltage_tol(arm_reg, volt_old, 0);
-		freqs.new = freqs.old;
-		goto post_notify;
+		return ret;
 	}
 
 	/* scaling down?  scale voltage after frequency */
 	if (freqs.new < freqs.old) {
 		ret = regulator_set_voltage_tol(arm_reg, volt, 0);
-		if (ret) {
+		if (ret)
 			dev_warn(cpu_dev,
 				 "failed to scale vddarm down: %d\n", ret);
-			ret = 0;
-		}
 
 		if (freqs.old == FREQ_1P2_GHZ / 1000) {
 			regulator_set_voltage_tol(pu_reg,
@@ -167,10 +163,9 @@ static int imx6q_set_target(struct cpufreq_policy *policy,
 		}
 	}
 
-post_notify:
 	cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
 
-	return ret;
+	return 0;
 }
 
 static int imx6q_cpufreq_init(struct cpufreq_policy *policy)

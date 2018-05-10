@@ -678,6 +678,9 @@ static void cp_tx (struct cp_private *cp)
 				 le32_to_cpu(txd->opts1) & 0xffff,
 				 PCI_DMA_TODEVICE);
 
+		bytes_compl += skb->len;
+		pkts_compl++;
+
 		if (status & LastFrag) {
 			if (status & (TxError | TxFIFOUnder)) {
 				netif_dbg(cp, tx_err, cp->dev,
@@ -699,8 +702,6 @@ static void cp_tx (struct cp_private *cp)
 				netif_dbg(cp, tx_done, cp->dev,
 					  "tx done, slot %d\n", tx_tail);
 			}
-			bytes_compl += skb->len;
-			pkts_compl++;
 			dev_kfree_skb_irq(skb);
 		}
 
@@ -899,7 +900,7 @@ out_unlock:
 
 	return NETDEV_TX_OK;
 out_dma_error:
-	dev_kfree_skb_any(skb);
+	kfree_skb(skb);
 	cp->dev->stats.tx_dropped++;
 	goto out_unlock;
 }
@@ -1859,7 +1860,7 @@ static int cp_set_eeprom(struct net_device *dev,
 /* Put the board into D3cold state and wait for WakeUp signal */
 static void cp_set_d3_state (struct cp_private *cp)
 {
-	pci_enable_wake(cp->pdev, PCI_D0, 1); /* Enable PME# generation */
+	pci_enable_wake (cp->pdev, 0, 1); /* Enable PME# generation */
 	pci_set_power_state (cp->pdev, PCI_D3hot);
 }
 

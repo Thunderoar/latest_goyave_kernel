@@ -226,7 +226,7 @@ static ssize_t ad799x_write_frequency(struct device *dev,
 	int ret, i;
 	u8 t;
 
-	ret = kstrtol(buf, 10, &val);
+	ret = strict_strtol(buf, 10, &val);
 	if (ret)
 		return ret;
 
@@ -337,7 +337,7 @@ static ssize_t ad799x_write_channel_config(struct device *dev,
 	long val;
 	int ret;
 
-	ret = kstrtol(buf, 10, &val);
+	ret = strict_strtol(buf, 10, &val);
 	if (ret)
 		return ret;
 
@@ -644,8 +644,7 @@ static int ad799x_probe(struct i2c_client *client,
 	return 0;
 
 error_free_irq:
-	if (client->irq > 0)
-		free_irq(client->irq, indio_dev);
+	free_irq(client->irq, indio_dev);
 error_cleanup_ring:
 	ad799x_ring_cleanup(indio_dev);
 error_disable_reg:

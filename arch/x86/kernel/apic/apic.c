@@ -35,7 +35,6 @@
 #include <linux/smp.h>
 #include <linux/mm.h>
 
-#include <asm/trace/irq_vectors.h>
 #include <asm/irq_remapping.h>
 #include <asm/perf_event.h>
 #include <asm/x86_init.h>
@@ -351,13 +350,6 @@ static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
 	apic_write(APIC_LVTT, lvtt_value);
 
 	if (lvtt_value & APIC_LVT_TIMER_TSCDEADLINE) {
-		/*
-		 * See Intel SDM: TSC-Deadline Mode chapter. In xAPIC mode,
-		 * writing to the APIC LVTT and TSC_DEADLINE MSR isn't serialized.
-		 * According to Intel, MFENCE can do the serialization here.
-		 */
-		asm volatile("mfence" : : : "memory");
-
 		printk_once(KERN_DEBUG "TSC deadline timer enabled\n");
 		return;
 	}
@@ -927,35 +919,17 @@ void __irq_entry smp_apic_timer_interrupt(struct pt_regs *regs)
 	/*
 	 * NOTE! We'd better ACK the irq immediately,
 	 * because timer handling can be slow.
-	 *
-	 * update_process_times() expects us to have done irq_enter().
-	 * Besides, if we don't timer interrupts ignore the global
-	 * interrupt lock, which is the WrongThing (tm) to do.
 	 */
-	entering_ack_irq();
-	local_apic_timer_interrupt();
-	exiting_irq();
-
-	set_irq_regs(old_regs);
-}
-
-void __irq_entry smp_trace_apic_timer_interrupt(struct pt_regs *regs)
-{
-	struct pt_regs *old_regs = set_irq_regs(regs);
-
+	ack_APIC_irq();
 	/*
-	 * NOTE! We'd better ACK the irq immediately,
-	 * because timer handling can be slow.
-	 *
 	 * update_process_times() expects us to have done irq_enter().
 	 * Besides, if we don't timer interrupts ignore the global
 	 * interrupt lock, which is the WrongThing (tm) to do.
 	 */
-	entering_ack_irq();
-	trace_local_timer_entry(LOCAL_TIMER_VECTOR);
+	irq_enter();
+	exit_idle();
 	local_apic_timer_interrupt();
-	trace_local_timer_exit(LOCAL_TIMER_VECTOR);
-	exiting_irq();
+	irq_exit();
 
 	set_irq_regs(old_regs);
 }
@@ -1289,7 +1263,7 @@ void __cpuinit setup_local_APIC(void)
 	unsigned int value, queued;
 	int i, j, acked = 0;
 	unsigned long long tsc = 0, ntsc;
-	long long max_loops = cpu_khz ? cpu_khz : 1000000;
+	long long max_loops = cpu_khz;
 
 	if (cpu_has_tsc)
 		rdtscll(tsc);
@@ -1386,7 +1360,7 @@ void __cpuinit setup_local_APIC(void)
 			break;
 		}
 		if (queued) {
-			if (cpu_has_tsc && cpu_khz) {
+			if (cpu_has_tsc) {
 				rdtscll(ntsc);
 				max_loops = (cpu_khz << 10) - (ntsc - tsc);
 			} else
@@ -1599,11 +1573,6 @@ void __init enable_IR_x2apic(void)
 	unsigned long flags;
 	int ret, x2apic_enabled = 0;
 	int hardware_init_ret;
-
-#ifdef CONFIG_X86_IO_APIC
-	if (skip_ioapic_setup)
-		return;
-#endif
 
 	/* Make sure irq_remap_ops are initialized */
 	setup_irq_remapping_ops();
@@ -1938,10 +1907,12 @@ int __init APIC_init_uniprocessor(void)
 /*
  * This interrupt should _never_ happen with our APIC/SMP architecture
  */
-static inline void __smp_spurious_interrupt(void)
+void smp_spurious_interrupt(struct pt_regs *regs)
 {
 	u32 v;
 
+	irq_enter();
+	exit_idle();
 	/*
 	 * Check if this really is a spurious interrupt and ACK it
 	 * if it is a vectored one.  Just in case...
@@ -1956,28 +1927,13 @@ static inline void __smp_spurious_interrupt(void)
 	/* see sw-dev-man vol 3, chapter 7.4.13.5 */
 	pr_info("spurious APIC interrupt on CPU#%d, "
 		"should never happen.\n", smp_processor_id());
-}
-
-void smp_spurious_interrupt(struct pt_regs *regs)
-{
-	entering_irq();
-	__smp_spurious_interrupt();
-	exiting_irq();
-}
-
-void smp_trace_spurious_interrupt(struct pt_regs *regs)
-{
-	entering_irq();
-	trace_spurious_apic_entry(SPURIOUS_APIC_VECTOR);
-	__smp_spurious_interrupt();
-	trace_spurious_apic_exit(SPURIOUS_APIC_VECTOR);
-	exiting_irq();
+	irq_exit();
 }
 
 /*
  * This interrupt should never happen with our APIC/SMP architecture
  */
-static inline void __smp_error_interrupt(struct pt_regs *regs)
+void smp_error_interrupt(struct pt_regs *regs)
 {
 	u32 v0, v1;
 	u32 i = 0;
@@ -1992,6 +1948,8 @@ static inline void __smp_error_interrupt(struct pt_regs *regs)
 		"Illegal register address",	/* APIC Error Bit 7 */
 	};
 
+	irq_enter();
+	exit_idle();
 	/* First tickle the hardware, only then report what went on. -- REW */
 	v0 = apic_read(APIC_ESR);
 	apic_write(APIC_ESR, 0);
@@ -2012,22 +1970,7 @@ static inline void __smp_error_interrupt(struct pt_regs *regs)
 
 	apic_printk(APIC_DEBUG, KERN_CONT "\n");
 
-}
-
-void smp_error_interrupt(struct pt_regs *regs)
-{
-	entering_irq();
-	__smp_error_interrupt(regs);
-	exiting_irq();
-}
-
-void smp_trace_error_interrupt(struct pt_regs *regs)
-{
-	entering_irq();
-	trace_error_apic_entry(ERROR_APIC_VECTOR);
-	__smp_error_interrupt(regs);
-	trace_error_apic_exit(ERROR_APIC_VECTOR);
-	exiting_irq();
+	irq_exit();
 }
 
 /**
@@ -2359,7 +2302,7 @@ static void lapic_resume(void)
 	apic_write(APIC_SPIV, apic_pm_state.apic_spiv);
 	apic_write(APIC_LVT0, apic_pm_state.apic_lvt0);
 	apic_write(APIC_LVT1, apic_pm_state.apic_lvt1);
-#if defined(CONFIG_X86_MCE_INTEL)
+#if defined(CONFIG_X86_MCE_P4THERMAL) || defined(CONFIG_X86_MCE_INTEL)
 	if (maxlvt >= 5)
 		apic_write(APIC_LVTTHMR, apic_pm_state.apic_thmr);
 #endif

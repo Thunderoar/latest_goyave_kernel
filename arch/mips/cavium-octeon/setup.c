@@ -41,6 +41,12 @@
 #include <asm/octeon/pci-octeon.h>
 #include <asm/octeon/cvmx-mio-defs.h>
 
+#ifdef CONFIG_CAVIUM_DECODE_RSL
+extern void cvmx_interrupt_rsl_decode(void);
+extern int __cvmx_interrupt_ecc_report_single_bit_errors;
+extern void cvmx_interrupt_rsl_enable(void);
+#endif
+
 extern struct plat_smp_ops octeon_smp_ops;
 
 #ifdef CONFIG_PCI
@@ -457,17 +463,17 @@ static void octeon_halt(void)
 	octeon_kill_core(NULL);
 }
 
-static char __read_mostly octeon_system_type[80];
-
-static int __init init_octeon_system_type(void)
+/**
+ * Handle all the error condition interrupts that might occur.
+ *
+ */
+#ifdef CONFIG_CAVIUM_DECODE_RSL
+static irqreturn_t octeon_rlm_interrupt(int cpl, void *dev_id)
 {
-	snprintf(octeon_system_type, sizeof(octeon_system_type), "%s (%s)",
-		cvmx_board_type_to_string(octeon_bootinfo->board_type),
-		octeon_model_get_string(read_c0_prid()));
-
-	return 0;
+	cvmx_interrupt_rsl_decode();
+	return IRQ_HANDLED;
 }
-early_initcall(init_octeon_system_type);
+#endif
 
 /**
  * Return a string representing the system type
@@ -476,7 +482,11 @@ early_initcall(init_octeon_system_type);
  */
 const char *octeon_board_type_string(void)
 {
-	return octeon_system_type;
+	static char name[80];
+	sprintf(name, "%s (%s)",
+		cvmx_board_type_to_string(octeon_bootinfo->board_type),
+		octeon_model_get_string(read_c0_prid()));
+	return name;
 }
 
 const char *get_system_type(void)
@@ -1055,6 +1065,15 @@ void prom_free_prom_memory(void)
 			panic("Core-14449 WAR not in place (%04x).\n"
 			      "Please build kernel with proper options (CONFIG_CAVIUM_CN63XXP1).", insn);
 	}
+#ifdef CONFIG_CAVIUM_DECODE_RSL
+	cvmx_interrupt_rsl_enable();
+
+	/* Add an interrupt handler for general failures. */
+	if (request_irq(OCTEON_IRQ_RML, octeon_rlm_interrupt, IRQF_SHARED,
+			"RML/RSL", octeon_rlm_interrupt)) {
+		panic("Unable to request_irq(OCTEON_IRQ_RML)");
+	}
+#endif
 }
 
 int octeon_prune_device_tree(void);

@@ -1881,8 +1881,11 @@ static int qe_get_frame(struct usb_gadget *gadget)
 
 	tmp = in_be16(&udc->usb_param->frame_n);
 	if (tmp & 0x8000)
-		return tmp & 0x07ff;
-	return -EINVAL;
+		tmp = tmp & 0x07ff;
+	else
+		tmp = -EINVAL;
+
+	return (int)tmp;
 }
 
 static int fsl_qe_start(struct usb_gadget *gadget,
@@ -2586,7 +2589,7 @@ static int qe_udc_probe(struct platform_device *ofdev)
 	if (ret)
 		goto err6;
 
-	platform_set_drvdata(ofdev, udc);
+	dev_set_drvdata(&ofdev->dev, udc);
 	dev_info(udc->dev,
 			"%s USB controller initialized as device\n",
 			(udc->soc_type == PORT_QE) ? "QE" : "CPM");
@@ -2637,7 +2640,7 @@ static int qe_udc_resume(struct platform_device *dev)
 
 static int qe_udc_remove(struct platform_device *ofdev)
 {
-	struct qe_udc *udc = platform_get_drvdata(ofdev);
+	struct qe_udc *udc = dev_get_drvdata(&ofdev->dev);
 	struct qe_ep *ep;
 	unsigned int size;
 	DECLARE_COMPLETION(done);

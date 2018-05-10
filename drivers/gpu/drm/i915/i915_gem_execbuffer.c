@@ -635,9 +635,9 @@ i915_gem_execbuffer_relocate_slow(struct drm_device *dev,
 		 * relocations were valid.
 		 */
 		for (j = 0; j < exec[i].relocation_count; j++) {
-			if (__copy_to_user(&user_relocs[j].presumed_offset,
-					   &invalid_offset,
-					   sizeof(invalid_offset))) {
+			if (copy_to_user(&user_relocs[j].presumed_offset,
+					 &invalid_offset,
+					 sizeof(invalid_offset))) {
 				ret = -EFAULT;
 				mutex_lock(&dev->struct_mutex);
 				goto err;
@@ -786,7 +786,7 @@ i915_gem_execbuffer_move_to_active(struct list_head *objects,
 			obj->dirty = 1;
 			obj->last_write_seqno = intel_ring_get_seqno(ring);
 			if (obj->pin_count) /* check for potential scanout */
-				intel_mark_fb_busy(obj, ring);
+				intel_mark_fb_busy(obj);
 		}
 
 		trace_i915_gem_object_change_domain(obj, old_read, old_write);
@@ -796,14 +796,13 @@ i915_gem_execbuffer_move_to_active(struct list_head *objects,
 static void
 i915_gem_execbuffer_retire_commands(struct drm_device *dev,
 				    struct drm_file *file,
-				    struct intel_ring_buffer *ring,
-				    struct drm_i915_gem_object *obj)
+				    struct intel_ring_buffer *ring)
 {
 	/* Unconditionally force add_request to emit a full flush. */
 	ring->gpu_caches_dirty = true;
 
 	/* Add a breadcrumb for the completion of the batch buffer */
-	(void)__i915_add_request(ring, file, obj, NULL);
+	(void)i915_add_request(ring, file, NULL);
 }
 
 static int
@@ -886,15 +885,6 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 			return -EPERM;
 		}
 		break;
-	case I915_EXEC_VEBOX:
-		ring = &dev_priv->ring[VECS];
-		if (ctx_id != 0) {
-			DRM_DEBUG("Ring %s doesn't support contexts\n",
-				  ring->name);
-			return -EPERM;
-		}
-		break;
-
 	default:
 		DRM_DEBUG("execbuf with unknown ring: %d\n",
 			  (int)(args->flags & I915_EXEC_RING_MASK));
@@ -1084,7 +1074,7 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 	trace_i915_gem_ring_dispatch(ring, intel_ring_get_seqno(ring), flags);
 
 	i915_gem_execbuffer_move_to_active(&eb->objects, ring);
-	i915_gem_execbuffer_retire_commands(dev, file, ring, batch_obj);
+	i915_gem_execbuffer_retire_commands(dev, file, ring);
 
 err:
 	eb_destroy(eb);
@@ -1161,21 +1151,18 @@ i915_gem_execbuffer(struct drm_device *dev, void *data,
 
 	ret = i915_gem_do_execbuffer(dev, data, file, &exec2, exec2_list);
 	if (!ret) {
-		struct drm_i915_gem_exec_object __user *user_exec_list =
-			to_user_ptr(args->buffers_ptr);
-
 		/* Copy the new buffer offsets back to the user's exec list. */
-		for (i = 0; i < args->buffer_count; i++) {
-			ret = __copy_to_user(&user_exec_list[i].offset,
-					     &exec2_list[i].offset,
-					     sizeof(user_exec_list[i].offset));
-			if (ret) {
-				ret = -EFAULT;
-				DRM_DEBUG("failed to copy %d exec entries "
-					  "back to user (%d)\n",
-					  args->buffer_count, ret);
-				break;
-			}
+		for (i = 0; i < args->buffer_count; i++)
+			exec_list[i].offset = exec2_list[i].offset;
+		/* ... and back out to userspace */
+		ret = copy_to_user(to_user_ptr(args->buffers_ptr),
+				   exec_list,
+				   sizeof(*exec_list) * args->buffer_count);
+		if (ret) {
+			ret = -EFAULT;
+			DRM_DEBUG("failed to copy %d exec entries "
+				  "back to user (%d)\n",
+				  args->buffer_count, ret);
 		}
 	}
 
@@ -1221,21 +1208,14 @@ i915_gem_execbuffer2(struct drm_device *dev, void *data,
 	ret = i915_gem_do_execbuffer(dev, data, file, args, exec2_list);
 	if (!ret) {
 		/* Copy the new buffer offsets back to the user's exec list. */
-		struct drm_i915_gem_exec_object2 *user_exec_list =
-				   to_user_ptr(args->buffers_ptr);
-		int i;
-
-		for (i = 0; i < args->buffer_count; i++) {
-			ret = __copy_to_user(&user_exec_list[i].offset,
-					     &exec2_list[i].offset,
-					     sizeof(user_exec_list[i].offset));
-			if (ret) {
-				ret = -EFAULT;
-				DRM_DEBUG("failed to copy %d exec entries "
-					  "back to user\n",
-					  args->buffer_count);
-				break;
-			}
+		ret = copy_to_user(to_user_ptr(args->buffers_ptr),
+				   exec2_list,
+				   sizeof(*exec2_list) * args->buffer_count);
+		if (ret) {
+			ret = -EFAULT;
+			DRM_DEBUG("failed to copy %d exec entries "
+				  "back to user (%d)\n",
+				  args->buffer_count, ret);
 		}
 	}
 

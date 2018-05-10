@@ -29,6 +29,7 @@
  */
 
 _F(void, setup, (char** cmd), { });
+_F(void, init_irq, (void), { });
 _F(void, restart, (void), { while(1); });
 _F(void, halt, (void), { while(1); });
 _F(void, power_off, (void), { while(1); });

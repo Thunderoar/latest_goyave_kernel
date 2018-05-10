@@ -402,7 +402,6 @@ acpi_ps_complete_op(struct acpi_walk_state *walk_state,
 
 	switch (status) {
 	case AE_OK:
-
 		break;
 
 	case AE_CTRL_TRANSFER:

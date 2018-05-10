@@ -50,7 +50,6 @@ static ssize_t manager_display_store(struct omap_overlay_manager *mgr,
 	int r = 0;
 	size_t len = size;
 	struct omap_dss_device *dssdev = NULL;
-	struct omap_dss_device *old_dssdev;
 
 	int match(struct omap_dss_device *dssdev, void *data)
 	{
@@ -67,44 +66,32 @@ static ssize_t manager_display_store(struct omap_overlay_manager *mgr,
 	if (len > 0 && dssdev == NULL)
 		return -EINVAL;
 
-	if (dssdev) {
+	if (dssdev)
 		DSSDBG("display %s found\n", dssdev->name);
 
-		if (omapdss_device_is_connected(dssdev)) {
-			DSSERR("new display is already connected\n");
-			r = -EINVAL;
+	if (mgr->output) {
+		r = mgr->unset_output(mgr);
+		if (r) {
+			DSSERR("failed to unset current output\n");
 			goto put_device;
 		}
-
-		if (omapdss_device_is_enabled(dssdev)) {
-			DSSERR("new display is not disabled\n");
-			r = -EINVAL;
-			goto put_device;
-		}
-	}
-
-	old_dssdev = mgr->get_device(mgr);
-	if (old_dssdev) {
-		if (omapdss_device_is_enabled(old_dssdev)) {
-			DSSERR("old display is not disabled\n");
-			r = -EINVAL;
-			goto put_device;
-		}
-
-		old_dssdev->driver->disconnect(old_dssdev);
 	}
 
 	if (dssdev) {
-		r = dssdev->driver->connect(dssdev);
-		if (r) {
-			DSSERR("failed to connect new device\n");
+		struct omap_dss_output *out = dssdev->output;
+
+		/*
+		 * a registered device should have an output connected to it
+		 * already
+		 */
+		if (!out) {
+			DSSERR("device has no output connected to it\n");
 			goto put_device;
 		}
 
-		old_dssdev = mgr->get_device(mgr);
-		if (old_dssdev != dssdev) {
-			DSSERR("failed to connect device to this manager\n");
-			dssdev->driver->disconnect(dssdev);
+		r = mgr->set_output(mgr, out);
+		if (r) {
+			DSSERR("failed to set manager output\n");
 			goto put_device;
 		}
 
@@ -522,6 +509,4 @@ void dss_manager_kobj_uninit(struct omap_overlay_manager *mgr)
 {
 	kobject_del(&mgr->kobj);
 	kobject_put(&mgr->kobj);
-
-	memset(&mgr->kobj, 0, sizeof(mgr->kobj));
 }

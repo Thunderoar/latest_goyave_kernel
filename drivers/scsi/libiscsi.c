@@ -717,20 +717,10 @@ __iscsi_conn_send_pdu(struct iscsi_conn *conn, struct iscsi_hdr *hdr,
 			return NULL;
 		}
 
-		if (data_size > ISCSI_DEF_MAX_RECV_SEG_LEN) {
-			iscsi_conn_printk(KERN_ERR, conn, "Invalid buffer len of %u for login task. Max len is %u\n", data_size, ISCSI_DEF_MAX_RECV_SEG_LEN);
-			return NULL;
-		}
-
 		task = conn->login_task;
 	} else {
 		if (session->state != ISCSI_STATE_LOGGED_IN)
 			return NULL;
-
-		if (data_size != 0) {
-			iscsi_conn_printk(KERN_ERR, conn, "Can not send data buffer of len %u for op 0x%x\n", data_size, opcode);
-			return NULL;
-		}
 
 		BUG_ON(conn->c_stage == ISCSI_CONN_INITIAL_STAGE);
 		BUG_ON(conn->c_stage == ISCSI_CONN_STOPPED);
@@ -2818,9 +2808,6 @@ void iscsi_session_teardown(struct iscsi_cls_session *cls_session)
 	kfree(session->targetname);
 	kfree(session->targetalias);
 	kfree(session->initiatorname);
-	kfree(session->boot_root);
-	kfree(session->boot_nic);
-	kfree(session->boot_target);
 	kfree(session->ifacename);
 
 	iscsi_destroy_session(cls_session);
@@ -3261,12 +3248,6 @@ int iscsi_set_param(struct iscsi_cls_conn *cls_conn,
 		return iscsi_switch_str_param(&session->ifacename, buf);
 	case ISCSI_PARAM_INITIATOR_NAME:
 		return iscsi_switch_str_param(&session->initiatorname, buf);
-	case ISCSI_PARAM_BOOT_ROOT:
-		return iscsi_switch_str_param(&session->boot_root, buf);
-	case ISCSI_PARAM_BOOT_NIC:
-		return iscsi_switch_str_param(&session->boot_nic, buf);
-	case ISCSI_PARAM_BOOT_TARGET:
-		return iscsi_switch_str_param(&session->boot_target, buf);
 	default:
 		return -ENOSYS;
 	}
@@ -3344,15 +3325,6 @@ int iscsi_session_get_param(struct iscsi_cls_session *cls_session,
 		break;
 	case ISCSI_PARAM_INITIATOR_NAME:
 		len = sprintf(buf, "%s\n", session->initiatorname);
-		break;
-	case ISCSI_PARAM_BOOT_ROOT:
-		len = sprintf(buf, "%s\n", session->boot_root);
-		break;
-	case ISCSI_PARAM_BOOT_NIC:
-		len = sprintf(buf, "%s\n", session->boot_nic);
-		break;
-	case ISCSI_PARAM_BOOT_TARGET:
-		len = sprintf(buf, "%s\n", session->boot_target);
 		break;
 	default:
 		return -ENOSYS;

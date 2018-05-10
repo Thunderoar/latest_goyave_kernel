@@ -262,21 +262,11 @@ static int sdo_runtime_resume(struct device *dev)
 {
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct sdo_device *sdev = sd_to_sdev(sd);
-	int ret;
 
 	dev_info(dev, "resume\n");
-
-	ret = clk_enable(sdev->sclk_dac);
-	if (ret < 0)
-		return ret;
-
-	ret = regulator_enable(sdev->vdac);
-	if (ret < 0)
-		goto dac_clk_dis;
-
-	ret = regulator_enable(sdev->vdet);
-	if (ret < 0)
-		goto vdac_r_dis;
+	clk_enable(sdev->sclk_dac);
+	regulator_enable(sdev->vdac);
+	regulator_enable(sdev->vdet);
 
 	/* software reset */
 	sdo_write_mask(sdev, SDO_CLKCON, ~0, SDO_TVOUT_SW_RESET);
@@ -295,12 +285,6 @@ static int sdo_runtime_resume(struct device *dev)
 		SDO_COMPENSATION_CVBS_COMP_OFF);
 	sdo_reg_debug(sdev);
 	return 0;
-
-vdac_r_dis:
-	regulator_disable(sdev->vdac);
-dac_clk_dis:
-	clk_disable(sdev->sclk_dac);
-	return ret;
 }
 
 static const struct dev_pm_ops sdo_pm_ops = {

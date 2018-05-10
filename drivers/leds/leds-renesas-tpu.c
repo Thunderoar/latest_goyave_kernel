@@ -63,7 +63,7 @@ static DEFINE_SPINLOCK(r_tpu_lock);
 #define TGRC 8 /* Timer general register C (+0x20) */
 #define TGRD 9 /* Timer general register D (+0x24) */
 
-static inline u16 r_tpu_read(struct r_tpu_priv *p, int reg_nr)
+static inline unsigned short r_tpu_read(struct r_tpu_priv *p, int reg_nr)
 {
 	struct led_renesas_tpu_config *cfg = p->pdev->dev.platform_data;
 	void __iomem *base = p->mapbase;
@@ -75,7 +75,8 @@ static inline u16 r_tpu_read(struct r_tpu_priv *p, int reg_nr)
 	return ioread16(base + offs);
 }
 
-static inline void r_tpu_write(struct r_tpu_priv *p, int reg_nr, u16 value)
+static inline void r_tpu_write(struct r_tpu_priv *p, int reg_nr,
+			       unsigned short value)
 {
 	struct led_renesas_tpu_config *cfg = p->pdev->dev.platform_data;
 	void __iomem *base = p->mapbase;
@@ -92,8 +93,7 @@ static inline void r_tpu_write(struct r_tpu_priv *p, int reg_nr, u16 value)
 static void r_tpu_start_stop_ch(struct r_tpu_priv *p, int start)
 {
 	struct led_renesas_tpu_config *cfg = p->pdev->dev.platform_data;
-	unsigned long flags;
-	u16 value;
+	unsigned long flags, value;
 
 	/* start stop register shared by multiple timer channels */
 	spin_lock_irqsave(&r_tpu_lock, flags);

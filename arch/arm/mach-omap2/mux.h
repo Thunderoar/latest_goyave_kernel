@@ -10,6 +10,7 @@
 #include "mux2420.h"
 #include "mux2430.h"
 #include "mux34xx.h"
+#include "mux44xx.h"
 
 #define OMAP_MUX_TERMINATOR	0xffff
 
@@ -63,6 +64,8 @@
 
 /* Flags for omapX_mux_init */
 #define OMAP_PACKAGE_MASK		0xffff
+#define OMAP_PACKAGE_CBS		8		/* 547-pin 0.40 0.40 */
+#define OMAP_PACKAGE_CBL		7		/* 547-pin 0.40 0.40 */
 #define OMAP_PACKAGE_CBP		6		/* 515-pin 0.40 0.50 */
 #define OMAP_PACKAGE_CUS		5		/* 423-pin 0.65 */
 #define OMAP_PACKAGE_CBB		4		/* 515-pin 0.40 0.50 */

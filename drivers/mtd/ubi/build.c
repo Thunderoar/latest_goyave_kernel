@@ -997,9 +997,6 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 			goto out_detach;
 	}
 
-	/* Make device "available" before it becomes accessible via sysfs */
-	ubi_devices[ubi_num] = ubi;
-
 	err = uif_init(ubi, &ref);
 	if (err)
 		goto out_detach;
@@ -1044,6 +1041,7 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 	wake_up_process(ubi->bgt_thread);
 	spin_unlock(&ubi->wl_lock);
 
+	ubi_devices[ubi_num] = ubi;
 	ubi_notify_all(ubi, UBI_VOLUME_ADDED, NULL);
 	return ubi_num;
 
@@ -1054,7 +1052,6 @@ out_uif:
 	ubi_assert(ref);
 	uif_close(ubi);
 out_detach:
-	ubi_devices[ubi_num] = NULL;
 	ubi_wl_close(ubi);
 	ubi_free_internal_volumes(ubi);
 	vfree(ubi->vtbl);
@@ -1264,11 +1261,7 @@ static int __init ubi_init(void)
 		mtd = open_mtd_device(p->name);
 		if (IS_ERR(mtd)) {
 			err = PTR_ERR(mtd);
-			ubi_err("cannot open mtd %s, error %d", p->name, err);
-			/* See comment below re-ubi_is_module(). */
-			if (ubi_is_module())
-				goto out_detach;
-			continue;
+			goto out_detach;
 		}
 
 		mutex_lock(&ubi_devices_mutex);
@@ -1316,7 +1309,7 @@ out_version:
 out_class:
 	class_destroy(ubi_class);
 out:
-	ubi_err("cannot initialize UBI, error %d", err);
+	ubi_err("UBI error: cannot initialize UBI, error %d", err);
 	return err;
 }
 late_initcall(ubi_init);
@@ -1353,7 +1346,7 @@ static int __init bytes_str_to_int(const char *str)
 
 	result = simple_strtoul(str, &endp, 0);
 	if (str == endp || result >= INT_MAX) {
-		ubi_err("incorrect bytes count: \"%s\"\n", str);
+		ubi_err("UBI error: incorrect bytes count: \"%s\"\n", str);
 		return -EINVAL;
 	}
 
@@ -1369,7 +1362,7 @@ static int __init bytes_str_to_int(const char *str)
 	case '\0':
 		break;
 	default:
-		ubi_err("incorrect bytes count: \"%s\"\n", str);
+		ubi_err("UBI error: incorrect bytes count: \"%s\"\n", str);
 		return -EINVAL;
 	}
 
@@ -1396,14 +1389,14 @@ static int __init ubi_mtd_param_parse(const char *val, struct kernel_param *kp)
 		return -EINVAL;
 
 	if (mtd_devs == UBI_MAX_DEVICES) {
-		ubi_err("too many parameters, max. is %d\n",
+		ubi_err("UBI error: too many parameters, max. is %d\n",
 			UBI_MAX_DEVICES);
 		return -EINVAL;
 	}
 
 	len = strnlen(val, MTD_PARAM_LEN_MAX);
 	if (len == MTD_PARAM_LEN_MAX) {
-		ubi_err("parameter \"%s\" is too long, max. is %d\n",
+		ubi_err("UBI error: parameter \"%s\" is too long, max. is %d\n",
 			val, MTD_PARAM_LEN_MAX);
 		return -EINVAL;
 	}
@@ -1423,7 +1416,7 @@ static int __init ubi_mtd_param_parse(const char *val, struct kernel_param *kp)
 		tokens[i] = strsep(&pbuf, ",");
 
 	if (pbuf) {
-		ubi_err("too many arguments at \"%s\"\n", val);
+		ubi_err("UBI error: too many arguments at \"%s\"\n", val);
 		return -EINVAL;
 	}
 
@@ -1440,7 +1433,7 @@ static int __init ubi_mtd_param_parse(const char *val, struct kernel_param *kp)
 		int err = kstrtoint(tokens[2], 10, &p->max_beb_per1024);
 
 		if (err) {
-			ubi_err("bad value for max_beb_per1024 parameter: %s",
+			ubi_err("UBI error: bad value for max_beb_per1024 parameter: %s",
 				tokens[2]);
 			return -EINVAL;
 		}

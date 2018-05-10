@@ -18,9 +18,6 @@
 #include <asm/mce.h>
 #include <asm/hw_irq.h>
 
-#define CREATE_TRACE_POINTS
-#include <asm/trace/irq_vectors.h>
-
 atomic_t irq_err_count;
 
 /* Function pointer for generic interrupt vector handling */
@@ -207,21 +204,23 @@ unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 /*
  * Handler for X86_PLATFORM_IPI_VECTOR.
  */
-void __smp_x86_platform_ipi(void)
-{
-	inc_irq_stat(x86_platform_ipis);
-
-	if (x86_platform_ipi_callback)
-		x86_platform_ipi_callback();
-}
-
 void smp_x86_platform_ipi(struct pt_regs *regs)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
-	entering_ack_irq();
-	__smp_x86_platform_ipi();
-	exiting_irq();
+	ack_APIC_irq();
+
+	irq_enter();
+
+	exit_idle();
+
+	inc_irq_stat(x86_platform_ipis);
+
+	if (x86_platform_ipi_callback)
+		x86_platform_ipi_callback();
+
+	irq_exit();
+
 	set_irq_regs(old_regs);
 }
 
@@ -246,18 +245,6 @@ void smp_kvm_posted_intr_ipi(struct pt_regs *regs)
 	set_irq_regs(old_regs);
 }
 #endif
-
-void smp_trace_x86_platform_ipi(struct pt_regs *regs)
-{
-	struct pt_regs *old_regs = set_irq_regs(regs);
-
-	entering_ack_irq();
-	trace_x86_platform_ipi_entry(X86_PLATFORM_IPI_VECTOR);
-	__smp_x86_platform_ipi();
-	trace_x86_platform_ipi_exit(X86_PLATFORM_IPI_VECTOR);
-	exiting_irq();
-	set_irq_regs(old_regs);
-}
 
 EXPORT_SYMBOL_GPL(vector_used_by_percpu_irq);
 

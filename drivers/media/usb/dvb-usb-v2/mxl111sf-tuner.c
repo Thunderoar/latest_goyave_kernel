@@ -31,6 +31,8 @@ MODULE_PARM_DESC(debug, "set debugging level (1=info (or-able)).");
 	if (mxl111sf_tuner_debug) \
 		mxl_printk(KERN_DEBUG, fmt, ##arg)
 
+#define err pr_err
+
 /* ------------------------------------------------------------------------ */
 
 struct mxl111sf_tuner_state {
@@ -111,7 +113,7 @@ static struct mxl111sf_reg_ctrl_info *mxl111sf_calc_phy_tune_regs(u32 freq,
 		filt_bw = 63;
 		break;
 	default:
-		pr_err("%s: invalid bandwidth setting!", __func__);
+		err("%s: invalid bandwidth setting!", __func__);
 		return NULL;
 	}
 
@@ -302,12 +304,12 @@ static int mxl111sf_tuner_set_params(struct dvb_frontend *fe)
 			bw = 8;
 			break;
 		default:
-			pr_err("%s: bandwidth not set!", __func__);
+			err("%s: bandwidth not set!", __func__);
 			return -EINVAL;
 		}
 		break;
 	default:
-		pr_err("%s: modulation type not supported!", __func__);
+		err("%s: modulation type not supported!", __func__);
 		return -EINVAL;
 	}
 	ret = mxl1x1sf_tune_rf(fe, c->frequency, bw);

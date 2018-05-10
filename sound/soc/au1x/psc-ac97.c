@@ -201,12 +201,13 @@ static void au1xpsc_ac97_cold_reset(struct snd_ac97 *ac97)
 }
 
 /* AC97 controller operations */
-static struct snd_ac97_bus_ops psc_ac97_ops = {
+struct snd_ac97_bus_ops soc_ac97_ops = {
 	.read		= au1xpsc_ac97_read,
 	.write		= au1xpsc_ac97_write,
 	.reset		= au1xpsc_ac97_cold_reset,
 	.warm_reset	= au1xpsc_ac97_warm_reset,
 };
+EXPORT_SYMBOL_GPL(soc_ac97_ops);
 
 static int au1xpsc_ac97_hw_params(struct snd_pcm_substream *substream,
 				  struct snd_pcm_hw_params *params,
@@ -382,9 +383,15 @@ static int au1xpsc_ac97_drvprobe(struct platform_device *pdev)
 	if (!iores)
 		return -ENODEV;
 
-	wd->mmio = devm_ioremap_resource(&pdev->dev, iores);
-	if (IS_ERR(wd->mmio))
-		return PTR_ERR(wd->mmio);
+	if (!devm_request_mem_region(&pdev->dev, iores->start,
+				     resource_size(iores),
+				     pdev->name))
+		return -EBUSY;
+
+	wd->mmio = devm_ioremap(&pdev->dev, iores->start,
+				resource_size(iores));
+	if (!wd->mmio)
+		return -EBUSY;
 
 	dmares = platform_get_resource(pdev, IORESOURCE_DMA, 0);
 	if (!dmares)
@@ -415,10 +422,6 @@ static int au1xpsc_ac97_drvprobe(struct platform_device *pdev)
 	wd->dai_drv.name = dev_name(&pdev->dev);
 
 	platform_set_drvdata(pdev, wd);
-
-	ret = snd_soc_set_ac97_ops(&psc_ac97_ops);
-	if (ret)
-		return ret;
 
 	ret = snd_soc_register_component(&pdev->dev, &au1xpsc_ac97_component,
 					 &wd->dai_drv, 1);
@@ -500,7 +503,19 @@ static struct platform_driver au1xpsc_ac97_driver = {
 	.remove		= au1xpsc_ac97_drvremove,
 };
 
-module_platform_driver(au1xpsc_ac97_driver);
+static int __init au1xpsc_ac97_load(void)
+{
+	au1xpsc_ac97_workdata = NULL;
+	return platform_driver_register(&au1xpsc_ac97_driver);
+}
+
+static void __exit au1xpsc_ac97_unload(void)
+{
+	platform_driver_unregister(&au1xpsc_ac97_driver);
+}
+
+module_init(au1xpsc_ac97_load);
+module_exit(au1xpsc_ac97_unload);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Au12x0/Au1550 PSC AC97 ALSA ASoC audio driver");

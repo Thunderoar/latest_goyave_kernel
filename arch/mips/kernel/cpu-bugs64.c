@@ -6,7 +6,6 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
-#include <linux/context_tracking.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/ptrace.h>
@@ -172,12 +171,8 @@ static volatile int daddi_ov __cpuinitdata;
 
 asmlinkage void __init do_daddi_ov(struct pt_regs *regs)
 {
-	enum ctx_state prev_state;
-
-	prev_state = exception_enter();
 	daddi_ov = 1;
 	regs->cp0_epc += 4;
-	exception_exit(prev_state);
 }
 
 static inline void check_daddi(void)

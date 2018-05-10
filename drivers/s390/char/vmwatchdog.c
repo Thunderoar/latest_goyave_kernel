@@ -112,8 +112,7 @@ static int vmwdt_keepalive(void)
 
 static int vmwdt_disable(void)
 {
-	char cmd[] = {'\0'};
-	int ret = __diag288(wdt_cancel, 0, cmd, 0);
+	int ret = __diag288(wdt_cancel, 0, "", 0);
 	WARN_ON(ret != 0);
 	clear_bit(VMWDT_RUNNING, &vmwdt_is_open);
 	return ret;
@@ -125,7 +124,7 @@ static int __init vmwdt_probe(void)
 	 * so we try initializing it with a NOP command ("BEGIN")
 	 * that won't cause any harm even if the following disable
 	 * fails for some reason */
-	char ebc_begin[] = {
+	static char __initdata ebc_begin[] = {
 		194, 197, 199, 201, 213
 	};
 	if (__diag288(wdt_init, 15, ebc_begin, sizeof(ebc_begin)) != 0)

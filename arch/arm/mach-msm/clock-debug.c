@@ -25,7 +25,14 @@ static int clock_debug_rate_set(void *data, u64 val)
 	struct clk *clock = data;
 	int ret;
 
-	ret = clk_set_rate(clock, val);
+	/* Only increases to max rate will succeed, but that's actually good
+	 * for debugging purposes so we don't check for error. */
+	if (clock->flags & CLK_MAX)
+		clk_set_max_rate(clock, val);
+	if (clock->flags & CLK_MIN)
+		ret = clk_set_min_rate(clock, val);
+	else
+		ret = clk_set_rate(clock, val);
 	if (ret != 0)
 		printk(KERN_ERR "clk_set%s_rate failed (%d)\n",
 			(clock->flags & CLK_MIN) ? "_min" : "", ret);
@@ -97,7 +104,7 @@ int __init clock_debug_add(struct clk *clock)
 	if (!debugfs_base)
 		return -ENOMEM;
 
-	strlcpy(temp, clock->dbg_name, ARRAY_SIZE(temp));
+	strncpy(temp, clock->dbg_name, ARRAY_SIZE(temp)-1);
 	for (ptr = temp; *ptr; ptr++)
 		*ptr = tolower(*ptr);
 

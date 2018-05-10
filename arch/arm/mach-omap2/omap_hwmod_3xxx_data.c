@@ -25,7 +25,6 @@
 #include <linux/platform_data/asoc-ti-mcbsp.h>
 #include <linux/platform_data/spi-omap2-mcspi.h>
 #include <linux/platform_data/iommu-omap.h>
-#include <linux/platform_data/mailbox-omap.h>
 #include <plat/dmtimer.h>
 
 #include "am35xx.h"
@@ -36,6 +35,7 @@
 #include "prm-regbits-34xx.h"
 #include "cm-regbits-34xx.h"
 
+#include "dma.h"
 #include "i2c.h"
 #include "mmc.h"
 #include "wd_timer.h"
@@ -548,8 +548,8 @@ static struct omap_hwmod_irq_info uart4_mpu_irqs[] = {
 };
 
 static struct omap_hwmod_dma_info uart4_sdma_reqs[] = {
-	{ .name = "rx",	.dma_req = 82, },
-	{ .name = "tx",	.dma_req = 81, },
+	{ .name = "rx",	.dma_req = OMAP36XX_DMA_UART4_RX, },
+	{ .name = "tx",	.dma_req = OMAP36XX_DMA_UART4_TX, },
 	{ .dma_req = -1 }
 };
 
@@ -577,8 +577,8 @@ static struct omap_hwmod_irq_info am35xx_uart4_mpu_irqs[] = {
 };
 
 static struct omap_hwmod_dma_info am35xx_uart4_sdma_reqs[] = {
-	{ .name = "rx", .dma_req = 55, },
-	{ .name = "tx", .dma_req = 54, },
+	{ .name = "rx", .dma_req = AM35XX_DMA_UART4_RX, },
+	{ .name = "tx", .dma_req = AM35XX_DMA_UART4_TX, },
 	{ .dma_req = -1 }
 };
 
@@ -857,8 +857,8 @@ static struct omap_hwmod_irq_info i2c3_mpu_irqs[] = {
 };
 
 static struct omap_hwmod_dma_info i2c3_sdma_reqs[] = {
-	{ .name = "tx", .dma_req = 25 },
-	{ .name = "rx", .dma_req = 26 },
+	{ .name = "tx", .dma_req = OMAP34XX_DMA_I2C3_TX },
+	{ .name = "rx", .dma_req = OMAP34XX_DMA_I2C3_RX },
 	{ .dma_req = -1 }
 };
 
@@ -1505,17 +1505,6 @@ static struct omap_hwmod_class omap3xxx_mailbox_hwmod_class = {
 	.sysc = &omap3xxx_mailbox_sysc,
 };
 
-static struct omap_mbox_dev_info omap3xxx_mailbox_info[] = {
-	{ .name = "dsp", .tx_id = 0, .rx_id = 1 },
-};
-
-static struct omap_mbox_pdata omap3xxx_mailbox_attrs = {
-	.num_users	= 2,
-	.num_fifos	= 2,
-	.info_cnt	= ARRAY_SIZE(omap3xxx_mailbox_info),
-	.info		= omap3xxx_mailbox_info,
-};
-
 static struct omap_hwmod_irq_info omap3xxx_mailbox_irqs[] = {
 	{ .irq = 26 + OMAP_INTC_START, },
 	{ .irq = -1 },
@@ -1535,7 +1524,6 @@ static struct omap_hwmod omap3xxx_mailbox_hwmod = {
 			.idlest_idle_bit = OMAP3430_ST_MAILBOXES_SHIFT,
 		},
 	},
-	.dev_attr	= &omap3xxx_mailbox_attrs,
 };
 
 /*
@@ -1942,8 +1930,7 @@ static struct omap_hwmod_class_sysconfig omap3xxx_usb_host_hs_sysc = {
 	.syss_offs	= 0x0014,
 	.sysc_flags	= (SYSC_HAS_MIDLEMODE | SYSC_HAS_CLOCKACTIVITY |
 			   SYSC_HAS_SIDLEMODE | SYSC_HAS_ENAWAKEUP |
-			   SYSC_HAS_SOFTRESET | SYSC_HAS_AUTOIDLE |
-			   SYSS_HAS_RESET_STATUS),
+			   SYSC_HAS_SOFTRESET | SYSC_HAS_AUTOIDLE),
 	.idlemodes	= (SIDLE_FORCE | SIDLE_NO | SIDLE_SMART |
 			   MSTANDBY_FORCE | MSTANDBY_NO | MSTANDBY_SMART),
 	.sysc_fields	= &omap_hwmod_sysc_type1,
@@ -1967,7 +1954,7 @@ static struct omap_hwmod_irq_info omap3xxx_usb_host_hs_irqs[] = {
 static struct omap_hwmod omap3xxx_usb_host_hs_hwmod = {
 	.name		= "usb_host_hs",
 	.class		= &omap3xxx_usb_host_hs_hwmod_class,
-	.clkdm_name	= "usbhost_clkdm",
+	.clkdm_name	= "l3_init_clkdm",
 	.mpu_irqs	= omap3xxx_usb_host_hs_irqs,
 	.main_clk	= "usbhost_48m_fck",
 	.prcm = {
@@ -2021,7 +2008,15 @@ static struct omap_hwmod omap3xxx_usb_host_hs_hwmod = {
 	 * hence HWMOD_SWSUP_MSTANDBY
 	 */
 
-	.flags		= HWMOD_SWSUP_SIDLE | HWMOD_SWSUP_MSTANDBY,
+	/*
+	 * During system boot; If the hwmod framework resets the module
+	 * the module will have smart idle settings; which can lead to deadlock
+	 * (above Errata Id:i660); so, dont reset the module during boot;
+	 * Use HWMOD_INIT_NO_RESET.
+	 */
+
+	.flags		= HWMOD_SWSUP_SIDLE | HWMOD_SWSUP_MSTANDBY |
+			  HWMOD_INIT_NO_RESET,
 };
 
 /*
@@ -2052,7 +2047,7 @@ static struct omap_hwmod_irq_info omap3xxx_usb_tll_hs_irqs[] = {
 static struct omap_hwmod omap3xxx_usb_tll_hs_hwmod = {
 	.name		= "usb_tll_hs",
 	.class		= &omap3xxx_usb_tll_hs_hwmod_class,
-	.clkdm_name	= "core_l4_clkdm",
+	.clkdm_name	= "l3_init_clkdm",
 	.mpu_irqs	= omap3xxx_usb_tll_hs_irqs,
 	.main_clk	= "usbtll_fck",
 	.prcm = {
@@ -2164,7 +2159,7 @@ static struct omap_hwmod_class omap3xxx_gpmc_hwmod_class = {
 };
 
 static struct omap_hwmod_irq_info omap3xxx_gpmc_irqs[] = {
-	{ .irq = 20 + OMAP_INTC_START, },
+	{ .irq = 20 },
 	{ .irq = -1 }
 };
 
@@ -2998,7 +2993,7 @@ static struct omap_mmu_dev_attr mmu_isp_dev_attr = {
 
 static struct omap_hwmod omap3xxx_mmu_isp_hwmod;
 static struct omap_hwmod_irq_info omap3xxx_mmu_isp_irqs[] = {
-	{ .irq = 24 + OMAP_INTC_START, },
+	{ .irq = 24 },
 	{ .irq = -1 }
 };
 
@@ -3040,7 +3035,7 @@ static struct omap_mmu_dev_attr mmu_iva_dev_attr = {
 
 static struct omap_hwmod omap3xxx_mmu_iva_hwmod;
 static struct omap_hwmod_irq_info omap3xxx_mmu_iva_irqs[] = {
-	{ .irq = 28 + OMAP_INTC_START, },
+	{ .irq = 28 },
 	{ .irq = -1 }
 };
 
@@ -3586,7 +3581,7 @@ static struct omap_hwmod_irq_info omap3_sham_mpu_irqs[] = {
 };
 
 static struct omap_hwmod_dma_info omap3_sham_sdma_reqs[] = {
-	{ .name = "rx", .dma_req = 69, },
+	{ .name = "rx", .dma_req = OMAP34XX_DMA_SHA1MD5_RX, },
 	{ .dma_req = -1 }
 };
 
@@ -3647,8 +3642,8 @@ static struct omap_hwmod_class omap3xxx_aes_class = {
 };
 
 static struct omap_hwmod_dma_info omap3_aes_sdma_reqs[] = {
-	{ .name = "tx", .dma_req = 65, },
-	{ .name = "rx", .dma_req = 66, },
+	{ .name = "tx", .dma_req = OMAP34XX_DMA_AES2_TX, },
+	{ .name = "rx", .dma_req = OMAP34XX_DMA_AES2_RX, },
 	{ .dma_req = -1 }
 };
 

@@ -8,10 +8,7 @@
  * kind, whether express or implied.
  */
 
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/pinctrl/omap.h>
-
-#include "skeleton.dtsi"
+/include/ "skeleton.dtsi"
 
 / {
 	compatible = "ti,omap2430", "ti,omap2420", "ti,omap2";
@@ -24,12 +21,8 @@
 	};
 
 	cpus {
-		#address-cells = <0>;
-		#size-cells = <0>;
-
-		cpu {
+		cpu@0 {
 			compatible = "arm,arm1136jf-s";
-			device_type = "cpu";
 		};
 	};
 

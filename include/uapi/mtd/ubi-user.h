@@ -173,10 +173,7 @@
 
 #define UBI_VOL_IOC_MAGIC 'O'
 
-/* Start UBI volume update
- * Note: This actually takes a pointer (__s64*), but we can't change
- *       that without breaking the ABI on 32bit systems
- */
+/* Start UBI volume update */
 #define UBI_IOCVOLUP _IOW(UBI_VOL_IOC_MAGIC, 0, __s64)
 /* LEB erasure command, used for debugging, disabled by default */
 #define UBI_IOCEBER _IOW(UBI_VOL_IOC_MAGIC, 1, __s32)

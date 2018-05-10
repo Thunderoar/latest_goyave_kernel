@@ -15,6 +15,11 @@
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
 */
 /*
 Driver: ssv_dnp
@@ -82,11 +87,11 @@ static int dnp_dio_insn_bits(struct comedi_device *dev,
 
 	/* on return, data[1] contains the value of the digital input lines. */
 	outb(PADR, CSCIR);
-	data[1] = inb(CSCDR);
+	data[0] = inb(CSCDR);
 	outb(PBDR, CSCIR);
-	data[1] += inb(CSCDR) << 8;
+	data[0] += inb(CSCDR) << 8;
 	outb(PCDR, CSCIR);
-	data[1] += ((inb(CSCDR) & 0xF0) << 12);
+	data[0] += ((inb(CSCDR) & 0xF0) << 12);
 
 	return insn->n;
 

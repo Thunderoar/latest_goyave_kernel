@@ -1070,6 +1070,7 @@ out:
 
 	ssc_free(chip->ssc);
 	snd_card_free(card);
+	dev_set_drvdata(&spi->dev, NULL);
 
 	return 0;
 }

@@ -515,6 +515,7 @@ int mxs_pinctrl_probe(struct platform_device *pdev,
 	return 0;
 
 err:
+	platform_set_drvdata(pdev, NULL);
 	iounmap(d->base);
 	return ret;
 }
@@ -524,6 +525,7 @@ int mxs_pinctrl_remove(struct platform_device *pdev)
 {
 	struct mxs_pinctrl_data *d = platform_get_drvdata(pdev);
 
+	platform_set_drvdata(pdev, NULL);
 	pinctrl_unregister(d->pctl);
 	iounmap(d->base);
 

@@ -443,22 +443,6 @@ bool menu_has_prompt(struct menu *menu)
 	return true;
 }
 
-/*
- * Determine if a menu is empty.
- * A menu is considered empty if it contains no or only
- * invisible entries.
- */
-bool menu_is_empty(struct menu *menu)
-{
-	struct menu *child;
-
-	for (child = menu->list; child; child = child->next) {
-		if (menu_is_visible(child))
-			return(false);
-	}
-	return(true);
-}
-
 bool menu_is_visible(struct menu *menu)
 {
 	struct menu *child;
@@ -541,7 +525,7 @@ static void get_prompt_str(struct gstr *r, struct property *prop,
 {
 	int i, j;
 	struct menu *submenu[8], *menu, *location = NULL;
-	struct jump_key *jump = NULL;
+	struct jump_key *jump;
 
 	str_printf(r, _("Prompt: %s\n"), _(prop->text));
 	menu = prop->menu->parent;
@@ -579,7 +563,7 @@ static void get_prompt_str(struct gstr *r, struct property *prop,
 		str_printf(r, _("  Location:\n"));
 		for (j = 4; --i >= 0; j += 2) {
 			menu = submenu[i];
-			if (jump && menu == location)
+			if (head && location && menu == location)
 				jump->offset = r->len - 1;
 			str_printf(r, "%*c-> %s", j, ' ',
 				   _(menu_get_prompt(menu)));

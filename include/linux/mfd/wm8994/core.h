@@ -29,7 +29,6 @@ enum wm8994_type {
 
 struct regulator_dev;
 struct regulator_bulk_data;
-struct irq_domain;
 
 #define WM8994_NUM_GPIO_REGS 11
 #define WM8994_NUM_LDO_REGS   2
@@ -74,7 +73,6 @@ struct wm8994 {
 
 	int irq;
 	struct regmap_irq_chip_data *irq_data;
-	struct irq_domain *edge_irq;
 
 	/* Used over suspend/resume */
 	bool suspended;

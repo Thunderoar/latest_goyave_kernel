@@ -166,7 +166,7 @@ static const char *synth_immediate(struct spk_synth *synth, const char *buf)
 		outb_p(ch, speakup_info.port_tts);
 		buf++;
 	}
-	return NULL;
+	return 0;
 }
 
 static void do_catch_up(struct spk_synth *synth)
@@ -186,26 +186,26 @@ static void do_catch_up(struct spk_synth *synth)
 	delay_time = spk_get_var(DELAY);
 	full_time = spk_get_var(FULL);
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	jiffy_delta_val = jiffy_delta->u.n.value;
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 
 	jiff_max = jiffies + jiffy_delta_val;
 	while (!kthread_should_stop()) {
-		spin_lock_irqsave(&speakup_info.spinlock, flags);
+		spk_lock(flags);
 		if (speakup_info.flushing) {
 			speakup_info.flushing = 0;
-			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+			spk_unlock(flags);
 			synth->flush(synth);
 			continue;
 		}
 		if (synth_buffer_empty()) {
-			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+			spk_unlock(flags);
 			break;
 		}
 		set_current_state(TASK_INTERRUPTIBLE);
 		full_time_val = full_time->u.n.value;
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		if (synth_full()) {
 			schedule_timeout(msecs_to_jiffies(full_time_val));
 			continue;
@@ -217,9 +217,9 @@ static void do_catch_up(struct spk_synth *synth)
 				break;
 			udelay(1);
 		}
-		spin_lock_irqsave(&speakup_info.spinlock, flags);
+		spk_lock(flags);
 		ch = synth_buffer_getc();
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		if (ch == '\n')
 			ch = PROCSPEECH;
 		outb_p(ch, speakup_info.port_tts);
@@ -231,10 +231,10 @@ static void do_catch_up(struct spk_synth *synth)
 				udelay(1);
 			}
 			outb_p(PROCSPEECH, speakup_info.port_tts);
-			spin_lock_irqsave(&speakup_info.spinlock, flags);
+			spk_lock(flags);
 			jiffy_delta_val = jiffy_delta->u.n.value;
 			delay_time_val = delay_time->u.n.value;
-			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+			spk_unlock(flags);
 			schedule_timeout(msecs_to_jiffies(delay_time_val));
 			jiff_max = jiffies+jiffy_delta_val;
 		}

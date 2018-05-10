@@ -15,6 +15,7 @@
 #include "ozpd.h"
 #include "ozproto.h"
 #include "oztrace.h"
+#include "ozevent.h"
 #include "ozcdev.h"
 #include "ozusbsvc.h"
 #include <asm/unaligned.h>
@@ -120,6 +121,7 @@ static void oz_def_app_rx(struct oz_pd *pd, struct oz_elt *elt)
 void oz_pd_set_state(struct oz_pd *pd, unsigned state)
 {
 	pd->state = state;
+	oz_event_log(OZ_EVT_PD_STATE, 0, 0, NULL, state);
 #ifdef WANT_TRACE
 	switch (state) {
 	case OZ_PD_S_IDLE:
@@ -542,6 +544,7 @@ static int oz_send_next_queued_frame(struct oz_pd *pd, int more_data)
 			if (dev_queue_xmit(skb) < 0) {
 				oz_trace2(OZ_TRACE_TX_FRAMES,
 						"Dropping ISOC Frame\n");
+				oz_event_log(OZ_EVT_TX_ISOC_DROP, 0, 0, NULL, 0);
 				return -1;
 			}
 			atomic_inc(&g_submitted_isoc);
@@ -552,6 +555,7 @@ static int oz_send_next_queued_frame(struct oz_pd *pd, int more_data)
 		} else {
 			kfree_skb(skb);
 			oz_trace2(OZ_TRACE_TX_FRAMES, "Dropping ISOC Frame>\n");
+			oz_event_log(OZ_EVT_TX_ISOC_DROP, 0, 0, NULL, 0);
 			return -1;
 		}
 	}
@@ -563,6 +567,10 @@ static int oz_send_next_queued_frame(struct oz_pd *pd, int more_data)
 		oz_set_more_bit(skb);
 	oz_trace2(OZ_TRACE_TX_FRAMES, "TX frame PN=0x%x\n", f->hdr.pkt_num);
 	if (skb) {
+		oz_event_log(OZ_EVT_TX_FRAME,
+			0,
+			(((u16)f->hdr.control)<<8)|f->hdr.last_pkt_num,
+			NULL, f->hdr.pkt_num);
 		if (dev_queue_xmit(skb) < 0)
 			return -1;
 
@@ -651,6 +659,7 @@ static int oz_send_isoc_frame(struct oz_pd *pd)
 		memcpy(elt, ei->data, ei->length);
 		elt = oz_next_elt(elt);
 	}
+	oz_event_log(OZ_EVT_TX_ISOC, 0, 0, NULL, 0);
 	dev_queue_xmit(skb);
 	oz_elt_info_free_chain(&pd->elt_buff, &list);
 	return 0;
@@ -759,6 +768,8 @@ int oz_isoc_stream_delete(struct oz_pd *pd, u8 ep_num)
 static void oz_isoc_destructor(struct sk_buff *skb)
 {
 	atomic_dec(&g_submitted_isoc);
+	oz_event_log(OZ_EVT_TX_ISOC_DONE, atomic_read(&g_submitted_isoc),
+		0, skb, 0);
 }
 /*------------------------------------------------------------------------------
  * Context: softirq
@@ -852,19 +863,25 @@ int oz_send_isoc_unit(struct oz_pd *pd, u8 ep_num, const u8 *data, int len)
 			oz_trace2(OZ_TRACE_TX_FRAMES,
 			"Added ISOC Frame to Tx Queue isoc_nb= %d, nb= %d\n",
 			pd->nb_queued_isoc_frames, pd->nb_queued_frames);
+			oz_event_log(OZ_EVT_TX_ISOC, nb_units, iso.frame_number,
+					skb, atomic_read(&g_submitted_isoc));
 			return 0;
 		}
 
 		/*In ANYTIME mode Xmit unit immediately*/
 		if (atomic_read(&g_submitted_isoc) < OZ_MAX_SUBMITTED_ISOC) {
 			atomic_inc(&g_submitted_isoc);
-			if (dev_queue_xmit(skb) < 0)
+			oz_event_log(OZ_EVT_TX_ISOC, nb_units, iso.frame_number,
+					skb, atomic_read(&g_submitted_isoc));
+			if (dev_queue_xmit(skb) < 0) {
+				oz_event_log(OZ_EVT_TX_ISOC_DROP, 0, 0, NULL, 0);
 				return -1;
-			else
+			} else
 				return 0;
 		}
 
-out:	kfree_skb(skb);
+out:	oz_event_log(OZ_EVT_TX_ISOC_DROP, 0, 0, NULL, 0);
+	kfree_skb(skb);
 	return -1;
 
 	}

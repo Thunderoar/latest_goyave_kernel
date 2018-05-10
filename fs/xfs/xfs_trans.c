@@ -234,10 +234,37 @@ xfs_calc_remove_reservation(
 }
 
 /*
- * For create, break it in to the two cases that the transaction
- * covers. We start with the modify case - allocation done by modification
- * of the state of existing inodes - and the allocation case.
+ * For symlink we can modify:
+ *    the parent directory inode: inode size
+ *    the new inode: inode size
+ *    the inode btree entry: 1 block
+ *    the directory btree: (max depth + v2) * dir block size
+ *    the directory inode's bmap btree: (max depth + v2) * block size
+ *    the blocks for the symlink: 1 kB
+ * Or in the first xact we allocate some inodes giving:
+ *    the agi and agf of the ag getting the new inodes: 2 * sectorsize
+ *    the inode blocks allocated: XFS_IALLOC_BLOCKS * blocksize
+ *    the inode btree: max depth * blocksize
+ *    the allocation btrees: 2 trees * (2 * max depth - 1) * block size
  */
+STATIC uint
+xfs_calc_symlink_reservation(
+	struct xfs_mount	*mp)
+{
+	return XFS_DQUOT_LOGRES(mp) +
+		MAX((xfs_calc_buf_res(2, mp->m_sb.sb_inodesize) +
+		     xfs_calc_buf_res(1, XFS_FSB_TO_B(mp, 1)) +
+		     xfs_calc_buf_res(XFS_DIROP_LOG_COUNT(mp),
+				      XFS_FSB_TO_B(mp, 1)) +
+		     xfs_calc_buf_res(1, 1024)),
+		    (xfs_calc_buf_res(2, mp->m_sb.sb_sectsize) +
+		     xfs_calc_buf_res(XFS_IALLOC_BLOCKS(mp),
+				      XFS_FSB_TO_B(mp, 1)) +
+		     xfs_calc_buf_res(mp->m_in_maxlevels,
+				      XFS_FSB_TO_B(mp, 1)) +
+		     xfs_calc_buf_res(XFS_ALLOCFREE_LOG_COUNT(mp, 1),
+				      XFS_FSB_TO_B(mp, 1))));
+}
 
 /*
  * For create we can modify:
@@ -247,19 +274,7 @@ xfs_calc_remove_reservation(
  *    the superblock for the nlink flag: sector size
  *    the directory btree: (max depth + v2) * dir block size
  *    the directory inode's bmap btree: (max depth + v2) * block size
- */
-STATIC uint
-xfs_calc_create_resv_modify(
-	struct xfs_mount	*mp)
-{
-	return xfs_calc_buf_res(2, mp->m_sb.sb_inodesize) +
-		xfs_calc_buf_res(1, mp->m_sb.sb_sectsize) +
-		(uint)XFS_FSB_TO_B(mp, 1) +
-		xfs_calc_buf_res(XFS_DIROP_LOG_COUNT(mp), XFS_FSB_TO_B(mp, 1));
-}
-
-/*
- * For create we can allocate some inodes giving:
+ * Or in the first xact we allocate some inodes giving:
  *    the agi and agf of the ag getting the new inodes: 2 * sectorsize
  *    the superblock for the nlink flag: sector size
  *    the inode blocks allocated: XFS_IALLOC_BLOCKS * blocksize
@@ -267,60 +282,23 @@ xfs_calc_create_resv_modify(
  *    the allocation btrees: 2 trees * (max depth - 1) * block size
  */
 STATIC uint
-xfs_calc_create_resv_alloc(
-	struct xfs_mount	*mp)
-{
-	return xfs_calc_buf_res(2, mp->m_sb.sb_sectsize) +
-		mp->m_sb.sb_sectsize +
-		xfs_calc_buf_res(XFS_IALLOC_BLOCKS(mp), XFS_FSB_TO_B(mp, 1)) +
-		xfs_calc_buf_res(mp->m_in_maxlevels, XFS_FSB_TO_B(mp, 1)) +
-		xfs_calc_buf_res(XFS_ALLOCFREE_LOG_COUNT(mp, 1),
-				 XFS_FSB_TO_B(mp, 1));
-}
-
-STATIC uint
-__xfs_calc_create_reservation(
-	struct xfs_mount	*mp)
-{
-	return XFS_DQUOT_LOGRES(mp) +
-		MAX(xfs_calc_create_resv_alloc(mp),
-		    xfs_calc_create_resv_modify(mp));
-}
-
-/*
- * For icreate we can allocate some inodes giving:
- *    the agi and agf of the ag getting the new inodes: 2 * sectorsize
- *    the superblock for the nlink flag: sector size
- *    the inode btree: max depth * blocksize
- *    the allocation btrees: 2 trees * (max depth - 1) * block size
- */
-STATIC uint
-xfs_calc_icreate_resv_alloc(
-	struct xfs_mount	*mp)
-{
-	return xfs_calc_buf_res(2, mp->m_sb.sb_sectsize) +
-		mp->m_sb.sb_sectsize +
-		xfs_calc_buf_res(mp->m_in_maxlevels, XFS_FSB_TO_B(mp, 1)) +
-		xfs_calc_buf_res(XFS_ALLOCFREE_LOG_COUNT(mp, 1),
-				 XFS_FSB_TO_B(mp, 1));
-}
-
-STATIC uint
-xfs_calc_icreate_reservation(xfs_mount_t *mp)
-{
-	return XFS_DQUOT_LOGRES(mp) +
-		MAX(xfs_calc_icreate_resv_alloc(mp),
-		    xfs_calc_create_resv_modify(mp));
-}
-
-STATIC uint
 xfs_calc_create_reservation(
 	struct xfs_mount	*mp)
 {
-	if (xfs_sb_version_hascrc(&mp->m_sb))
-		return xfs_calc_icreate_reservation(mp);
-	return __xfs_calc_create_reservation(mp);
-
+	return XFS_DQUOT_LOGRES(mp) +
+		MAX((xfs_calc_buf_res(2, mp->m_sb.sb_inodesize) +
+		     xfs_calc_buf_res(1, mp->m_sb.sb_sectsize) +
+		     (uint)XFS_FSB_TO_B(mp, 1) +
+		     xfs_calc_buf_res(XFS_DIROP_LOG_COUNT(mp),
+				      XFS_FSB_TO_B(mp, 1))),
+		    (xfs_calc_buf_res(2, mp->m_sb.sb_sectsize) +
+		     mp->m_sb.sb_sectsize +
+		     xfs_calc_buf_res(XFS_IALLOC_BLOCKS(mp),
+				      XFS_FSB_TO_B(mp, 1)) +
+		     xfs_calc_buf_res(mp->m_in_maxlevels,
+				      XFS_FSB_TO_B(mp, 1)) +
+		     xfs_calc_buf_res(XFS_ALLOCFREE_LOG_COUNT(mp, 1),
+				      XFS_FSB_TO_B(mp, 1))));
 }
 
 /*
@@ -331,20 +309,6 @@ xfs_calc_mkdir_reservation(
 	struct xfs_mount	*mp)
 {
 	return xfs_calc_create_reservation(mp);
-}
-
-
-/*
- * Making a new symplink is the same as creating a new file, but
- * with the added blocks for remote symlink data which can be up to 1kB in
- * length (MAXPATHLEN).
- */
-STATIC uint
-xfs_calc_symlink_reservation(
-	struct xfs_mount	*mp)
-{
-	return xfs_calc_create_reservation(mp) +
-	       xfs_calc_buf_res(1, MAXPATHLEN);
 }
 
 /*
@@ -1136,7 +1100,6 @@ xfs_trans_apply_sb_deltas(
 		whole = 1;
 	}
 
-	xfs_trans_buf_set_type(tp, bp, XFS_BLFT_SB_BUF);
 	if (whole)
 		/*
 		 * Log the whole thing, the fields are noncontiguous.

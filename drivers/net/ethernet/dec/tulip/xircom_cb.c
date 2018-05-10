@@ -1171,4 +1171,16 @@ investigate_write_descriptor(struct net_device *dev,
 	}
 }
 
-module_pci_driver(xircom_ops);
+static int __init xircom_init(void)
+{
+	return pci_register_driver(&xircom_ops);
+}
+
+static void __exit xircom_exit(void)
+{
+	pci_unregister_driver(&xircom_ops);
+}
+
+module_init(xircom_init)
+module_exit(xircom_exit)
+

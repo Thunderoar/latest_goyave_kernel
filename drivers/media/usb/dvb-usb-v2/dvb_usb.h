@@ -140,7 +140,7 @@ struct dvb_usb_rc {
 	int (*change_protocol)(struct rc_dev *dev, u64 *rc_type);
 	int (*query) (struct dvb_usb_device *d);
 	unsigned int interval;
-	enum rc_driver_type driver_type;
+	const enum rc_driver_type driver_type;
 	bool bulk_mode;
 };
 

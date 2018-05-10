@@ -893,7 +893,7 @@ static int swim_probe(struct platform_device *dev)
 
 	swim_base = ioremap(res->start, resource_size(res));
 	if (!swim_base) {
-		ret = -ENOMEM;
+		return -ENOMEM;
 		goto out_release_io;
 	}
 

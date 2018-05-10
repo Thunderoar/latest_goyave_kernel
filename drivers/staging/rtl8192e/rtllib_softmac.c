@@ -341,7 +341,7 @@ inline void softmac_ps_mgmt_xmit(struct sk_buff *skb,
 	}
 }
 
-static inline struct sk_buff *rtllib_probe_req(struct rtllib_device *ieee)
+inline struct sk_buff *rtllib_probe_req(struct rtllib_device *ieee)
 {
 	unsigned int len, rate_len;
 	u8 *tag;
@@ -1801,9 +1801,8 @@ static inline u16 auth_parse(struct sk_buff *skb, u8** challenge, int *chlen)
 
 		if (*(t++) == MFIE_TYPE_CHALLENGE) {
 			*chlen = *(t++);
-			*challenge = kmemdup(t, *chlen, GFP_ATOMIC);
-			if (!*challenge)
-				return -ENOMEM;
+			*challenge = kmalloc(*chlen, GFP_ATOMIC);
+			memcpy(*challenge, t, *chlen);	/*TODO - check here*/
 		}
 	}
 	return cpu_to_le16(a->status);

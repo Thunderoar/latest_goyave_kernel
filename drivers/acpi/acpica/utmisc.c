@@ -382,12 +382,10 @@ acpi_ut_display_init_pathname(u8 type,
 
 	switch (type) {
 	case ACPI_TYPE_METHOD:
-
 		acpi_os_printf("Executing  ");
 		break;
 
 	default:
-
 		acpi_os_printf("Initializing ");
 		break;
 	}

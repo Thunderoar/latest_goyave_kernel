@@ -16,19 +16,14 @@
 
 #include <linux/module.h>
 #include <linux/crypto.h>
-#include <linux/audit.h>
 #include <linux/xattr.h>
 #include <linux/integrity.h>
 #include <linux/evm.h>
 #include <crypto/hash.h>
-#include <crypto/algapi.h>
 #include "evm.h"
 
 int evm_initialized;
 
-static char *integrity_status_msg[] = {
-	"pass", "fail", "no_label", "no_xattrs", "unknown"
-};
 char *evm_hmac = "hmac(sha1)";
 char *evm_hash = "sha1";
 int evm_hmac_version = CONFIG_EVM_HMAC_VERSION;
@@ -133,7 +128,7 @@ static enum integrity_status evm_verify_hmac(struct dentry *dentry,
 				   xattr_value_len, calc.digest);
 		if (rc)
 			break;
-		rc = crypto_memneq(xattr_data->digest, calc.digest,
+		rc = memcmp(xattr_data->digest, calc.digest,
 			    sizeof(calc.digest));
 		if (rc)
 			rc = -EINVAL;
@@ -267,15 +262,9 @@ static int evm_protect_xattr(struct dentry *dentry, const char *xattr_name,
 		if ((evm_status == INTEGRITY_PASS) ||
 		    (evm_status == INTEGRITY_NOXATTRS))
 			return 0;
-		goto out;
+		return -EPERM;
 	}
 	evm_status = evm_verify_current_integrity(dentry);
-out:
-	if (evm_status != INTEGRITY_PASS)
-		integrity_audit_msg(AUDIT_INTEGRITY_METADATA, dentry->d_inode,
-				    dentry->d_name.name, "appraise_metadata",
-				    integrity_status_msg[evm_status],
-				    -EPERM, 0);
 	return evm_status == INTEGRITY_PASS ? 0 : -EPERM;
 }
 
@@ -286,23 +275,12 @@ out:
  * @xattr_value: pointer to the new extended attribute value
  * @xattr_value_len: pointer to the new extended attribute value length
  *
- * Before allowing the 'security.evm' protected xattr to be updated,
- * verify the existing value is valid.  As only the kernel should have
- * access to the EVM encrypted key needed to calculate the HMAC, prevent
- * userspace from writing HMAC value.  Writing 'security.evm' requires
- * requires CAP_SYS_ADMIN privileges.
+ * Updating 'security.evm' requires CAP_SYS_ADMIN privileges and that
+ * the current value is valid.
  */
 int evm_inode_setxattr(struct dentry *dentry, const char *xattr_name,
 		       const void *xattr_value, size_t xattr_value_len)
 {
-	const struct evm_ima_xattr_data *xattr_data = xattr_value;
-
-	if (strcmp(xattr_name, XATTR_NAME_EVM) == 0) {
-		if (!xattr_value_len)
-			return -EINVAL;
-		if (xattr_data->type != EVM_IMA_XATTR_DIGSIG)
-			return -EPERM;
-	}
 	return evm_protect_xattr(dentry, xattr_name, xattr_value,
 				 xattr_value_len);
 }
@@ -379,9 +357,6 @@ int evm_inode_setattr(struct dentry *dentry, struct iattr *attr)
 	if ((evm_status == INTEGRITY_PASS) ||
 	    (evm_status == INTEGRITY_NOXATTRS))
 		return 0;
-	integrity_audit_msg(AUDIT_INTEGRITY_METADATA, dentry->d_inode,
-			    dentry->d_name.name, "appraise_metadata",
-			    integrity_status_msg[evm_status], -EPERM, 0);
 	return -EPERM;
 }
 

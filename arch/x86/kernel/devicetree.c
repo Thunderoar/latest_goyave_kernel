@@ -364,7 +364,9 @@ static void dt_add_ioapic_domain(unsigned int ioapic_num,
 		 * and assigned so we can keep the 1:1 mapping which the ioapic
 		 * is having.
 		 */
-		irq_domain_associate_many(id, 0, 0, NR_IRQS_LEGACY);
+		ret = irq_domain_associate_many(id, 0, 0, NR_IRQS_LEGACY);
+		if (ret)
+			pr_err("Error mapping legacy IRQs: %d\n", ret);
 
 		if (num > NR_IRQS_LEGACY) {
 			ret = irq_create_strict_mappings(id, NR_IRQS_LEGACY,

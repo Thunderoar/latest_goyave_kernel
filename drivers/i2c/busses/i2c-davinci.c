@@ -414,9 +414,11 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	if (dev->cmd_err & DAVINCI_I2C_STR_NACK) {
 		if (msg->flags & I2C_M_IGNORE_NAK)
 			return msg->len;
-		w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
-		w |= DAVINCI_I2C_MDR_STP;
-		davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
+		if (stop) {
+			w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
+			w |= DAVINCI_I2C_MDR_STP;
+			davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
+		}
 		return -EREMOTEIO;
 	}
 	return -EIO;
@@ -644,6 +646,13 @@ static int davinci_i2c_probe(struct platform_device *pdev)
 	struct resource *mem, *irq;
 	int r;
 
+	/* NOTE: driver uses the static register mapping */
+	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!mem) {
+		dev_err(&pdev->dev, "no mem resource?\n");
+		return -ENODEV;
+	}
+
 	irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!irq) {
 		dev_err(&pdev->dev, "no irq resource?\n");
@@ -688,7 +697,6 @@ static int davinci_i2c_probe(struct platform_device *pdev)
 		return -ENODEV;
 	clk_prepare_enable(dev->clk);
 
-	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	dev->base = devm_ioremap_resource(&pdev->dev, mem);
 	if (IS_ERR(dev->base)) {
 		r = PTR_ERR(dev->base);

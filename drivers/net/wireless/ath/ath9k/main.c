@@ -192,15 +192,14 @@ static bool ath_prepare_reset(struct ath_softc *sc)
 	ath_stop_ani(sc);
 	del_timer_sync(&sc->rx_poll_timer);
 
+	ath9k_debug_samp_bb_mac(sc);
 	ath9k_hw_disable_interrupts(ah);
 
-	if (AR_SREV_9300_20_OR_LATER(ah)) {
-		ret &= ath_stoprecv(sc);
-		ret &= ath_drain_all_txq(sc);
-	} else {
-		ret &= ath_drain_all_txq(sc);
-		ret &= ath_stoprecv(sc);
-	}
+	if (!ath_drain_all_txq(sc))
+		ret = false;
+
+	if (!ath_stoprecv(sc))
+		ret = false;
 
 	return ret;
 }
@@ -210,7 +209,6 @@ static bool ath_complete_reset(struct ath_softc *sc, bool start)
 	struct ath_hw *ah = sc->sc_ah;
 	struct ath_common *common = ath9k_hw_common(ah);
 	unsigned long flags;
-	int i;
 
 	if (ath_startrecv(sc) != 0) {
 		ath_err(common, "Unable to restart recv logic\n");
@@ -238,15 +236,6 @@ static bool ath_complete_reset(struct ath_softc *sc, bool start)
 		}
 	work:
 		ath_restart_work(sc);
-
-		for (i = 0; i < ATH9K_NUM_TX_QUEUES; i++) {
-			if (!ATH_TXQ_SETUP(sc, i))
-				continue;
-
-			spin_lock_bh(&sc->tx.txq[i].axq_lock);
-			ath_txq_schedule(sc, &sc->tx.txq[i]);
-			spin_unlock_bh(&sc->tx.txq[i].axq_lock);
-		}
 	}
 
 	if ((ah->caps.hw_caps & ATH9K_HW_CAP_ANT_DIV_COMB) && sc->ant_rx != 3)
@@ -554,10 +543,21 @@ chip_reset:
 
 static int ath_reset(struct ath_softc *sc)
 {
-	int r;
+	int i, r;
 
 	ath9k_ps_wakeup(sc);
+
 	r = ath_reset_internal(sc, NULL);
+
+	for (i = 0; i < ATH9K_NUM_TX_QUEUES; i++) {
+		if (!ATH_TXQ_SETUP(sc, i))
+			continue;
+
+		spin_lock_bh(&sc->tx.txq[i].axq_lock);
+		ath_txq_schedule(sc, &sc->tx.txq[i]);
+		spin_unlock_bh(&sc->tx.txq[i].axq_lock);
+	}
+
 	ath9k_ps_restore(sc);
 
 	return r;
@@ -890,9 +890,8 @@ void ath9k_calculate_iter_data(struct ieee80211_hw *hw,
 	struct ath_common *common = ath9k_hw_common(ah);
 
 	/*
-	 * Pick the MAC address of the first interface as the new hardware
-	 * MAC address. The hardware will use it together with the BSSID mask
-	 * when matching addresses.
+	 * Use the hardware MAC address as reference, the hardware uses it
+	 * together with the BSSID mask when matching addresses.
 	 */
 	memset(iter_data, 0, sizeof(*iter_data));
 	memset(&iter_data->mask, 0xff, ETH_ALEN);
@@ -1266,7 +1265,7 @@ static int ath9k_config(struct ieee80211_hw *hw, u32 changed)
 				curchan->center_freq);
 		} else {
 			/* perform spectral scan if requested. */
-			if (test_bit(SC_OP_SCANNING, &sc->sc_flags) &&
+			if (sc->scanning &&
 			    sc->spectral_mode == SPECTRAL_CHANSCAN)
 				ath9k_spectral_scan_trigger(hw);
 		}
@@ -1683,7 +1682,7 @@ static int ath9k_ampdu_action(struct ieee80211_hw *hw,
 	bool flush = false;
 	int ret = 0;
 
-	mutex_lock(&sc->mutex);
+	local_bh_disable();
 
 	switch (action) {
 	case IEEE80211_AMPDU_RX_START:
@@ -1716,7 +1715,7 @@ static int ath9k_ampdu_action(struct ieee80211_hw *hw,
 		ath_err(ath9k_hw_common(sc->sc_ah), "Unknown AMPDU action\n");
 	}
 
-	mutex_unlock(&sc->mutex);
+	local_bh_enable();
 
 	return ret;
 }
@@ -2335,13 +2334,15 @@ static void ath9k_set_wakeup(struct ieee80211_hw *hw, bool enabled)
 static void ath9k_sw_scan_start(struct ieee80211_hw *hw)
 {
 	struct ath_softc *sc = hw->priv;
-	set_bit(SC_OP_SCANNING, &sc->sc_flags);
+
+	sc->scanning = 1;
 }
 
 static void ath9k_sw_scan_complete(struct ieee80211_hw *hw)
 {
 	struct ath_softc *sc = hw->priv;
-	clear_bit(SC_OP_SCANNING, &sc->sc_flags);
+
+	sc->scanning = 0;
 }
 
 struct ieee80211_ops ath9k_ops = {
@@ -2369,7 +2370,6 @@ struct ieee80211_ops ath9k_ops = {
 	.flush		    = ath9k_flush,
 	.tx_frames_pending  = ath9k_tx_frames_pending,
 	.tx_last_beacon     = ath9k_tx_last_beacon,
-	.release_buffered_frames = ath9k_release_buffered_frames,
 	.get_stats	    = ath9k_get_stats,
 	.set_antenna	    = ath9k_set_antenna,
 	.get_antenna	    = ath9k_get_antenna,

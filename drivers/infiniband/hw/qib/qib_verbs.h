@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2012 Intel Corporation.  All rights reserved.
  * Copyright (c) 2006 - 2012 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
@@ -41,7 +41,6 @@
 #include <linux/interrupt.h>
 #include <linux/kref.h>
 #include <linux/workqueue.h>
-#include <linux/kthread.h>
 #include <linux/completion.h>
 #include <rdma/ib_pack.h>
 #include <rdma/ib_user_verbs.h>
@@ -268,8 +267,7 @@ struct qib_cq_wc {
  */
 struct qib_cq {
 	struct ib_cq ibcq;
-	struct kthread_work comptask;
-	struct qib_devdata *dd;
+	struct work_struct comptask;
 	spinlock_t lock; /* protect changes in this struct */
 	u8 notify;
 	u8 triggered;
@@ -647,8 +645,6 @@ struct qib_qpn_table {
 	struct qpn_map map[QPNMAP_ENTRIES];
 };
 
-#define MAX_LKEY_TABLE_BITS 23
-
 struct qib_lkey_table {
 	spinlock_t lock; /* protect changes in this struct */
 	u32 next;               /* next unused index (speeds search) */
@@ -660,10 +656,6 @@ struct qib_lkey_table {
 struct qib_opcode_stats {
 	u64 n_packets;          /* number of packets */
 	u64 n_bytes;            /* total number of bytes */
-};
-
-struct qib_opcode_stats_perctx {
-	struct qib_opcode_stats stats[128];
 };
 
 struct qib_ibport {
@@ -732,6 +724,7 @@ struct qib_ibport {
 	u8 vl_high_limit;
 	u8 sl_to_vl[16];
 
+	struct qib_opcode_stats opstats[128];
 };
 
 
@@ -775,10 +768,6 @@ struct qib_ibdev {
 	spinlock_t n_srqs_lock;
 	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
 	spinlock_t n_mcast_grps_lock;
-#ifdef CONFIG_DEBUG_FS
-	/* per HCA debugfs */
-	struct dentry *qib_ibdev_dbg;
-#endif
 };
 
 struct qib_verbs_counters {
@@ -842,6 +831,8 @@ static inline int qib_send_ok(struct qib_qp *qp)
 		(qp->s_hdrwords || (qp->s_flags & QIB_S_RESP_PENDING) ||
 		 !(qp->s_flags & QIB_S_ANY_WAIT_SEND));
 }
+
+extern struct workqueue_struct *qib_cq_wq;
 
 /*
  * This must be called with s_lock held.
@@ -919,18 +910,6 @@ void qib_init_qpn_table(struct qib_devdata *dd, struct qib_qpn_table *qpt);
 
 void qib_free_qpn_table(struct qib_qpn_table *qpt);
 
-#ifdef CONFIG_DEBUG_FS
-
-struct qib_qp_iter;
-
-struct qib_qp_iter *qib_qp_iter_init(struct qib_ibdev *dev);
-
-int qib_qp_iter_next(struct qib_qp_iter *iter);
-
-void qib_qp_iter_print(struct seq_file *s, struct qib_qp_iter *iter);
-
-#endif
-
 void qib_get_credit(struct qib_qp *qp, u32 aeth);
 
 unsigned qib_pkt_delay(u32 plen, u8 snd_mult, u8 rcv_mult);
@@ -992,10 +971,6 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr);
 
 int qib_destroy_srq(struct ib_srq *ibsrq);
-
-int qib_cq_init(struct qib_devdata *dd);
-
-void qib_cq_exit(struct qib_devdata *dd);
 
 void qib_cq_enter(struct qib_cq *cq, struct ib_wc *entry, int sig);
 

@@ -22,24 +22,8 @@
 #include "delayed-ref.h"
 #include "ctree.h"
 
-enum btrfs_trans_state {
-	TRANS_STATE_RUNNING		= 0,
-	TRANS_STATE_BLOCKED		= 1,
-	TRANS_STATE_COMMIT_START	= 2,
-	TRANS_STATE_COMMIT_DOING	= 3,
-	TRANS_STATE_UNBLOCKED		= 4,
-	TRANS_STATE_COMPLETED		= 5,
-	TRANS_STATE_MAX			= 6,
-};
-
 struct btrfs_transaction {
 	u64 transid;
-	/*
-	 * total external writers(USERSPACE/START/ATTACH) in this
-	 * transaction, it must be zero before the transaction is
-	 * being committed
-	 */
-	atomic_t num_extwriters;
 	/*
 	 * total writers in this transaction, it must be zero before the
 	 * transaction can end
@@ -47,8 +31,12 @@ struct btrfs_transaction {
 	atomic_t num_writers;
 	atomic_t use_count;
 
-	/* Be protected by fs_info->trans_lock when we want to change it. */
-	enum btrfs_trans_state state;
+	unsigned long num_joined;
+
+	spinlock_t commit_lock;
+	int in_commit;
+	int commit_done;
+	int blocked;
 	struct list_head list;
 	struct extent_io_tree dirty_pages;
 	unsigned long start_time;
@@ -60,22 +48,13 @@ struct btrfs_transaction {
 	int aborted;
 };
 
-#define __TRANS_FREEZABLE	(1U << 0)
-
-#define __TRANS_USERSPACE	(1U << 8)
-#define __TRANS_START		(1U << 9)
-#define __TRANS_ATTACH		(1U << 10)
-#define __TRANS_JOIN		(1U << 11)
-#define __TRANS_JOIN_NOLOCK	(1U << 12)
-
-#define TRANS_USERSPACE		(__TRANS_USERSPACE | __TRANS_FREEZABLE)
-#define TRANS_START		(__TRANS_START | __TRANS_FREEZABLE)
-#define TRANS_ATTACH		(__TRANS_ATTACH)
-#define TRANS_JOIN		(__TRANS_JOIN | __TRANS_FREEZABLE)
-#define TRANS_JOIN_NOLOCK	(__TRANS_JOIN_NOLOCK)
-
-#define TRANS_EXTWRITERS	(__TRANS_USERSPACE | __TRANS_START |	\
-				 __TRANS_ATTACH)
+enum btrfs_trans_type {
+	TRANS_START,
+	TRANS_JOIN,
+	TRANS_USERSPACE,
+	TRANS_JOIN_NOLOCK,
+	TRANS_ATTACH,
+};
 
 struct btrfs_trans_handle {
 	u64 transid;
@@ -91,7 +70,7 @@ struct btrfs_trans_handle {
 	short aborted;
 	short adding_csums;
 	bool allocating_chunk;
-	unsigned int type;
+	enum btrfs_trans_type type;
 	/*
 	 * this root is only needed to validate that the root passed to
 	 * start_transaction is the same as the one passed to end_transaction.

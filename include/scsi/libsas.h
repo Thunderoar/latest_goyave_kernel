@@ -608,7 +608,7 @@ struct sas_ssp_task {
 	u8     enable_first_burst:1;
 	enum   task_attribute task_attr;
 	u8     task_prio;
-	struct scsi_cmnd *cmd;
+	u8     cdb[16];
 };
 
 struct sas_task {

@@ -25,7 +25,7 @@ static void cirrus_dirty_update(struct cirrus_fbdev *afbdev,
 	struct cirrus_bo *bo;
 	int src_offset, dst_offset;
 	int bpp = (afbdev->gfb.base.bits_per_pixel + 7)/8;
-	int ret = -EBUSY;
+	int ret;
 	bool unmap = false;
 	bool store_for_later = false;
 	int x2, y2;
@@ -39,8 +39,7 @@ static void cirrus_dirty_update(struct cirrus_fbdev *afbdev,
 	 * then the BO is being moved and we should
 	 * store up the damage until later.
 	 */
-	if (!in_interrupt())
-		ret = cirrus_bo_reserve(bo, true);
+	ret = cirrus_bo_reserve(bo, true);
 	if (ret) {
 		if (ret != -EBUSY)
 			return;

@@ -271,8 +271,8 @@ static irqreturn_t stmpe_gpio_irq(int irq, void *dev)
 	return IRQ_HANDLED;
 }
 
-static int stmpe_gpio_irq_map(struct irq_domain *d, unsigned int virq,
-			      irq_hw_number_t hwirq)
+int stmpe_gpio_irq_map(struct irq_domain *d, unsigned int virq,
+		       irq_hw_number_t hwirq)
 {
 	struct stmpe_gpio *stmpe_gpio = d->host_data;
 
@@ -292,7 +292,7 @@ static int stmpe_gpio_irq_map(struct irq_domain *d, unsigned int virq,
 	return 0;
 }
 
-static void stmpe_gpio_irq_unmap(struct irq_domain *d, unsigned int virq)
+void stmpe_gpio_irq_unmap(struct irq_domain *d, unsigned int virq)
 {
 #ifdef CONFIG_ARM
 	set_irq_flags(virq, 0);
@@ -431,6 +431,7 @@ static int stmpe_gpio_remove(struct platform_device *pdev)
 	if (irq >= 0)
 		free_irq(irq, stmpe_gpio);
 
+	platform_set_drvdata(pdev, NULL);
 	kfree(stmpe_gpio);
 
 	return 0;

@@ -83,7 +83,6 @@ acpi-$(ACPI_FUTURE_USAGE) += hwtimer.o
 acpi-y +=		\
 	nsaccess.o	\
 	nsalloc.o	\
-	nsarguments.o	\
 	nsconvert.o	\
 	nsdump.o	\
 	nseval.o	\
@@ -138,7 +137,6 @@ acpi-y +=		\
 	tbfadt.o	\
 	tbfind.o	\
 	tbinstal.o	\
-	tbprint.o	\
 	tbutils.o	\
 	tbxface.o	\
 	tbxfload.o	\
@@ -147,13 +145,11 @@ acpi-y +=		\
 acpi-y +=		\
 	utaddress.o	\
 	utalloc.o	\
-	utbuffer.o	\
 	utcopy.o	\
 	utexcep.o	\
 	utdebug.o	\
 	utdecode.o	\
 	utdelete.o	\
-	uterror.o	\
 	uteval.o	\
 	utglobal.o	\
 	utids.o		\

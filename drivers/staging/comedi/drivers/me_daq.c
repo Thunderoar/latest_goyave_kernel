@@ -14,6 +14,10 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 /*
@@ -33,6 +37,7 @@
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/sched.h>
+#include <linux/firmware.h>
 
 #include "../comedidev.h"
 
@@ -386,8 +391,7 @@ static int me_ao_insn_read(struct comedi_device *dev,
 }
 
 static int me2600_xilinx_download(struct comedi_device *dev,
-				  const u8 *data, size_t size,
-				  unsigned long context)
+				  const u8 *data, size_t size)
 {
 	struct me_private_data *dev_private = dev->private;
 	unsigned int value;
@@ -456,6 +460,22 @@ static int me2600_xilinx_download(struct comedi_device *dev,
 	return 0;
 }
 
+static int me2600_upload_firmware(struct comedi_device *dev)
+{
+	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
+	const struct firmware *fw;
+	int ret;
+
+	ret = request_firmware(&fw, ME2600_FIRMWARE, &pcidev->dev);
+	if (ret)
+		return ret;
+
+	ret = me2600_xilinx_download(dev, fw->data, fw->size);
+	release_firmware(fw);
+
+	return ret;
+}
+
 static int me_reset(struct comedi_device *dev)
 {
 	struct me_private_data *dev_private = dev->private;
@@ -509,9 +529,7 @@ static int me_auto_attach(struct comedi_device *dev,
 
 	/* Download firmware and reset card */
 	if (board->needs_firmware) {
-		ret = comedi_load_firmware(dev, &comedi_to_pci_dev(dev)->dev,
-					   ME2600_FIRMWARE,
-					   me2600_xilinx_download, 0);
+		ret = me2600_upload_firmware(dev);
 		if (ret < 0)
 			return ret;
 	}

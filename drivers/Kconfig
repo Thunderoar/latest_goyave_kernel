@@ -8,8 +8,6 @@ source "drivers/bus/Kconfig"
 
 source "drivers/connector/Kconfig"
 
-source "drivers/gpu/mali400/Kconfig"
-
 source "drivers/mtd/Kconfig"
 
 source "drivers/of/Kconfig"
@@ -55,6 +53,8 @@ source "drivers/char/Kconfig"
 source "drivers/i2c/Kconfig"
 
 source "drivers/spi/Kconfig"
+
+source "drivers/ssbi/Kconfig"
 
 source "drivers/hsi/Kconfig"
 
@@ -177,9 +177,5 @@ source "drivers/sensor/Kconfig"
 source "drivers/iq/Kconfig"
 
 source "drivers/cpuhotplug/Kconfig"
-
-source "drivers/android/Kconfig"
-
-source "drivers/fmc/Kconfig"
 
 endmenu

@@ -403,8 +403,10 @@ static int wm8903_class_w_put(struct snd_kcontrol *kcontrol,
 }
 
 #define SOC_DAPM_SINGLE_W(xname, reg, shift, max, invert) \
-	SOC_SINGLE_EXT(xname, reg, shift, max, invert, \
-		snd_soc_dapm_get_volsw, wm8903_class_w_put)
+{	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, \
+	.info = snd_soc_info_volsw, \
+	.get = snd_soc_dapm_get_volsw, .put = wm8903_class_w_put, \
+	.private_value =  SOC_SINGLE_VALUE(reg, shift, max, invert) }
 
 
 static int wm8903_deemph[] = { 0, 32000, 44100, 48000 };
@@ -444,7 +446,7 @@ static int wm8903_get_deemph(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct wm8903_priv *wm8903 = snd_soc_codec_get_drvdata(codec);
 
-	ucontrol->value.integer.value[0] = wm8903->deemph;
+	ucontrol->value.enumerated.item[0] = wm8903->deemph;
 
 	return 0;
 }
@@ -454,7 +456,7 @@ static int wm8903_put_deemph(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct wm8903_priv *wm8903 = snd_soc_codec_get_drvdata(codec);
-	int deemph = ucontrol->value.integer.value[0];
+	int deemph = ucontrol->value.enumerated.item[0];
 	int ret = 0;
 
 	if (deemph > 1)

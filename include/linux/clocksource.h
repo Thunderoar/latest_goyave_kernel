@@ -21,7 +21,6 @@
 /* clocksource cycle base type */
 typedef u64 cycle_t;
 struct clocksource;
-struct module;
 
 #ifdef CONFIG_ARCH_CLOCKSOURCE_DATA
 #include <asm/clocksource.h>
@@ -163,7 +162,6 @@ extern u64 timecounter_cyc2time(struct timecounter *tc,
  * @suspend:		suspend function for the clocksource, if necessary
  * @resume:		resume function for the clocksource, if necessary
  * @cycle_last:		most recent cycle counter value seen by ::read()
- * @owner:		module reference, must be set by clocksource in modules
  */
 struct clocksource {
 	/*
@@ -197,7 +195,6 @@ struct clocksource {
 	cycle_t cs_last;
 	cycle_t wd_last;
 #endif
-	struct module *owner;
 } ____cacheline_aligned;
 
 /*
@@ -282,13 +279,13 @@ static inline s64 clocksource_cyc2ns(cycle_t cycles, u32 mult, u32 shift)
 
 
 extern int clocksource_register(struct clocksource*);
-extern int clocksource_unregister(struct clocksource*);
+extern void clocksource_unregister(struct clocksource*);
 extern void clocksource_touch_watchdog(void);
 extern struct clocksource* clocksource_get_next(void);
 extern void clocksource_change_rating(struct clocksource *cs, int rating);
 extern void clocksource_suspend(void);
 extern void clocksource_resume(void);
-extern struct clocksource * __init clocksource_default_clock(void);
+extern struct clocksource * __init __weak clocksource_default_clock(void);
 extern void clocksource_mark_unstable(struct clocksource *cs);
 
 extern void
@@ -324,7 +321,7 @@ static inline void __clocksource_updatefreq_khz(struct clocksource *cs, u32 khz)
 }
 
 
-extern int timekeeping_notify(struct clocksource *clock);
+extern void timekeeping_notify(struct clocksource *clock);
 
 extern cycle_t clocksource_mmio_readl_up(struct clocksource *);
 extern cycle_t clocksource_mmio_readl_down(struct clocksource *);

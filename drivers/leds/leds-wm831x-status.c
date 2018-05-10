@@ -241,7 +241,7 @@ static int wm831x_status_probe(struct platform_device *pdev)
 			       GFP_KERNEL);
 	if (!drvdata)
 		return -ENOMEM;
-	platform_set_drvdata(pdev, drvdata);
+	dev_set_drvdata(&pdev->dev, drvdata);
 
 	drvdata->wm831x = wm831x;
 	drvdata->reg = res->start;

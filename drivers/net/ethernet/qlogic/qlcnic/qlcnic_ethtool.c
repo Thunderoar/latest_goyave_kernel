@@ -846,9 +846,7 @@ static int qlcnic_irq_test(struct net_device *netdev)
 		goto clear_diag_irq;
 
 	ahw->diag_cnt = 0;
-	ret = qlcnic_alloc_mbx_args(&cmd, adapter, QLCNIC_CMD_INTRPT_TEST);
-	if (ret)
-		goto free_diag_res;
+	qlcnic_alloc_mbx_args(&cmd, adapter, QLCNIC_CMD_INTRPT_TEST);
 
 	cmd.req.arg[1] = ahw->pci_func;
 	ret = qlcnic_issue_cmd(adapter, &cmd);
@@ -860,8 +858,6 @@ static int qlcnic_irq_test(struct net_device *netdev)
 
 done:
 	qlcnic_free_mbx_args(&cmd);
-
-free_diag_res:
 	qlcnic_diag_free_res(netdev, max_sds_rings);
 
 clear_diag_irq:

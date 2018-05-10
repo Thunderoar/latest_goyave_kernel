@@ -28,8 +28,7 @@ void ath9k_htc_beaconq_config(struct ath9k_htc_priv *priv)
 
 	ath9k_hw_get_txq_props(ah, priv->beaconq, &qi);
 
-	if (priv->ah->opmode == NL80211_IFTYPE_AP ||
-	    priv->ah->opmode == NL80211_IFTYPE_MESH_POINT) {
+	if (priv->ah->opmode == NL80211_IFTYPE_AP) {
 		qi.tqi_aifs = 1;
 		qi.tqi_cwmin = 0;
 		qi.tqi_cwmax = 0;
@@ -629,7 +628,6 @@ void ath9k_htc_beacon_config(struct ath9k_htc_priv *priv,
 	case NL80211_IFTYPE_ADHOC:
 		ath9k_htc_beacon_config_adhoc(priv, cur_conf);
 		break;
-	case NL80211_IFTYPE_MESH_POINT:
 	case NL80211_IFTYPE_AP:
 		ath9k_htc_beacon_config_ap(priv, cur_conf);
 		break;
@@ -651,7 +649,6 @@ void ath9k_htc_beacon_reconfig(struct ath9k_htc_priv *priv)
 	case NL80211_IFTYPE_ADHOC:
 		ath9k_htc_beacon_config_adhoc(priv, cur_conf);
 		break;
-	case NL80211_IFTYPE_MESH_POINT:
 	case NL80211_IFTYPE_AP:
 		ath9k_htc_beacon_config_ap(priv, cur_conf);
 		break;

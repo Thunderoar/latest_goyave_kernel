@@ -84,6 +84,7 @@ struct perf_session_env {
 };
 
 struct perf_header {
+	int			frozen;
 	bool			needs_swap;
 	s64			attr_offset;
 	u64			data_offset;

@@ -207,6 +207,9 @@ static int mlx4_en_dcbnl_ieee_getmaxrate(struct net_device *dev,
 	struct mlx4_en_priv *priv = netdev_priv(dev);
 	int i;
 
+	if (!priv->maxrate)
+		return -EINVAL;
+
 	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
 		maxrate->tc_maxrate[i] =
 			priv->maxrate[i] * MLX4_RATELIMIT_UNITS_IN_KB;

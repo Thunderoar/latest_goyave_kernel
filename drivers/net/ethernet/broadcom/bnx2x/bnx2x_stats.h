@@ -40,6 +40,7 @@ struct nig_stats {
 	u32 egress_mac_pkt1_hi;
 };
 
+
 enum bnx2x_stats_event {
 	STATS_EVENT_PMF = 0,
 	STATS_EVENT_LINK_UP,
@@ -207,6 +208,7 @@ struct bnx2x_eth_stats {
 	u32 eee_tx_lpi;
 };
 
+
 struct bnx2x_eth_q_stats {
 	u32 total_unicast_bytes_received_hi;
 	u32 total_unicast_bytes_received_lo;
@@ -328,6 +330,7 @@ struct bnx2x_fw_port_stats_old {
 	 u32 brb_truncate_discard;
 	 u32 mac_discard;
 };
+
 
 /****************************************************************************
 * Macros
@@ -532,6 +535,7 @@ struct bnx2x_fw_port_stats_old {
 		diff = le32_to_cpu(uclient->s) - le32_to_cpu(old_uclient->s); \
 		SUB_EXTEND_64(qstats->t##_hi, qstats->t##_lo, diff); \
 	} while (0)
+
 
 /* forward */
 struct bnx2x;

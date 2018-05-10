@@ -168,10 +168,10 @@ struct thread_struct {
 	 * The following help to manage the use of Debug Control Registers
 	 * om the BookE platforms.
 	 */
-	uint32_t	dbcr0;
-	uint32_t	dbcr1;
+	unsigned long	dbcr0;
+	unsigned long	dbcr1;
 #ifdef CONFIG_BOOKE
-	uint32_t	dbcr2;
+	unsigned long	dbcr2;
 #endif
 	/*
 	 * The stored value of the DBSR register will be the value at the
@@ -179,7 +179,7 @@ struct thread_struct {
 	 * user (will never be written to) and has value while helping to
 	 * describe the reason for the last debug trap.  Torez
 	 */
-	uint32_t	dbsr;
+	unsigned long	dbsr;
 	/*
 	 * The following will contain addresses used by debug applications
 	 * to help trace and trap on particular address locations.
@@ -200,7 +200,7 @@ struct thread_struct {
 #endif
 #endif
 	/* FP and VSX 0-31 register set */
-	double		fpr[32][TS_FPRWIDTH] __attribute__((aligned(16)));
+	double		fpr[32][TS_FPRWIDTH];
 	struct {
 
 		unsigned int pad;
@@ -408,7 +408,9 @@ static inline void prefetchw(const void *x)
 
 #define spin_lock_prefetch(x)	prefetchw(x)
 
+#ifdef CONFIG_PPC64
 #define HAVE_ARCH_PICK_MMAP_LAYOUT
+#endif
 
 #ifdef CONFIG_PPC64
 static inline unsigned long get_clean_sp(unsigned long sp, int is_32)

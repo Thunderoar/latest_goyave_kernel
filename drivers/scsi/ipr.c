@@ -281,22 +281,12 @@ struct ipr_error_table_t ipr_error_table[] = {
 	"FFF6: Failure prediction threshold exceeded"},
 	{0x015D9200, 0, IPR_DEFAULT_LOG_LEVEL,
 	"8009: Impending cache battery pack failure"},
-	{0x02040100, 0, 0,
-	"Logical Unit in process of becoming ready"},
-	{0x02040200, 0, 0,
-	"Initializing command required"},
 	{0x02040400, 0, 0,
 	"34FF: Disk device format in progress"},
-	{0x02040C00, 0, 0,
-	"Logical unit not accessible, target port in unavailable state"},
 	{0x02048000, 0, IPR_DEFAULT_LOG_LEVEL,
 	"9070: IOA requested reset"},
 	{0x023F0000, 0, 0,
 	"Synchronization required"},
-	{0x02408500, 0, 0,
-	"IOA microcode download required"},
-	{0x02408600, 0, 0,
-	"Device bus connection is prohibited by host"},
 	{0x024E0000, 0, 0,
 	"No ready, IOA shutdown"},
 	{0x025A0000, 0, 0,
@@ -395,8 +385,6 @@ struct ipr_error_table_t ipr_error_table[] = {
 	"4030: Incorrect multipath connection"},
 	{0x04679000, 0, IPR_DEFAULT_LOG_LEVEL,
 	"4110: Unsupported enclosure function"},
-	{0x04679800, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4120: SAS cable VPD cannot be read"},
 	{0x046E0000, 0, IPR_DEFAULT_LOG_LEVEL,
 	"FFF4: Command to logical unit failed"},
 	{0x05240000, 1, 0,
@@ -419,18 +407,10 @@ struct ipr_error_table_t ipr_error_table[] = {
 	"Illegal request, command sequence error"},
 	{0x052C8000, 1, 0,
 	"Illegal request, dual adapter support not enabled"},
-	{0x052C8100, 1, 0,
-	"Illegal request, another cable connector was physically disabled"},
-	{0x054E8000, 1, 0,
-	"Illegal request, inconsistent group id/group count"},
 	{0x06040500, 0, IPR_DEFAULT_LOG_LEVEL,
 	"9031: Array protection temporarily suspended, protection resuming"},
 	{0x06040600, 0, IPR_DEFAULT_LOG_LEVEL,
 	"9040: Array protection temporarily suspended, protection resuming"},
-	{0x060B0100, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4080: IOA exceeded maximum operating temperature"},
-	{0x060B8000, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4085: Service required"},
 	{0x06288000, 0, IPR_DEFAULT_LOG_LEVEL,
 	"3140: Device bus not ready to ready transition"},
 	{0x06290000, 0, IPR_DEFAULT_LOG_LEVEL,
@@ -443,8 +423,6 @@ struct ipr_error_table_t ipr_error_table[] = {
 	"FFFB: SCSI bus was reset by another initiator"},
 	{0x063F0300, 0, IPR_DEFAULT_LOG_LEVEL,
 	"3029: A device replacement has occurred"},
-	{0x063F8300, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4102: Device bus fabric performance degradation"},
 	{0x064C8000, 0, IPR_DEFAULT_LOG_LEVEL,
 	"9051: IOA cache data exists for a missing or failed device"},
 	{0x064C8100, 0, IPR_DEFAULT_LOG_LEVEL,
@@ -467,14 +445,6 @@ struct ipr_error_table_t ipr_error_table[] = {
 	"9076: Configuration error, missing remote IOA"},
 	{0x06679100, 0, IPR_DEFAULT_LOG_LEVEL,
 	"4050: Enclosure does not support a required multipath function"},
-	{0x06679800, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4121: Configuration error, required cable is missing"},
-	{0x06679900, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4122: Cable is not plugged into the correct location on remote IOA"},
-	{0x06679A00, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4123: Configuration error, invalid cable vital product data"},
-	{0x06679B00, 0, IPR_DEFAULT_LOG_LEVEL,
-	"4124: Configuration error, both cable ends are plugged into the same IOA"},
 	{0x06690000, 0, IPR_DEFAULT_LOG_LEVEL,
 	"4070: Logically bad block written on device"},
 	{0x06690200, 0, IPR_DEFAULT_LOG_LEVEL,
@@ -537,18 +507,10 @@ struct ipr_error_table_t ipr_error_table[] = {
 	"9062: One or more disks are missing from an array"},
 	{0x07279900, 0, IPR_DEFAULT_LOG_LEVEL,
 	"9063: Maximum number of functional arrays has been exceeded"},
-	{0x07279A00, 0, 0,
-	"Data protect, other volume set problem"},
 	{0x0B260000, 0, 0,
 	"Aborted command, invalid descriptor"},
-	{0x0B3F9000, 0, 0,
-	"Target operating conditions have changed, dual adapter takeover"},
-	{0x0B530200, 0, 0,
-	"Aborted command, medium removal prevented"},
 	{0x0B5A0000, 0, 0,
-	"Command terminated by host"},
-	{0x0B5B8000, 0, 0,
-	"Aborted command, command terminated by host"}
+	"Command terminated by host"}
 };
 
 static const struct ipr_ses_table_entry ipr_ses_table[] = {
@@ -592,10 +554,9 @@ static void ipr_trc_hook(struct ipr_cmnd *ipr_cmd,
 {
 	struct ipr_trace_entry *trace_entry;
 	struct ipr_ioa_cfg *ioa_cfg = ipr_cmd->ioa_cfg;
-	unsigned int trace_index;
 
-	trace_index = atomic_add_return(1, &ioa_cfg->trace_index) & IPR_TRACE_INDEX_MASK;
-	trace_entry = &ioa_cfg->trace[trace_index];
+	trace_entry = &ioa_cfg->trace[atomic_add_return
+			(1, &ioa_cfg->trace_index)%IPR_NUM_TRACE_ENTRIES];
 	trace_entry->time = jiffies;
 	trace_entry->op_code = ipr_cmd->ioarcb.cmd_pkt.cdb[0];
 	trace_entry->type = type;
@@ -684,7 +645,6 @@ static void ipr_init_ipr_cmnd(struct ipr_cmnd *ipr_cmd,
 	ipr_reinit_ipr_cmnd(ipr_cmd);
 	ipr_cmd->u.scratch = 0;
 	ipr_cmd->sibling = NULL;
-	ipr_cmd->eh_comp = NULL;
 	ipr_cmd->fast_done = fast_done;
 	init_timer(&ipr_cmd->timer);
 }
@@ -850,8 +810,6 @@ static void ipr_scsi_eh_done(struct ipr_cmnd *ipr_cmd)
 
 	scsi_dma_unmap(ipr_cmd->scsi_cmd);
 	scsi_cmd->scsi_done(scsi_cmd);
-	if (ipr_cmd->eh_comp)
-		complete(ipr_cmd->eh_comp);
 	list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
 }
 
@@ -1045,15 +1003,10 @@ static void ipr_send_blocking_cmd(struct ipr_cmnd *ipr_cmd,
 
 static int ipr_get_hrrq_index(struct ipr_ioa_cfg *ioa_cfg)
 {
-	unsigned int hrrq;
-
 	if (ioa_cfg->hrrq_num == 1)
-		hrrq = 0;
-	else {
-		hrrq = atomic_add_return(1, &ioa_cfg->hrrq_index);
-		hrrq = (hrrq % (ioa_cfg->hrrq_num - 1)) + 1;
-	}
-	return hrrq;
+		return 0;
+	else
+		return (atomic_add_return(1, &ioa_cfg->hrrq_index) % (ioa_cfg->hrrq_num - 1)) + 1;
 }
 
 /**
@@ -3946,17 +3899,13 @@ static ssize_t ipr_store_update_fw(struct device *dev,
 	struct ipr_sglist *sglist;
 	char fname[100];
 	char *src;
-	char *endline;
-	int result, dnld_size;
+	int len, result, dnld_size;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 
-	snprintf(fname, sizeof(fname), "%s", buf);
-
-	endline = strchr(fname, '\n');
-	if (endline)
-		*endline = '\0';
+	len = snprintf(fname, 99, "%s", buf);
+	fname[len-1] = '\0';
 
 	if (request_firmware(&fw_entry, fname, &ioa_cfg->pdev->dev)) {
 		dev_err(&ioa_cfg->pdev->dev, "Firmware file %s not found\n", fname);
@@ -4818,84 +4767,6 @@ static int ipr_slave_alloc(struct scsi_device *sdev)
 	return rc;
 }
 
-/**
- * ipr_match_lun - Match function for specified LUN
- * @ipr_cmd:	ipr command struct
- * @device:		device to match (sdev)
- *
- * Returns:
- *	1 if command matches sdev / 0 if command does not match sdev
- **/
-static int ipr_match_lun(struct ipr_cmnd *ipr_cmd, void *device)
-{
-	if (ipr_cmd->scsi_cmd && ipr_cmd->scsi_cmd->device == device)
-		return 1;
-	return 0;
-}
-
-/**
- * ipr_wait_for_ops - Wait for matching commands to complete
- * @ipr_cmd:	ipr command struct
- * @device:		device to match (sdev)
- * @match:		match function to use
- *
- * Returns:
- *	SUCCESS / FAILED
- **/
-static int ipr_wait_for_ops(struct ipr_ioa_cfg *ioa_cfg, void *device,
-			    int (*match)(struct ipr_cmnd *, void *))
-{
-	struct ipr_cmnd *ipr_cmd;
-	int wait;
-	unsigned long flags;
-	struct ipr_hrr_queue *hrrq;
-	signed long timeout = IPR_ABORT_TASK_TIMEOUT;
-	DECLARE_COMPLETION_ONSTACK(comp);
-
-	ENTER;
-	do {
-		wait = 0;
-
-		for_each_hrrq(hrrq, ioa_cfg) {
-			spin_lock_irqsave(hrrq->lock, flags);
-			list_for_each_entry(ipr_cmd, &hrrq->hrrq_pending_q, queue) {
-				if (match(ipr_cmd, device)) {
-					ipr_cmd->eh_comp = &comp;
-					wait++;
-				}
-			}
-			spin_unlock_irqrestore(hrrq->lock, flags);
-		}
-
-		if (wait) {
-			timeout = wait_for_completion_timeout(&comp, timeout);
-
-			if (!timeout) {
-				wait = 0;
-
-				for_each_hrrq(hrrq, ioa_cfg) {
-					spin_lock_irqsave(hrrq->lock, flags);
-					list_for_each_entry(ipr_cmd, &hrrq->hrrq_pending_q, queue) {
-						if (match(ipr_cmd, device)) {
-							ipr_cmd->eh_comp = NULL;
-							wait++;
-						}
-					}
-					spin_unlock_irqrestore(hrrq->lock, flags);
-				}
-
-				if (wait)
-					dev_err(&ioa_cfg->pdev->dev, "Timed out waiting for aborted commands\n");
-				LEAVE;
-				return wait ? FAILED : SUCCESS;
-			}
-		}
-	} while (wait);
-
-	LEAVE;
-	return SUCCESS;
-}
-
 static int ipr_eh_host_reset(struct scsi_cmnd *cmd)
 {
 	struct ipr_ioa_cfg *ioa_cfg;
@@ -5114,16 +4985,10 @@ static int __ipr_eh_dev_reset(struct scsi_cmnd *scsi_cmd)
 static int ipr_eh_dev_reset(struct scsi_cmnd *cmd)
 {
 	int rc;
-	struct ipr_ioa_cfg *ioa_cfg;
-
-	ioa_cfg = (struct ipr_ioa_cfg *) cmd->device->host->hostdata;
 
 	spin_lock_irq(cmd->device->host->host_lock);
 	rc = __ipr_eh_dev_reset(cmd);
 	spin_unlock_irq(cmd->device->host->host_lock);
-
-	if (rc == SUCCESS)
-		rc = ipr_wait_for_ops(ioa_cfg, cmd->device, ipr_match_lun);
 
 	return rc;
 }
@@ -5302,18 +5167,13 @@ static int ipr_eh_abort(struct scsi_cmnd *scsi_cmd)
 {
 	unsigned long flags;
 	int rc;
-	struct ipr_ioa_cfg *ioa_cfg;
 
 	ENTER;
-
-	ioa_cfg = (struct ipr_ioa_cfg *) scsi_cmd->device->host->hostdata;
 
 	spin_lock_irqsave(scsi_cmd->device->host->host_lock, flags);
 	rc = ipr_cancel_op(scsi_cmd);
 	spin_unlock_irqrestore(scsi_cmd->device->host->host_lock, flags);
 
-	if (rc == SUCCESS)
-		rc = ipr_wait_for_ops(ioa_cfg, scsi_cmd->device, ipr_match_lun);
 	LEAVE;
 	return rc;
 }
@@ -6189,23 +6049,21 @@ static void ipr_scsi_done(struct ipr_cmnd *ipr_cmd)
 	struct ipr_ioa_cfg *ioa_cfg = ipr_cmd->ioa_cfg;
 	struct scsi_cmnd *scsi_cmd = ipr_cmd->scsi_cmd;
 	u32 ioasc = be32_to_cpu(ipr_cmd->s.ioasa.hdr.ioasc);
-	unsigned long lock_flags;
+	unsigned long hrrq_flags;
 
 	scsi_set_resid(scsi_cmd, be32_to_cpu(ipr_cmd->s.ioasa.hdr.residual_data_len));
 
 	if (likely(IPR_IOASC_SENSE_KEY(ioasc) == 0)) {
 		scsi_dma_unmap(scsi_cmd);
 
-		spin_lock_irqsave(ipr_cmd->hrrq->lock, lock_flags);
+		spin_lock_irqsave(ipr_cmd->hrrq->lock, hrrq_flags);
 		list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
 		scsi_cmd->scsi_done(scsi_cmd);
-		spin_unlock_irqrestore(ipr_cmd->hrrq->lock, lock_flags);
+		spin_unlock_irqrestore(ipr_cmd->hrrq->lock, hrrq_flags);
 	} else {
-		spin_lock_irqsave(ioa_cfg->host->host_lock, lock_flags);
-		spin_lock(&ipr_cmd->hrrq->_lock);
+		spin_lock_irqsave(ipr_cmd->hrrq->lock, hrrq_flags);
 		ipr_erp_start(ioa_cfg, ipr_cmd);
-		spin_unlock(&ipr_cmd->hrrq->_lock);
-		spin_unlock_irqrestore(ioa_cfg->host->host_lock, lock_flags);
+		spin_unlock_irqrestore(ipr_cmd->hrrq->lock, hrrq_flags);
 	}
 }
 
@@ -6409,8 +6267,7 @@ static struct scsi_host_template driver_template = {
 	.use_clustering = ENABLE_CLUSTERING,
 	.shost_attrs = ipr_ioa_attrs,
 	.sdev_attrs = ipr_dev_attrs,
-	.proc_name = IPR_NAME,
-	.no_write_same = 1,
+	.proc_name = IPR_NAME
 };
 
 /**
@@ -6805,6 +6662,7 @@ static bool ipr_qc_fill_rtf(struct ata_queued_cmd *qc)
 	tf->hob_lbal = g->hob_lbal;
 	tf->hob_lbam = g->hob_lbam;
 	tf->hob_lbah = g->hob_lbah;
+	tf->ctl = g->alt_status;
 
 	return true;
 }
@@ -9534,7 +9392,7 @@ static int ipr_probe_ioa(struct pci_dev *pdev,
 	void __iomem *ipr_regs;
 	int rc = PCIBIOS_SUCCESSFUL;
 	volatile u32 mask, uproc, interrupts;
-	unsigned long lock_flags, driver_lock_flags;
+	unsigned long lock_flags;
 
 	ENTER;
 
@@ -9644,7 +9502,6 @@ static int ipr_probe_ioa(struct pci_dev *pdev,
 		ioa_cfg->intr_flag = IPR_USE_MSI;
 	else {
 		ioa_cfg->intr_flag = IPR_USE_LSI;
-		ioa_cfg->clear_isr = 1;
 		ioa_cfg->nvectors = 1;
 		dev_info(&pdev->dev, "Cannot enable MSI.\n");
 	}
@@ -9758,9 +9615,9 @@ static int ipr_probe_ioa(struct pci_dev *pdev,
 	} else
 		ioa_cfg->reset = ipr_reset_start_bist;
 
-	spin_lock_irqsave(&ipr_driver_lock, driver_lock_flags);
+	spin_lock(&ipr_driver_lock);
 	list_add_tail(&ioa_cfg->queue, &ipr_ioa_head);
-	spin_unlock_irqrestore(&ipr_driver_lock, driver_lock_flags);
+	spin_unlock(&ipr_driver_lock);
 
 	LEAVE;
 out:
@@ -9843,7 +9700,6 @@ static void __ipr_remove(struct pci_dev *pdev)
 	unsigned long host_lock_flags = 0;
 	struct ipr_ioa_cfg *ioa_cfg = pci_get_drvdata(pdev);
 	int i;
-	unsigned long driver_lock_flags;
 	ENTER;
 
 	spin_lock_irqsave(ioa_cfg->host->host_lock, host_lock_flags);
@@ -9867,9 +9723,9 @@ static void __ipr_remove(struct pci_dev *pdev)
 	INIT_LIST_HEAD(&ioa_cfg->used_res_q);
 	spin_lock_irqsave(ioa_cfg->host->host_lock, host_lock_flags);
 
-	spin_lock_irqsave(&ipr_driver_lock, driver_lock_flags);
+	spin_lock(&ipr_driver_lock);
 	list_del(&ioa_cfg->queue);
-	spin_unlock_irqrestore(&ipr_driver_lock, driver_lock_flags);
+	spin_unlock(&ipr_driver_lock);
 
 	if (ioa_cfg->sdt_state == ABORT_DUMP)
 		ioa_cfg->sdt_state = WAIT_FOR_DUMP;
@@ -10135,12 +9991,12 @@ static int ipr_halt(struct notifier_block *nb, ulong event, void *buf)
 {
 	struct ipr_cmnd *ipr_cmd;
 	struct ipr_ioa_cfg *ioa_cfg;
-	unsigned long flags = 0, driver_lock_flags;
+	unsigned long flags = 0;
 
 	if (event != SYS_RESTART && event != SYS_HALT && event != SYS_POWER_OFF)
 		return NOTIFY_DONE;
 
-	spin_lock_irqsave(&ipr_driver_lock, driver_lock_flags);
+	spin_lock(&ipr_driver_lock);
 
 	list_for_each_entry(ioa_cfg, &ipr_ioa_head, queue) {
 		spin_lock_irqsave(ioa_cfg->host->host_lock, flags);
@@ -10158,7 +10014,7 @@ static int ipr_halt(struct notifier_block *nb, ulong event, void *buf)
 		ipr_do_req(ipr_cmd, ipr_halt_done, ipr_timeout, IPR_DEVICE_RESET_TIMEOUT);
 		spin_unlock_irqrestore(ioa_cfg->host->host_lock, flags);
 	}
-	spin_unlock_irqrestore(&ipr_driver_lock, driver_lock_flags);
+	spin_unlock(&ipr_driver_lock);
 
 	return NOTIFY_OK;
 }

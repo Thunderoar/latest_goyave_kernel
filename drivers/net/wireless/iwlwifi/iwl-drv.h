@@ -62,7 +62,8 @@
 
 #ifndef __iwl_drv_h__
 #define __iwl_drv_h__
-#include <linux/export.h>
+
+#include <linux/module.h>
 
 /* for all modules */
 #define DRV_NAME        "iwlwifi"

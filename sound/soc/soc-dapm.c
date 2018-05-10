@@ -64,7 +64,6 @@ static int dapm_up_seq[] = {
 	[snd_soc_dapm_virt_mux] = 5,
 	[snd_soc_dapm_value_mux] = 5,
 	[snd_soc_dapm_dac] = 6,
-	[snd_soc_dapm_switch] = 7,
 	[snd_soc_dapm_mixer] = 7,
 	[snd_soc_dapm_mixer_named_ctl] = 7,
 	[snd_soc_dapm_pga] = 8,
@@ -84,7 +83,6 @@ static int dapm_down_seq[] = {
 	[snd_soc_dapm_line] = 2,
 	[snd_soc_dapm_out_drv] = 2,
 	[snd_soc_dapm_pga] = 4,
-	[snd_soc_dapm_switch] = 5,
 	[snd_soc_dapm_mixer_named_ctl] = 5,
 	[snd_soc_dapm_mixer] = 5,
 	[snd_soc_dapm_dac] = 6,
@@ -367,10 +365,11 @@ static void dapm_set_path_status(struct snd_soc_dapm_widget *w,
 		val = soc_widget_read(w, e->reg);
 		item = (val >> e->shift_l) & e->mask;
 
-		if (item < e->max && !strcmp(p->name, e->texts[item]))
-			p->connect = 1;
-		else
-			p->connect = 0;
+		p->connect = 0;
+		for (i = 0; i < e->max; i++) {
+			if (!(strcmp(p->name, e->texts[i])) && item == i)
+				p->connect = 1;
+		}
 	}
 	break;
 	case snd_soc_dapm_virt_mux: {
@@ -400,10 +399,11 @@ static void dapm_set_path_status(struct snd_soc_dapm_widget *w,
 				break;
 		}
 
-		if (item < e->max && !strcmp(p->name, e->texts[item]))
-			p->connect = 1;
-		else
-			p->connect = 0;
+		p->connect = 0;
+		for (i = 0; i < e->max; i++) {
+			if (!(strcmp(p->name, e->texts[i])) && item == i)
+				p->connect = 1;
+		}
 	}
 	break;
 	/* does not affect routing - always connected */
@@ -507,11 +507,6 @@ static int dapm_is_shared_kcontrol(struct snd_soc_dapm_context *dapm,
 	return 0;
 }
 
-static void dapm_kcontrol_free(struct snd_kcontrol *kctl)
-{
-	kfree(kctl->private_data);
-}
-
 /*
  * Determine if a kcontrol is shared. If it is, look it up. If it isn't,
  * create it. Either way, add the widget into the control's widget list
@@ -529,6 +524,7 @@ static int dapm_create_or_share_mixmux_kcontrol(struct snd_soc_dapm_widget *w,
 	int wlistentries;
 	size_t wlistsize;
 	bool wname_in_long_name, kcname_in_long_name;
+	size_t name_len;
 	char *long_name;
 	const char *name;
 	int ret;
@@ -593,19 +589,25 @@ static int dapm_create_or_share_mixmux_kcontrol(struct snd_soc_dapm_widget *w,
 		}
 
 		if (wname_in_long_name && kcname_in_long_name) {
+			name_len = strlen(w->name) - prefix_len + 1 +
+				   strlen(w->kcontrol_news[kci].name) + 1;
+
+			long_name = kmalloc(name_len, GFP_KERNEL);
+			if (long_name == NULL) {
+				kfree(wlist);
+				return -ENOMEM;
+			}
+
 			/*
 			 * The control will get a prefix from the control
 			 * creation process but we're also using the same
 			 * prefix for widgets so cut the prefix off the
 			 * front of the widget name.
 			 */
-			long_name = kasprintf(GFP_KERNEL, "%s %s",
+			snprintf(long_name, name_len, "%s %s",
 				 w->name + prefix_len,
 				 w->kcontrol_news[kci].name);
-			if (long_name == NULL) {
-				kfree(wlist);
-				return -ENOMEM;
-			}
+			long_name[name_len - 1] = '\0';
 
 			name = long_name;
 		} else if (wname_in_long_name) {
@@ -618,16 +620,17 @@ static int dapm_create_or_share_mixmux_kcontrol(struct snd_soc_dapm_widget *w,
 
 		kcontrol = snd_soc_cnew(&w->kcontrol_news[kci], wlist, name,
 					prefix);
-		kcontrol->private_free = dapm_kcontrol_free;
-		kfree(long_name);
 		ret = snd_ctl_add(card, kcontrol);
 		if (ret < 0) {
 			dev_err(dapm->dev,
 				"ASoC: failed to add widget %s dapm kcontrol %s: %d\n",
 				w->name, name, ret);
 			kfree(wlist);
+			kfree(long_name);
 			return ret;
 		}
+
+		path->long_name = long_name;
 	}
 
 	kcontrol->private_data = wlist;
@@ -1794,7 +1797,7 @@ static ssize_t dapm_widget_power_read_file(struct file *file,
 				w->active ? "active" : "inactive");
 
 	list_for_each_entry(p, &w->sources, list_sink) {
-		if (p->connected && !p->connected(w, p->source))
+		if (p->connected && !p->connected(w, p->sink))
 			continue;
 
 		if (p->connect)
@@ -2092,14 +2095,6 @@ static void snd_soc_dapm_sys_remove(struct device *dev)
 	device_remove_file(dev, &dev_attr_dapm_widget);
 }
 
-static void dapm_free_path(struct snd_soc_dapm_path *path)
-{
-	list_del(&path->list_sink);
-	list_del(&path->list_source);
-	list_del(&path->list);
-	kfree(path);
-}
-
 /* free all dapm widgets and resources */
 static void dapm_free_widgets(struct snd_soc_dapm_context *dapm)
 {
@@ -2115,12 +2110,20 @@ static void dapm_free_widgets(struct snd_soc_dapm_context *dapm)
 		 * While removing the path, remove reference to it from both
 		 * source and sink widgets so that path is removed only once.
 		 */
-		list_for_each_entry_safe(p, next_p, &w->sources, list_sink)
-			dapm_free_path(p);
-
-		list_for_each_entry_safe(p, next_p, &w->sinks, list_source)
-			dapm_free_path(p);
-
+		list_for_each_entry_safe(p, next_p, &w->sources, list_sink) {
+			list_del(&p->list_sink);
+			list_del(&p->list_source);
+			list_del(&p->list);
+			kfree(p->long_name);
+			kfree(p);
+		}
+		list_for_each_entry_safe(p, next_p, &w->sinks, list_source) {
+			list_del(&p->list_sink);
+			list_del(&p->list_source);
+			list_del(&p->list);
+			kfree(p->long_name);
+			kfree(p);
+		}
 		kfree(w->kcontrols);
 		kfree(w->name);
 		kfree(w);
@@ -2396,7 +2399,10 @@ static int snd_soc_dapm_del_route(struct snd_soc_dapm_context *dapm,
 		dapm_mark_dirty(path->source, "Route removed");
 		dapm_mark_dirty(path->sink, "Route removed");
 
-		dapm_free_path(path);
+		list_del(&path->list);
+		list_del(&path->list_sink);
+		list_del(&path->list_source);
+		kfree(path);
 	} else {
 		dev_warn(dapm->dev, "ASoC: Route %s->%s does not exist\n",
 			 source, sink);
@@ -3050,6 +3056,7 @@ snd_soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
 			 const struct snd_soc_dapm_widget *widget)
 {
 	struct snd_soc_dapm_widget *w;
+	size_t name_len;
 	int ret;
 
 	if ((w = dapm_cnew_widget(widget)) == NULL)
@@ -3090,16 +3097,19 @@ snd_soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
 		break;
 	}
 
+	name_len = strlen(widget->name) + 1;
 	if (dapm->codec && dapm->codec->name_prefix)
-		w->name = kasprintf(GFP_KERNEL, "%s %s",
-			dapm->codec->name_prefix, widget->name);
-	else
-		w->name = kasprintf(GFP_KERNEL, "%s", widget->name);
-
+		name_len += 1 + strlen(dapm->codec->name_prefix);
+	w->name = kmalloc(name_len, GFP_KERNEL);
 	if (w->name == NULL) {
 		kfree(w);
 		return NULL;
 	}
+	if (dapm->codec && dapm->codec->name_prefix)
+		snprintf((char *)w->name, name_len, "%s %s",
+			dapm->codec->name_prefix, widget->name);
+	else
+		snprintf((char *)w->name, name_len, "%s", widget->name);
 
 	switch (w->id) {
 	case snd_soc_dapm_switch:

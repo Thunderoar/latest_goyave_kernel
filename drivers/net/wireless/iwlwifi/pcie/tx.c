@@ -224,13 +224,13 @@ static void iwl_pcie_txq_update_byte_cnt_tbl(struct iwl_trans *trans,
 
 	switch (sec_ctl & TX_CMD_SEC_MSK) {
 	case TX_CMD_SEC_CCM:
-		len += IEEE80211_CCMP_MIC_LEN;
+		len += CCMP_MIC_LEN;
 		break;
 	case TX_CMD_SEC_TKIP:
-		len += IEEE80211_TKIP_ICV_LEN;
+		len += TKIP_ICV_LEN;
 		break;
 	case TX_CMD_SEC_WEP:
-		len += IEEE80211_WEP_IV_LEN + IEEE80211_WEP_ICV_LEN;
+		len += WEP_IV_LEN + WEP_ICV_LEN;
 		break;
 	}
 
@@ -720,12 +720,7 @@ void iwl_trans_pcie_tx_reset(struct iwl_trans *trans)
 	iwl_write_direct32(trans, FH_KW_MEM_ADDR_REG,
 			   trans_pcie->kw.dma >> 4);
 
-	/*
-	 * Send 0 as the scd_base_addr since the device may have be reset
-	 * while we were in WoWLAN in which case SCD_SRAM_BASE_ADDR will
-	 * contain garbage.
-	 */
-	iwl_pcie_tx_start(trans, 0);
+	iwl_pcie_tx_start(trans, trans_pcie->scd_base_addr);
 }
 
 /*
@@ -1062,10 +1057,6 @@ static inline void iwl_pcie_txq_set_inactive(struct iwl_trans *trans,
 		(1 << SCD_QUEUE_STTS_REG_POS_SCD_ACT_EN));
 }
 
-/* Receiver address (actually, Rx station's index into station table),
- * combined with Traffic ID (QOS priority), in format used by Tx Scheduler */
-#define BUILD_RAxTID(sta_id, tid)	(((sta_id) << 4) + (tid))
-
 void iwl_trans_pcie_txq_enable(struct iwl_trans *trans, int txq_id, int fifo,
 			       int sta_id, int tid, int frame_limit, u16 ssn)
 {
@@ -1090,7 +1081,6 @@ void iwl_trans_pcie_txq_enable(struct iwl_trans *trans, int txq_id, int fifo,
 
 		/* enable aggregations for the queue */
 		iwl_set_bits_prph(trans, SCD_AGGR_SEL, BIT(txq_id));
-		trans_pcie->txq[txq_id].ampdu = true;
 	} else {
 		/*
 		 * disable aggregations for the queue, this will also make the
@@ -1148,7 +1138,6 @@ void iwl_trans_pcie_txq_disable(struct iwl_trans *trans, int txq_id)
 			    ARRAY_SIZE(zero_val));
 
 	iwl_pcie_txq_unmap(trans, txq_id);
-	trans_pcie->txq[txq_id].ampdu = false;
 
 	IWL_DEBUG_TX_QUEUES(trans, "Deactivate queue %d\n", txq_id);
 }
@@ -1317,9 +1306,9 @@ static int iwl_pcie_enqueue_hcmd(struct iwl_trans *trans,
 
 	/* start the TFD with the scratchbuf */
 	scratch_size = min_t(int, copy_size, IWL_HCMD_SCRATCHBUF_SIZE);
-	memcpy(&txq->scratchbufs[idx], &out_cmd->hdr, scratch_size);
+	memcpy(&txq->scratchbufs[q->write_ptr], &out_cmd->hdr, scratch_size);
 	iwl_pcie_txq_build_tfd(trans, txq,
-			       iwl_pcie_get_scratchbuf_dma(txq, idx),
+			       iwl_pcie_get_scratchbuf_dma(txq, q->write_ptr),
 			       scratch_size, 1);
 
 	/* map first command fragment, if any remains */
@@ -1542,13 +1531,11 @@ static int iwl_pcie_send_hcmd_sync(struct iwl_trans *trans,
 	if (test_bit(STATUS_FW_ERROR, &trans_pcie->status)) {
 		IWL_ERR(trans, "FW error in SYNC CMD %s\n",
 			get_cmd_string(trans_pcie, cmd->id));
-		dump_stack();
 		ret = -EIO;
 		goto cancel;
 	}
 
-	if (!(cmd->flags & CMD_SEND_IN_RFKILL) &&
-	    test_bit(STATUS_RFKILL, &trans_pcie->status)) {
+	if (test_bit(STATUS_RFKILL, &trans_pcie->status)) {
 		IWL_DEBUG_RF_KILL(trans, "RFKILL in SYNC CMD... no rsp\n");
 		ret = -ERFKILL;
 		goto cancel;
@@ -1590,8 +1577,7 @@ int iwl_trans_pcie_send_hcmd(struct iwl_trans *trans, struct iwl_host_cmd *cmd)
 	if (test_bit(STATUS_FW_ERROR, &trans_pcie->status))
 		return -EIO;
 
-	if (!(cmd->flags & CMD_SEND_IN_RFKILL) &&
-	    test_bit(STATUS_RFKILL, &trans_pcie->status)) {
+	if (test_bit(STATUS_RFKILL, &trans_pcie->status)) {
 		IWL_DEBUG_RF_KILL(trans, "Dropping CMD 0x%x: RF KILL\n",
 				  cmd->id);
 		return -ERFKILL;
@@ -1619,7 +1605,7 @@ int iwl_trans_pcie_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	u8 wait_write_ptr = 0;
 	__le16 fc = hdr->frame_control;
 	u8 hdr_len = ieee80211_hdrlen(fc);
-	u16 wifi_seq;
+	u16 __maybe_unused wifi_seq;
 
 	txq = &trans_pcie->txq[txq_id];
 	q = &txq->q;
@@ -1636,11 +1622,13 @@ int iwl_trans_pcie_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	 * the BA.
 	 * Check here that the packets are in the right place on the ring.
 	 */
+#ifdef CONFIG_IWLWIFI_DEBUG
 	wifi_seq = IEEE80211_SEQ_TO_SN(le16_to_cpu(hdr->seq_ctrl));
-	WARN_ONCE(trans_pcie->txq[txq_id].ampdu &&
-		  (wifi_seq & 0xff) != q->write_ptr,
+	WARN_ONCE((iwl_read_prph(trans, SCD_AGGR_SEL) & BIT(txq_id)) &&
+		  ((wifi_seq & 0xff) != q->write_ptr),
 		  "Q: %d WiFi Seq %d tfdNum %d",
 		  txq_id, wifi_seq, q->write_ptr);
+#endif
 
 	/* Set up driver data for this TFD */
 	txq->entries[q->write_ptr].skb = skb;

@@ -55,8 +55,7 @@ static inline struct uwb_rc *__uwb_rc_get(struct uwb_rc *rc)
 
 static inline void __uwb_rc_put(struct uwb_rc *rc)
 {
-	if (rc)
-		uwb_dev_put(&rc->uwb_dev);
+	uwb_dev_put(&rc->uwb_dev);
 }
 
 extern int uwb_rc_reset(struct uwb_rc *rc);

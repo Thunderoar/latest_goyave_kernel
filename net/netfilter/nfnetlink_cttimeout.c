@@ -59,10 +59,8 @@ ctnl_timeout_parse_policy(struct ctnl_timeout *timeout,
 	if (likely(l4proto->ctnl_timeout.nlattr_to_obj)) {
 		struct nlattr *tb[l4proto->ctnl_timeout.nlattr_max+1];
 
-		ret = nla_parse_nested(tb, l4proto->ctnl_timeout.nlattr_max,
-				       attr, l4proto->ctnl_timeout.nla_policy);
-		if (ret < 0)
-			return ret;
+		nla_parse_nested(tb, l4proto->ctnl_timeout.nlattr_max,
+				 attr, l4proto->ctnl_timeout.nla_policy);
 
 		ret = l4proto->ctnl_timeout.nlattr_to_obj(tb, net,
 							  &timeout->data);
@@ -433,7 +431,6 @@ static void __exit cttimeout_exit(void)
 #ifdef CONFIG_NF_CONNTRACK_TIMEOUT
 	RCU_INIT_POINTER(nf_ct_timeout_find_get_hook, NULL);
 	RCU_INIT_POINTER(nf_ct_timeout_put_hook, NULL);
-	synchronize_rcu();
 #endif /* CONFIG_NF_CONNTRACK_TIMEOUT */
 }
 

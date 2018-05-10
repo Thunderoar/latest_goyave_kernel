@@ -1005,6 +1005,7 @@ release_regs:
 release_mem:
 	release_mem_region(res->start, size);
 dealloc_fb:
+	platform_set_drvdata(pdev, NULL);
 	framebuffer_release(fbinfo);
 	return ret;
 }
@@ -1050,6 +1051,7 @@ static int s3c2410fb_remove(struct platform_device *pdev)
 
 	release_mem_region(info->mem->start, resource_size(info->mem));
 
+	platform_set_drvdata(pdev, NULL);
 	framebuffer_release(fbinfo);
 
 	return 0;

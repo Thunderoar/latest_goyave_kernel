@@ -39,6 +39,7 @@
 
 #include <asm/dma.h>
 
+#include "bf5xx-ac97-pcm.h"
 #include "bf5xx-ac97.h"
 #include "bf5xx-sport.h"
 

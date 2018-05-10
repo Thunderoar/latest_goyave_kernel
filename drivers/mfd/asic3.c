@@ -958,8 +958,7 @@ static int __init asic3_probe(struct platform_device *pdev)
 	unsigned long clksel;
 	int ret = 0;
 
-	asic = devm_kzalloc(&pdev->dev,
-			    sizeof(struct asic3), GFP_KERNEL);
+	asic = kzalloc(sizeof(struct asic3), GFP_KERNEL);
 	if (asic == NULL) {
 		printk(KERN_ERR "kzalloc failed\n");
 		return -ENOMEM;
@@ -971,14 +970,16 @@ static int __init asic3_probe(struct platform_device *pdev)
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
+		ret = -ENOMEM;
 		dev_err(asic->dev, "no MEM resource\n");
-		return -ENOMEM;
+		goto out_free;
 	}
 
 	asic->mapping = ioremap(mem->start, resource_size(mem));
 	if (!asic->mapping) {
+		ret = -ENOMEM;
 		dev_err(asic->dev, "Couldn't ioremap\n");
-		return -ENOMEM;
+		goto out_free;
 	}
 
 	asic->irq_base = pdata->irq_base;
@@ -1032,6 +1033,9 @@ static int __init asic3_probe(struct platform_device *pdev)
  out_unmap:
 	iounmap(asic->mapping);
 
+ out_free:
+	kfree(asic);
+
 	return ret;
 }
 
@@ -1053,6 +1057,8 @@ static int asic3_remove(struct platform_device *pdev)
 	asic3_write_register(asic, ASIC3_OFFSET(CLOCK, SEL), 0);
 
 	iounmap(asic->mapping);
+
+	kfree(asic);
 
 	return 0;
 }

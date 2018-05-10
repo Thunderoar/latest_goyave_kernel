@@ -10,6 +10,7 @@
 
 #include <linux/init.h>
 #include <linux/clk-provider.h>
+#include <linux/clk/mvebu.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_data/usb-ehci-orion.h>
@@ -48,7 +49,7 @@ static void __init dove_legacy_clk_init(void)
 
 static void __init dove_of_clk_init(void)
 {
-	of_clk_init(NULL);
+	mvebu_clocks_init();
 	dove_legacy_clk_init();
 }
 

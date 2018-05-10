@@ -29,9 +29,9 @@
 #include <linux/kvm_para.h>
 #include <linux/perf_event.h>
 
-int watchdog_user_enabled = 1;
+int watchdog_enabled = 1;
 int __read_mostly watchdog_thresh = 10;
-static int __read_mostly watchdog_running;
+static int __read_mostly watchdog_disabled;
 static u64 __read_mostly sample_period;
 
 static DEFINE_PER_CPU(unsigned long, watchdog_touch_ts);
@@ -68,7 +68,7 @@ static int __init hardlockup_panic_setup(char *str)
 	else if (!strncmp(str, "nopanic", 7))
 		hardlockup_panic = 0;
 	else if (!strncmp(str, "0", 1))
-		watchdog_user_enabled = 0;
+		watchdog_enabled = 0;
 	return 1;
 }
 __setup("nmi_watchdog=", hardlockup_panic_setup);
@@ -87,7 +87,7 @@ __setup("softlockup_panic=", softlockup_panic_setup);
 
 static int __init nowatchdog_setup(char *str)
 {
-	watchdog_user_enabled = 0;
+	watchdog_enabled = 0;
 	return 1;
 }
 __setup("nowatchdog", nowatchdog_setup);
@@ -95,7 +95,7 @@ __setup("nowatchdog", nowatchdog_setup);
 /* deprecated */
 static int __init nosoftlockup_setup(char *str)
 {
-	watchdog_user_enabled = 0;
+	watchdog_enabled = 0;
 	return 1;
 }
 __setup("nosoftlockup", nosoftlockup_setup);
@@ -163,7 +163,7 @@ void touch_all_softlockup_watchdogs(void)
 #ifdef CONFIG_HARDLOCKUP_DETECTOR
 void touch_nmi_watchdog(void)
 {
-	if (watchdog_user_enabled) {
+	if (watchdog_enabled) {
 		unsigned cpu;
 
 		for_each_present_cpu(cpu) {
@@ -425,6 +425,11 @@ static void watchdog_enable(unsigned int cpu)
 	hrtimer_init(hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	hrtimer->function = watchdog_timer_fn;
 
+	if (!watchdog_enabled) {
+		kthread_park(current);
+		return;
+	}
+
 	/* Enable the perf event */
 	watchdog_nmi_enable(cpu);
 
@@ -445,11 +450,6 @@ static void watchdog_disable(unsigned int cpu)
 	hrtimer_cancel(hrtimer);
 	/* disable the perf event */
 	watchdog_nmi_disable(cpu);
-}
-
-static void watchdog_cleanup(unsigned int cpu, bool online)
-{
-	watchdog_disable(cpu);
 }
 
 static int watchdog_should_run(unsigned int cpu)
@@ -588,40 +588,28 @@ static void watchdog_nmi_disable(unsigned int cpu) { return; }
 #endif /* CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU */
 #endif /* CONFIG_HARDLOCKUP_DETECTOR_NMI */
 
-static struct smp_hotplug_thread watchdog_threads = {
-	.store			= &softlockup_watchdog,
-	.thread_should_run	= watchdog_should_run,
-	.thread_fn		= watchdog,
-	.thread_comm		= "watchdog/%u",
-	.setup			= watchdog_enable,
-	.cleanup		= watchdog_cleanup,
-	.park			= watchdog_disable,
-	.unpark			= watchdog_enable,
-};
-
-static int watchdog_enable_all_cpus(void)
-{
-	int err = 0;
-
-	if (!watchdog_running) {
-		err = smpboot_register_percpu_thread(&watchdog_threads);
-		if (err)
-			pr_err("Failed to create watchdog threads, disabled\n");
-		else
-			watchdog_running = 1;
-	}
-
-	return err;
-}
-
 /* prepare/enable/disable routines */
 /* sysctl functions */
 #ifdef CONFIG_SYSCTL
+static void watchdog_enable_all_cpus(void)
+{
+	unsigned int cpu;
+
+	if (watchdog_disabled) {
+		watchdog_disabled = 0;
+		for_each_online_cpu(cpu)
+			kthread_unpark(per_cpu(softlockup_watchdog, cpu));
+	}
+}
+
 static void watchdog_disable_all_cpus(void)
 {
-	if (watchdog_running) {
-		watchdog_running = 0;
-		smpboot_unregister_percpu_thread(&watchdog_threads);
+	unsigned int cpu;
+
+	if (!watchdog_disabled) {
+		watchdog_disabled = 1;
+		for_each_online_cpu(cpu)
+			kthread_park(per_cpu(softlockup_watchdog, cpu));
 	}
 }
 
@@ -632,48 +620,45 @@ static void watchdog_disable_all_cpus(void)
 int proc_dowatchdog(struct ctl_table *table, int write,
 		    void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-	int err, old_thresh, old_enabled;
+	int ret;
 
-	old_thresh = ACCESS_ONCE(watchdog_thresh);
-	old_enabled = ACCESS_ONCE(watchdog_user_enabled);
+	if (watchdog_disabled < 0)
+		return -ENODEV;
 
-	err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
-	if (err || !write)
-		return err;
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write)
+		return ret;
 
 	set_sample_period();
 	/*
 	 * Watchdog threads shouldn't be enabled if they are
-	 * disabled. The 'watchdog_running' variable check in
+	 * disabled. The 'watchdog_disabled' variable check in
 	 * watchdog_*_all_cpus() function takes care of this.
 	 */
-	if (watchdog_user_enabled && watchdog_thresh)
-		err = watchdog_enable_all_cpus();
+	if (watchdog_enabled && watchdog_thresh)
+		watchdog_enable_all_cpus();
 	else
 		watchdog_disable_all_cpus();
 
-	/* Restore old values on failure */
-	if (err) {
-		watchdog_thresh = old_thresh;
-		watchdog_user_enabled = old_enabled;
-	}
-
-	return err;
+	return ret;
 }
 #endif /* CONFIG_SYSCTL */
+
+static struct smp_hotplug_thread watchdog_threads = {
+	.store			= &softlockup_watchdog,
+	.thread_should_run	= watchdog_should_run,
+	.thread_fn		= watchdog,
+	.thread_comm		= "watchdog/%u",
+	.setup			= watchdog_enable,
+	.park			= watchdog_disable,
+	.unpark			= watchdog_enable,
+};
 
 void __init lockup_detector_init(void)
 {
 	set_sample_period();
-
-#ifdef CONFIG_NO_HZ_FULL
-	if (watchdog_user_enabled) {
-		watchdog_user_enabled = 0;
-		pr_warning("Disabled lockup detectors by default for full dynticks\n");
-		pr_warning("You can reactivate it with 'sysctl -w kernel.watchdog=1'\n");
+	if (smpboot_register_percpu_thread(&watchdog_threads)) {
+		pr_err("Failed to create watchdog threads, disabled\n");
+		watchdog_disabled = -ENODEV;
 	}
-#endif
-
-	if (watchdog_user_enabled)
-		watchdog_enable_all_cpus();
 }

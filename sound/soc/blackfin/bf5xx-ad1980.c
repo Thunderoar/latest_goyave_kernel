@@ -48,6 +48,7 @@
 
 #include "../codecs/ad1980.h"
 
+#include "bf5xx-ac97-pcm.h"
 #include "bf5xx-ac97.h"
 
 static struct snd_soc_card bf5xx_board;

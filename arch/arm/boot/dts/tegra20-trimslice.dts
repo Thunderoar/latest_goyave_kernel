@@ -1,6 +1,6 @@
 /dts-v1/;
 
-#include "tegra20.dtsi"
+/include/ "tegra20.dtsi"
 
 / {
 	model = "Compulab TrimSlice board";
@@ -18,8 +18,7 @@
 			pll-supply = <&hdmi_pll_reg>;
 
 			nvidia,ddc-i2c-bus = <&hdmi_ddc>;
-			nvidia,hpd-gpio = <&gpio TEGRA_GPIO(N, 7)
-				GPIO_ACTIVE_HIGH>;
+			nvidia,hpd-gpio = <&gpio 111 0>; /* PN7 */
 		};
 	};
 
@@ -312,32 +311,20 @@
 
 	usb@c5000000 {
 		status = "okay";
-		nvidia,vbus-gpio = <&gpio TEGRA_GPIO(V, 2) GPIO_ACTIVE_HIGH>;
-	};
-
-	usb-phy@c5000000 {
-		status = "okay";
-		vbus-supply = <&vbus_reg>;
+		nvidia,vbus-gpio = <&gpio 170 0>; /* gpio PV2 */
 	};
 
 	usb@c5004000 {
 		status = "okay";
-		nvidia,phy-reset-gpio = <&gpio TEGRA_GPIO(V, 0)
-			GPIO_ACTIVE_LOW>;
-	};
-
-	usb-phy@c5004000 {
-		status = "okay";
-		nvidia,phy-reset-gpio = <&gpio TEGRA_GPIO(V, 0)
-			GPIO_ACTIVE_LOW>;
+		nvidia,phy-reset-gpio = <&gpio 168 0>; /* gpio PV0 */
 	};
 
 	usb@c5008000 {
 		status = "okay";
 	};
 
-	usb-phy@c5008000 {
-		status = "okay";
+	usb-phy@c5004400 {
+		nvidia,phy-reset-gpio = <&gpio 168 0>; /* gpio PV0 */
 	};
 
 	sdhci@c8000000 {
@@ -347,8 +334,8 @@
 
 	sdhci@c8000600 {
 		status = "okay";
-		cd-gpios = <&gpio TEGRA_GPIO(P, 1) GPIO_ACTIVE_LOW>;
-		wp-gpios = <&gpio TEGRA_GPIO(P, 2) GPIO_ACTIVE_HIGH>;
+		cd-gpios = <&gpio 121 1>; /* gpio PP1 */
+		wp-gpios = <&gpio 122 0>; /* gpio PP2 */
 		bus-width = <4>;
 	};
 
@@ -370,7 +357,7 @@
 
 		power {
 			label = "Power";
-			gpios = <&gpio TEGRA_GPIO(X, 6) GPIO_ACTIVE_LOW>;
+			gpios = <&gpio 190 1>; /* gpio PX6, active low */
 			linux,code = <116>; /* KEY_POWER */
 			gpio-key,wakeup;
 		};
@@ -378,7 +365,7 @@
 
 	poweroff {
 		compatible = "gpio-poweroff";
-		gpios = <&gpio TEGRA_GPIO(X, 7) GPIO_ACTIVE_LOW>;
+		gpios = <&gpio 191 1>; /* gpio PX7, active low */
 	};
 
 	regulators {
@@ -403,15 +390,6 @@
 			regulator-max-microvolt = <1800000>;
 			regulator-always-on;
 		};
-
-		vbus_reg: regulator@2 {
-			compatible = "regulator-fixed";
-			reg = <2>;
-			regulator-name = "usb1_vbus";
-			regulator-min-microvolt = <5000000>;
-			regulator-max-microvolt = <5000000>;
-			gpio = <&gpio 170 0>; /* PV2 */
-		};
 	};
 
 	sound {
@@ -419,9 +397,7 @@
 		nvidia,i2s-controller = <&tegra_i2s1>;
 		nvidia,audio-codec = <&codec>;
 
-		clocks = <&tegra_car TEGRA20_CLK_PLL_A>,
-			 <&tegra_car TEGRA20_CLK_PLL_A_OUT0>,
-			 <&tegra_car TEGRA20_CLK_CDEV1>;
+		clocks = <&tegra_car 112>, <&tegra_car 113>, <&tegra_car 94>;
 		clock-names = "pll_a", "pll_a_out0", "mclk";
 	};
 };

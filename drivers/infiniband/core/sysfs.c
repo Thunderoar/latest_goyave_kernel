@@ -545,10 +545,8 @@ static int add_port(struct ib_device *device, int port_num,
 
 	p->gid_group.name  = "gids";
 	p->gid_group.attrs = alloc_group_attrs(show_port_gid, attr.gid_tbl_len);
-	if (!p->gid_group.attrs) {
-		ret = -ENOMEM;
+	if (!p->gid_group.attrs)
 		goto err_remove_pma;
-	}
 
 	ret = sysfs_create_group(&p->kobj, &p->gid_group);
 	if (ret)
@@ -557,10 +555,8 @@ static int add_port(struct ib_device *device, int port_num,
 	p->pkey_group.name  = "pkeys";
 	p->pkey_group.attrs = alloc_group_attrs(show_port_pkey,
 						attr.pkey_tbl_len);
-	if (!p->pkey_group.attrs) {
-		ret = -ENOMEM;
+	if (!p->pkey_group.attrs)
 		goto err_remove_gid;
-	}
 
 	ret = sysfs_create_group(&p->kobj, &p->pkey_group);
 	if (ret)

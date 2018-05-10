@@ -425,7 +425,7 @@ struct platform_device msm_device_mdp = {
 	.resource = resources_mdp,
 };
 
-static struct clk_pcom_desc msm_clocks_7x01a[] = {
+struct clk_lookup msm_clocks_7x01a[] = {
 	CLK_PCOM("adm_clk",	ADM_CLK,	NULL, 0),
 	CLK_PCOM("adsp_clk",	ADSP_CLK,	NULL, 0),
 	CLK_PCOM("ebi1_clk",	EBI1_CLK,	NULL, 0),
@@ -469,12 +469,4 @@ static struct clk_pcom_desc msm_clocks_7x01a[] = {
 	CLK_PCOM("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
 };
 
-static struct pcom_clk_pdata msm_clock_7x01a_pdata = {
-	.lookup = msm_clocks_7x01a,
-	.num_lookups = ARRAY_SIZE(msm_clocks_7x01a),
-};
-
-struct platform_device msm_clock_7x01a = {
-	.name = "msm-clock-pcom",
-	.dev.platform_data = &msm_clock_7x01a_pdata,
-};
+unsigned msm_num_clocks_7x01a = ARRAY_SIZE(msm_clocks_7x01a);

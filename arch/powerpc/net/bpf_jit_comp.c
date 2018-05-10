@@ -209,11 +209,10 @@ static int bpf_jit_build_body(struct sk_filter *fp, u32 *image,
 			}
 			PPC_DIVWU(r_A, r_A, r_X);
 			break;
-		case BPF_S_ALU_DIV_K: /* A /= K */
-			if (K == 1)
-				break;
+		case BPF_S_ALU_DIV_K: /* A = reciprocal_divide(A, K); */
 			PPC_LI32(r_scratch1, K);
-			PPC_DIVWU(r_A, r_A, r_scratch1);
+			/* Top 32 bits of 64bit result -> A */
+			PPC_MULHWU(r_A, r_A, r_scratch1);
 			break;
 		case BPF_S_ALU_AND_X:
 			ctx->seen |= SEEN_XREG;
@@ -651,7 +650,8 @@ void bpf_jit_compile(struct sk_filter *fp)
 
 	proglen = cgctx.idx * 4;
 	alloclen = proglen + FUNCTION_DESCR_SIZE;
-	image = module_alloc(alloclen);
+	image = module_alloc(max_t(unsigned int, alloclen,
+				   sizeof(struct work_struct)));
 	if (!image)
 		goto out;
 
@@ -688,8 +688,20 @@ out:
 	return;
 }
 
+static void jit_free_defer(struct work_struct *arg)
+{
+	module_free(NULL, arg);
+}
+
+/* run from softirq, we must use a work_struct to call
+ * module_free() from process context
+ */
 void bpf_jit_free(struct sk_filter *fp)
 {
-	if (fp->bpf_func != sk_run_filter)
-		module_free(NULL, fp->bpf_func);
+	if (fp->bpf_func != sk_run_filter) {
+		struct work_struct *work = (struct work_struct *)fp->bpf_func;
+
+		INIT_WORK(work, jit_free_defer);
+		schedule_work(work);
+	}
 }

@@ -9,8 +9,6 @@
 #include "debug.h"
 #include "request.h"
 
-#include <trace/events/bcache.h>
-
 struct moving_io {
 	struct keybuf_key	*w;
 	struct search		s;
@@ -51,8 +49,9 @@ static void write_moving_finish(struct closure *cl)
 	while (bv-- != bio->bi_io_vec)
 		__free_page(bv->bv_page);
 
-	if (io->s.op.insert_collision)
-		trace_bcache_gc_copy_collision(&io->w->key);
+	pr_debug("%s %s", io->s.op.insert_collision
+		 ? "collision moving" : "moved",
+		 pkey(&io->w->key));
 
 	bch_keybuf_del(&io->s.op.c->moving_gc_keys, io->w);
 
@@ -95,6 +94,8 @@ static void write_moving(struct closure *cl)
 	struct moving_io *io = container_of(s, struct moving_io, s);
 
 	if (!s->error) {
+		trace_bcache_write_moving(&io->bio.bio);
+
 		moving_init(io);
 
 		io->bio.bio.bi_sector	= KEY_START(&io->w->key);
@@ -121,6 +122,7 @@ static void read_moving_submit(struct closure *cl)
 	struct moving_io *io = container_of(s, struct moving_io, s);
 	struct bio *bio = &io->bio.bio;
 
+	trace_bcache_read_moving(bio);
 	bch_submit_bbio(bio, s->op.c, &io->w->key, 0);
 
 	continue_at(cl, write_moving, bch_gc_wq);
@@ -136,8 +138,7 @@ static void read_moving(struct closure *cl)
 	/* XXX: if we error, background writeback could stall indefinitely */
 
 	while (!test_bit(CACHE_SET_STOPPING, &c->flags)) {
-		w = bch_keybuf_next_rescan(c, &c->moving_gc_keys,
-					   &MAX_KEY, moving_pred);
+		w = bch_keybuf_next_rescan(c, &c->moving_gc_keys, &MAX_KEY);
 		if (!w)
 			break;
 
@@ -161,7 +162,7 @@ static void read_moving(struct closure *cl)
 		if (bch_bio_alloc_pages(bio, GFP_KERNEL))
 			goto err;
 
-		trace_bcache_gc_copy(&w->key);
+		pr_debug("%s", pkey(&w->key));
 
 		closure_call(&io->s.cl, read_moving_submit, NULL, &c->gc.cl);
 
@@ -249,5 +250,5 @@ void bch_moving_gc(struct closure *cl)
 
 void bch_moving_init_cache_set(struct cache_set *c)
 {
-	bch_keybuf_init(&c->moving_gc_keys);
+	bch_keybuf_init(&c->moving_gc_keys, moving_pred);
 }

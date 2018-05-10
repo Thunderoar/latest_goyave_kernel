@@ -72,7 +72,6 @@
  *	 A store crossing a page boundary might be executed only partially.
  *	 Undo the partial store in this case.
  */
-#include <linux/context_tracking.h>
 #include <linux/mm.h>
 #include <linux/signal.h>
 #include <linux/smp.h>
@@ -605,6 +604,7 @@ static void emulate_load_store_insn(struct pt_regs *regs,
 	case sdc1_op:
 		die_if_kernel("Unaligned FP access in kernel code", regs);
 		BUG_ON(!used_math());
+		BUG_ON(!is_fpu_owner());
 
 		lose_fpu(1);	/* Save FPU state for the emulator. */
 		res = fpu_emulator_cop1Handler(regs, &current->thread.fpu, 1,
@@ -1550,11 +1550,9 @@ sigill:
 }
 asmlinkage void do_ade(struct pt_regs *regs)
 {
-	enum ctx_state prev_state;
 	unsigned int __user *pc;
 	mm_segment_t seg;
 
-	prev_state = exception_enter();
 	perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS,
 			1, regs, regs->cp0_badvaddr);
 	/*
@@ -1630,7 +1628,6 @@ sigbus:
 	/*
 	 * XXX On return from the signal handler we should advance the epc
 	 */
-	exception_exit(prev_state);
 }
 
 #ifdef CONFIG_DEBUG_FS

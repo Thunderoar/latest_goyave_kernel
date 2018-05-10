@@ -44,13 +44,11 @@
 #define FIRMWARE_CYPRESS	"radeon/CYPRESS_uvd.bin"
 #define FIRMWARE_SUMO		"radeon/SUMO_uvd.bin"
 #define FIRMWARE_TAHITI		"radeon/TAHITI_uvd.bin"
-#define FIRMWARE_BONAIRE	"radeon/BONAIRE_uvd.bin"
 
 MODULE_FIRMWARE(FIRMWARE_RV710);
 MODULE_FIRMWARE(FIRMWARE_CYPRESS);
 MODULE_FIRMWARE(FIRMWARE_SUMO);
 MODULE_FIRMWARE(FIRMWARE_TAHITI);
-MODULE_FIRMWARE(FIRMWARE_BONAIRE);
 
 static void radeon_uvd_idle_work_handler(struct work_struct *work);
 
@@ -100,12 +98,6 @@ int radeon_uvd_init(struct radeon_device *rdev)
 	case CHIP_PITCAIRN:
 	case CHIP_ARUBA:
 		fw_name = FIRMWARE_TAHITI;
-		break;
-
-	case CHIP_BONAIRE:
-	case CHIP_KABINI:
-	case CHIP_KAVERI:
-		fw_name = FIRMWARE_BONAIRE;
 		break;
 
 	default:
@@ -249,8 +241,6 @@ void radeon_uvd_free_handles(struct radeon_device *rdev, struct drm_file *filp)
 		uint32_t handle = atomic_read(&rdev->uvd.handles[i]);
 		if (handle != 0 && rdev->uvd.filp[i] == filp) {
 			struct radeon_fence *fence;
-
-			radeon_uvd_note_usage(rdev);
 
 			r = radeon_uvd_get_destroy_msg(rdev,
 				R600_RING_TYPE_UVD_INDEX, handle, &fence);
@@ -457,10 +447,6 @@ static int radeon_uvd_cs_reloc(struct radeon_cs_parser *p,
 	cmd = radeon_get_ib_value(p, p->idx) >> 1;
 
 	if (cmd < 0x4) {
-		if (end <= start) {
-			DRM_ERROR("invalid reloc offset %X!\n", offset);
-			return -EINVAL;
-		}
 		if ((end - start) < buf_sizes[cmd]) {
 			DRM_ERROR("buffer to small (%d / %d)!\n",
 				  (unsigned)(end - start), buf_sizes[cmd]);
@@ -472,7 +458,7 @@ static int radeon_uvd_cs_reloc(struct radeon_cs_parser *p,
 		return -EINVAL;
 	}
 
-	if ((start >> 28) != ((end - 1) >> 28)) {
+	if ((start >> 28) != (end >> 28)) {
 		DRM_ERROR("reloc %LX-%LX crossing 256MB boundary!\n",
 			  start, end);
 		return -EINVAL;
@@ -580,7 +566,6 @@ static int radeon_uvd_send_msg(struct radeon_device *rdev,
 			       struct radeon_fence **fence)
 {
 	struct ttm_validate_buffer tv;
-	struct ww_acquire_ctx ticket;
 	struct list_head head;
 	struct radeon_ib ib;
 	uint64_t addr;
@@ -592,7 +577,7 @@ static int radeon_uvd_send_msg(struct radeon_device *rdev,
 	INIT_LIST_HEAD(&head);
 	list_add(&tv.head, &head);
 
-	r = ttm_eu_reserve_buffers(&ticket, &head);
+	r = ttm_eu_reserve_buffers(&head);
 	if (r)
 		return r;
 
@@ -600,12 +585,16 @@ static int radeon_uvd_send_msg(struct radeon_device *rdev,
 	radeon_uvd_force_into_uvd_segment(bo);
 
 	r = ttm_bo_validate(&bo->tbo, &bo->placement, true, false);
-	if (r) 
-		goto err;
+	if (r) {
+		ttm_eu_backoff_reservation(&head);
+		return r;
+	}
 
 	r = radeon_ib_get(rdev, ring, &ib, NULL, 16);
-	if (r)
-		goto err;
+	if (r) {
+		ttm_eu_backoff_reservation(&head);
+		return r;
+	}
 
 	addr = radeon_bo_gpu_offset(bo);
 	ib.ptr[0] = PACKET0(UVD_GPCOM_VCPU_DATA0, 0);
@@ -619,9 +608,11 @@ static int radeon_uvd_send_msg(struct radeon_device *rdev,
 	ib.length_dw = 16;
 
 	r = radeon_ib_schedule(rdev, &ib, NULL);
-	if (r)
-		goto err;
-	ttm_eu_fence_buffer_objects(&ticket, &head, ib.fence);
+	if (r) {
+		ttm_eu_backoff_reservation(&head);
+		return r;
+	}
+	ttm_eu_fence_buffer_objects(&head, ib.fence);
 
 	if (fence)
 		*fence = radeon_fence_ref(ib.fence);
@@ -629,10 +620,6 @@ static int radeon_uvd_send_msg(struct radeon_device *rdev,
 	radeon_ib_free(rdev, &ib);
 	radeon_bo_unref(&bo);
 	return 0;
-
-err:
-	ttm_eu_backoff_reservation(&ticket, &head);
-	return r;
 }
 
 /* multiple fence commands without any stream commands in between can
@@ -728,19 +715,11 @@ static void radeon_uvd_idle_work_handler(struct work_struct *work)
 	struct radeon_device *rdev =
 		container_of(work, struct radeon_device, uvd.idle_work.work);
 
-	if (radeon_fence_count_emitted(rdev, R600_RING_TYPE_UVD_INDEX) == 0) {
-		if ((rdev->pm.pm_method == PM_METHOD_DPM) && rdev->pm.dpm_enabled) {
-			mutex_lock(&rdev->pm.mutex);
-			rdev->pm.dpm.uvd_active = false;
-			mutex_unlock(&rdev->pm.mutex);
-			radeon_pm_compute_clocks(rdev);
-		} else {
-			radeon_set_uvd_clocks(rdev, 0, 0);
-		}
-	} else {
+	if (radeon_fence_count_emitted(rdev, R600_RING_TYPE_UVD_INDEX) == 0)
+		radeon_set_uvd_clocks(rdev, 0, 0);
+	else
 		schedule_delayed_work(&rdev->uvd.idle_work,
 				      msecs_to_jiffies(UVD_IDLE_TIMEOUT_MS));
-	}
 }
 
 void radeon_uvd_note_usage(struct radeon_device *rdev)
@@ -748,14 +727,8 @@ void radeon_uvd_note_usage(struct radeon_device *rdev)
 	bool set_clocks = !cancel_delayed_work_sync(&rdev->uvd.idle_work);
 	set_clocks &= schedule_delayed_work(&rdev->uvd.idle_work,
 					    msecs_to_jiffies(UVD_IDLE_TIMEOUT_MS));
-	if (set_clocks) {
-		if ((rdev->pm.pm_method == PM_METHOD_DPM) && rdev->pm.dpm_enabled) {
-			/* XXX pick SD/HD/MVC */
-			radeon_dpm_enable_power_state(rdev, POWER_STATE_TYPE_INTERNAL_UVD);
-		} else {
-			radeon_set_uvd_clocks(rdev, 53300, 40000);
-		}
-	}
+	if (set_clocks)
+		radeon_set_uvd_clocks(rdev, 53300, 40000);
 }
 
 static unsigned radeon_uvd_calc_upll_post_div(unsigned vco_freq,

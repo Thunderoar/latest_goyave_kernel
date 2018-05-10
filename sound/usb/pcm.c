@@ -202,11 +202,13 @@ int snd_usb_init_pitch(struct snd_usb_audio *chip, int iface,
 		       struct usb_host_interface *alts,
 		       struct audioformat *fmt)
 {
+	struct usb_interface_descriptor *altsd = get_iface_desc(alts);
+
 	/* if endpoint doesn't have pitch control, bail out */
 	if (!(fmt->attributes & UAC_EP_CS_ATTR_PITCH_CONTROL))
 		return 0;
 
-	switch (fmt->protocol) {
+	switch (altsd->bInterfaceProtocol) {
 	case UAC_VERSION_1:
 	default:
 		return init_pitch_v1(chip, iface, alts, fmt);
@@ -295,35 +297,6 @@ static int deactivate_endpoints(struct snd_usb_substream *subs)
 	if (retb < 0)
 		return retb;
 
-	return 0;
-}
-
-static int search_roland_implicit_fb(struct usb_device *dev, int ifnum,
-				     unsigned int altsetting,
-				     struct usb_host_interface **alts,
-				     unsigned int *ep)
-{
-	struct usb_interface *iface;
-	struct usb_interface_descriptor *altsd;
-	struct usb_endpoint_descriptor *epd;
-
-	iface = usb_ifnum_to_if(dev, ifnum);
-	if (!iface || iface->num_altsetting < altsetting + 1)
-		return -ENOENT;
-	*alts = &iface->altsetting[altsetting];
-	altsd = get_iface_desc(*alts);
-	if (altsd->bAlternateSetting != altsetting ||
-	    altsd->bInterfaceClass != USB_CLASS_VENDOR_SPEC ||
-	    (altsd->bInterfaceSubClass != 2 &&
-	     altsd->bInterfaceProtocol != 2   ) ||
-	    altsd->bNumEndpoints < 1)
-		return -ENOENT;
-	epd = get_endpoint(*alts, 0);
-	if (!usb_endpoint_is_isoc_in(epd) ||
-	    (epd->bmAttributes & USB_ENDPOINT_USAGE_MASK) !=
-					USB_ENDPOINT_USAGE_IMPLICIT_FB)
-		return -ENOENT;
-	*ep = epd->bEndpointAddress;
 	return 0;
 }
 
@@ -421,18 +394,6 @@ static int set_format(struct snd_usb_substream *subs, struct audioformat *fmt)
 			alts = &iface->altsetting[1];
 			goto add_sync_ep;
 		}
-	}
-	if (is_playback &&
-	    attr == USB_ENDPOINT_SYNC_ASYNC &&
-	    altsd->bInterfaceClass == USB_CLASS_VENDOR_SPEC &&
-	    altsd->bInterfaceProtocol == 2 &&
-	    altsd->bNumEndpoints == 1 &&
-	    USB_ID_VENDOR(subs->stream->chip->usb_id) == 0x0582 /* Roland */ &&
-	    search_roland_implicit_fb(dev, altsd->bInterfaceNumber + 1,
-				      altsd->bAlternateSetting,
-				      &alts, &ep) >= 0) {
-		implicit_fb = 1;
-		goto add_sync_ep;
 	}
 
 	if (((is_playback && attr == USB_ENDPOINT_SYNC_ASYNC) ||
@@ -1459,8 +1420,7 @@ static void retire_playback_urb(struct snd_usb_substream *subs,
 	 * on two reads of a counter updated every ms.
 	 */
 	if (abs(est_delay - subs->last_delay) * 1000 > runtime->rate * 2)
-		dev_dbg_ratelimited(&subs->dev->dev,
-			"delay: estimated %d, actual %d\n",
+		snd_printk(KERN_DEBUG "delay: estimated %d, actual %d\n",
 			est_delay, subs->last_delay);
 
 	if (!subs->running) {

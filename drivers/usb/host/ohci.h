@@ -405,8 +405,6 @@ struct ohci_hcd {
 #define	OHCI_QUIRK_HUB_POWER	0x100			/* distrust firmware power/oc setup */
 #define	OHCI_QUIRK_AMD_PLL	0x200			/* AMD PLL quirk*/
 #define	OHCI_QUIRK_AMD_PREFETCH	0x400			/* pre-fetch for ISO transfer */
-#define	OHCI_QUIRK_GLOBAL_SUSPEND	0x800		/* must suspend ports */
-
 	// there are also chip quirks/bugs in init logic
 
 	struct work_struct	nec_work;	/* Worker for NEC quirk */
@@ -423,9 +421,6 @@ struct ohci_hcd {
 	struct dentry		*debug_periodic;
 	struct dentry		*debug_registers;
 #endif
-	/* platform-specific data -- must come last */
-	unsigned long           priv[0] __aligned(sizeof(s64));
-
 };
 
 #ifdef CONFIG_PCI
@@ -723,20 +718,3 @@ static inline u32 roothub_status (struct ohci_hcd *hc)
 	{ return ohci_readl (hc, &hc->regs->roothub.status); }
 static inline u32 roothub_portstatus (struct ohci_hcd *hc, int i)
 	{ return read_roothub (hc, portstatus [i], 0xffe0fce0); }
-
-/* Declarations of things exported for use by ohci platform drivers */
-
-struct ohci_driver_overrides {
-	const char	*product_desc;
-	size_t		extra_priv_size;
-	int		(*reset)(struct usb_hcd *hcd);
-};
-
-extern void	ohci_init_driver(struct hc_driver *drv,
-				const struct ohci_driver_overrides *over);
-extern int	ohci_restart(struct ohci_hcd *ohci);
-extern int	ohci_setup(struct usb_hcd *hcd);
-#ifdef CONFIG_PM
-extern int	ohci_suspend(struct usb_hcd *hcd, bool do_wakeup);
-extern int	ohci_resume(struct usb_hcd *hcd, bool hibernated);
-#endif

@@ -1175,7 +1175,6 @@
 #define TG3_CPMU_EEE_DBTMR1		0x000036b4
 #define  TG3_CPMU_DBTMR1_PCIEXIT_2047US	 0x07ff0000
 #define  TG3_CPMU_DBTMR1_LNKIDLE_2047US	 0x000007ff
-#define  TG3_CPMU_DBTMR1_LNKIDLE_MAX	 0x0000ffff
 #define TG3_CPMU_EEE_DBTMR2		0x000036b8
 #define  TG3_CPMU_DBTMR2_APE_TX_2047US	 0x07ff0000
 #define  TG3_CPMU_DBTMR2_TXIDXEQ_2047US	 0x000007ff
@@ -2588,11 +2587,7 @@ struct tg3_rx_buffer_desc {
 #define RXD_ERR_TOO_SMALL		0x00400000
 #define RXD_ERR_NO_RESOURCES		0x00800000
 #define RXD_ERR_HUGE_FRAME		0x01000000
-
-#define RXD_ERR_MASK	(RXD_ERR_BAD_CRC | RXD_ERR_COLLISION |		\
-			 RXD_ERR_LINK_LOST | RXD_ERR_PHY_DECODE |	\
-			 RXD_ERR_MAC_ABRT | RXD_ERR_TOO_SMALL |		\
-			 RXD_ERR_NO_RESOURCES | RXD_ERR_HUGE_FRAME)
+#define RXD_ERR_MASK			0xffff0000
 
 	u32				reserved;
 	u32				opaque;
@@ -3377,7 +3372,6 @@ struct tg3 {
 	unsigned int			irq_cnt;
 
 	struct ethtool_coalesce		coal;
-	struct ethtool_eee		eee;
 
 	/* firmware info */
 	const char			*fw_needed;

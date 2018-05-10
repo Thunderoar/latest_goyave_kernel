@@ -285,7 +285,6 @@ acpi_ds_method_data_get_node(u8 type,
 		break;
 
 	default:
-
 		ACPI_ERROR((AE_INFO, "Type %u is invalid", type));
 		return_ACPI_STATUS(AE_TYPE);
 	}
@@ -429,6 +428,7 @@ acpi_ds_method_data_get_value(u8 type,
 				return_ACPI_STATUS(AE_AML_UNINITIALIZED_ARG);
 
 			case ACPI_REFCLASS_LOCAL:
+
 				/*
 				 * No error message for this case, will be trapped again later to
 				 * detect and ignore cases of Store(local_x,local_x)

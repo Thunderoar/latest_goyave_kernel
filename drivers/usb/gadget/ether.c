@@ -14,7 +14,6 @@
 /* #define VERBOSE_DEBUG */
 
 #include <linux/kernel.h>
-#include <linux/netdevice.h>
 
 #if defined USB_ETH_RNDIS
 #  undef USB_ETH_RNDIS
@@ -101,8 +100,8 @@ static inline bool has_rndis(void)
  * the runtime footprint, and giving us at least some parts of what
  * a "gcc --combine ... part1.c part2.c part3.c ... " build would.
  */
-#include "u_ecm.h"
-#include "u_gether.h"
+#include "f_ecm.c"
+#include "f_subset.c"
 #ifdef	USB_ETH_RNDIS
 #include "f_rndis.c"
 #include "rndis.c"
@@ -209,16 +208,6 @@ static struct usb_gadget_strings *dev_strings[] = {
 
 static u8 hostaddr[ETH_ALEN];
 static struct eth_dev *the_dev;
-
-static struct usb_function_instance *fi_ecm;
-static struct usb_function *f_ecm;
-
-static struct usb_function_instance *fi_eem;
-static struct usb_function *f_eem;
-
-static struct usb_function_instance *fi_geth;
-static struct usb_function *f_geth;
-
 /*-------------------------------------------------------------------------*/
 
 /*
@@ -260,8 +249,6 @@ MODULE_PARM_DESC(use_eem, "use CDC EEM mode");
  */
 static int __init eth_do_config(struct usb_configuration *c)
 {
-	int status = 0;
-
 	/* FIXME alloc iConfiguration string, set it in c->strings */
 
 	if (gadget_is_otg(c->cdev->gadget)) {
@@ -289,10 +276,6 @@ static struct usb_configuration eth_config_driver = {
 static int __init eth_bind(struct usb_composite_dev *cdev)
 {
 	struct usb_gadget	*gadget = cdev->gadget;
-	struct f_eem_opts	*eem_opts = NULL;
-	struct f_ecm_opts	*ecm_opts = NULL;
-	struct f_gether_opts	*geth_opts = NULL;
-	struct net_device	*net;
 	int			status;
 
 	/* set up network link layer */
@@ -303,44 +286,14 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 	/* set up main config label and device descriptor */
 	if (use_eem) {
 		/* EEM */
-		fi_eem = usb_get_function_instance("eem");
-		if (IS_ERR(fi_eem))
-			return PTR_ERR(fi_eem);
-
-		eem_opts = container_of(fi_eem, struct f_eem_opts, func_inst);
-
-		net = eem_opts->net;
-		the_dev = netdev_priv(net);
-
 		eth_config_driver.label = "CDC Ethernet (EEM)";
 		device_desc.idVendor = cpu_to_le16(EEM_VENDOR_NUM);
 		device_desc.idProduct = cpu_to_le16(EEM_PRODUCT_NUM);
-	} else if (can_support_ecm(gadget)) {
+	} else if (can_support_ecm(cdev->gadget)) {
 		/* ECM */
-
-		fi_ecm = usb_get_function_instance("ecm");
-		if (IS_ERR(fi_ecm))
-			return PTR_ERR(fi_ecm);
-
-		ecm_opts = container_of(fi_ecm, struct f_ecm_opts, func_inst);
-
-		net = ecm_opts->net;
-		the_dev = netdev_priv(net);
-
 		eth_config_driver.label = "CDC Ethernet (ECM)";
 	} else {
 		/* CDC Subset */
-
-		fi_geth = usb_get_function_instance("geth");
-		if (IS_ERR(fi_geth))
-			return PTR_ERR(fi_geth);
-
-		geth_opts = container_of(fi_geth, struct f_gether_opts,
-					 func_inst);
-
-		net = geth_opts->net;
-		the_dev = netdev_priv(net);
-
 		eth_config_driver.label = "CDC Subset/SAFE";
 
 		device_desc.idVendor = cpu_to_le16(SIMPLE_VENDOR_NUM);
@@ -349,27 +302,8 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 			device_desc.bDeviceClass = USB_CLASS_VENDOR_SPEC;
 	}
 
-	gether_set_qmult(net, qmult);
-	if (!gether_set_host_addr(net, host_addr))
-		pr_info("using host ethernet address: %s", host_addr);
-	if (!gether_set_dev_addr(net, dev_addr))
-		pr_info("using self ethernet address: %s", dev_addr);
-
 	if (has_rndis()) {
 		/* RNDIS plus ECM-or-Subset */
-		gether_set_gadget(net, cdev->gadget);
-		status = gether_register_netdev(net);
-		if (status)
-			goto fail;
-		gether_get_host_addr_u8(net, host_mac);
-
-		if (use_eem)
-			eem_opts->bound = true;
-		else if (can_support_ecm(gadget))
-			ecm_opts->bound = true;
-		else
-			geth_opts->bound = true;
-
 		device_desc.idVendor = cpu_to_le16(RNDIS_VENDOR_NUM);
 		device_desc.idProduct = cpu_to_le16(RNDIS_PRODUCT_NUM);
 		device_desc.bNumConfigurations = 2;
@@ -404,23 +338,13 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 	return 0;
 
 fail:
-	if (use_eem)
-		usb_put_function_instance(fi_eem);
-	else if (can_support_ecm(gadget))
-		usb_put_function_instance(fi_ecm);
-	else
-		usb_put_function_instance(fi_geth);
+	gether_cleanup(the_dev);
 	return status;
 }
 
 static int __exit eth_unbind(struct usb_composite_dev *cdev)
 {
-	if (use_eem)
-		usb_put_function_instance(fi_eem);
-	else if (can_support_ecm(cdev->gadget))
-		usb_put_function_instance(fi_ecm);
-	else
-		usb_put_function_instance(fi_geth);
+	gether_cleanup(the_dev);
 	return 0;
 }
 

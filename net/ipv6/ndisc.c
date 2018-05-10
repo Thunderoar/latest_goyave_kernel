@@ -695,7 +695,7 @@ static void ndisc_recv_ns(struct sk_buff *skb)
 	const struct in6_addr *saddr = &ipv6_hdr(skb)->saddr;
 	const struct in6_addr *daddr = &ipv6_hdr(skb)->daddr;
 	u8 *lladdr = NULL;
-	u32 ndoptlen = skb_tail_pointer(skb) - (skb_transport_header(skb) +
+	u32 ndoptlen = skb->tail - (skb->transport_header +
 				    offsetof(struct nd_msg, opt));
 	struct ndisc_options ndopts;
 	struct net_device *dev = skb->dev;
@@ -855,7 +855,7 @@ static void ndisc_recv_na(struct sk_buff *skb)
 	const struct in6_addr *saddr = &ipv6_hdr(skb)->saddr;
 	const struct in6_addr *daddr = &ipv6_hdr(skb)->daddr;
 	u8 *lladdr = NULL;
-	u32 ndoptlen = skb_tail_pointer(skb) - (skb_transport_header(skb) +
+	u32 ndoptlen = skb->tail - (skb->transport_header +
 				    offsetof(struct nd_msg, opt));
 	struct ndisc_options ndopts;
 	struct net_device *dev = skb->dev;
@@ -1071,8 +1071,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 
 	__u8 * opt = (__u8 *)(ra_msg + 1);
 
-	optlen = (skb_tail_pointer(skb) - skb_transport_header(skb)) -
-		sizeof(struct ra_msg);
+	optlen = (skb->tail - skb->transport_header) - sizeof(struct ra_msg);
 
 	if (!(ipv6_addr_type(&ipv6_hdr(skb)->saddr) & IPV6_ADDR_LINKLOCAL)) {
 		ND_PRINTK(2, warn, "RA: source address is not link-local\n");
@@ -1194,14 +1193,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 	if (rt)
 		rt6_set_expires(rt, jiffies + (HZ * lifetime));
 	if (ra_msg->icmph.icmp6_hop_limit) {
-		/* Only set hop_limit on the interface if it is higher than
-		 * the current hop_limit.
-		 */
-		if (in6_dev->cnf.hop_limit < ra_msg->icmph.icmp6_hop_limit) {
-			in6_dev->cnf.hop_limit = ra_msg->icmph.icmp6_hop_limit;
-		} else {
-			ND_PRINTK(2, warn, "RA: Got route advertisement with lower hop_limit than current\n");
-		}
+		in6_dev->cnf.hop_limit = ra_msg->icmph.icmp6_hop_limit;
 		if (rt)
 			dst_metric_set(&rt->dst, RTAX_HOPLIMIT,
 				       ra_msg->icmph.icmp6_hop_limit);
@@ -1356,7 +1348,7 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 	u8 *hdr;
 	struct ndisc_options ndopts;
 	struct rd_msg *msg = (struct rd_msg *)skb_transport_header(skb);
-	u32 ndoptlen = skb_tail_pointer(skb) - (skb_transport_header(skb) +
+	u32 ndoptlen = skb->tail - (skb->transport_header +
 				    offsetof(struct rd_msg, opt));
 
 #ifdef CONFIG_IPV6_NDISC_NODETYPE
@@ -1585,7 +1577,7 @@ static int ndisc_netdev_event(struct notifier_block *this, unsigned long event, 
 	switch (event) {
 	case NETDEV_CHANGEADDR:
 		neigh_changeaddr(&nd_tbl, dev);
-		fib6_run_gc(0, net, false);
+		fib6_run_gc(~0UL, net);
 		idev = in6_dev_get(dev);
 		if (!idev)
 			break;
@@ -1595,7 +1587,7 @@ static int ndisc_netdev_event(struct notifier_block *this, unsigned long event, 
 		break;
 	case NETDEV_DOWN:
 		neigh_ifdown(&nd_tbl, dev);
-		fib6_run_gc(0, net, false);
+		fib6_run_gc(~0UL, net);
 		break;
 	case NETDEV_NOTIFY_PEERS:
 		ndisc_send_unsol_na(dev);
@@ -1717,28 +1709,24 @@ int __init ndisc_init(void)
 	if (err)
 		goto out_unregister_pernet;
 #endif
+	err = register_netdevice_notifier(&ndisc_netdev_notifier);
+	if (err)
+		goto out_unregister_sysctl;
 out:
 	return err;
 
+out_unregister_sysctl:
 #ifdef CONFIG_SYSCTL
+	neigh_sysctl_unregister(&nd_tbl.parms);
 out_unregister_pernet:
+#endif
 	unregister_pernet_subsys(&ndisc_net_ops);
 	goto out;
-#endif
-}
-
-int __init ndisc_late_init(void)
-{
-	return register_netdevice_notifier(&ndisc_netdev_notifier);
-}
-
-void ndisc_late_cleanup(void)
-{
-	unregister_netdevice_notifier(&ndisc_netdev_notifier);
 }
 
 void ndisc_cleanup(void)
 {
+	unregister_netdevice_notifier(&ndisc_netdev_notifier);
 #ifdef CONFIG_SYSCTL
 	neigh_sysctl_unregister(&nd_tbl.parms);
 #endif

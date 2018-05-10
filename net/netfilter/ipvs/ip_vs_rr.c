@@ -55,8 +55,7 @@ static int ip_vs_rr_del_dest(struct ip_vs_service *svc, struct ip_vs_dest *dest)
  * Round-Robin Scheduling
  */
 static struct ip_vs_dest *
-ip_vs_rr_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,
-		  struct ip_vs_iphdr *iph)
+ip_vs_rr_schedule(struct ip_vs_service *svc, const struct sk_buff *skb)
 {
 	struct list_head *p;
 	struct ip_vs_dest *dest, *last;

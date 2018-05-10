@@ -321,7 +321,7 @@ get_matching_model_microcode(int cpu, unsigned long start,
 	unsigned int mc_saved_count = mc_saved_data->mc_saved_count;
 	int i;
 
-	while (leftover && mc_saved_count < ARRAY_SIZE(mc_saved_tmp)) {
+	while (leftover) {
 		mc_header = (struct microcode_header_intel *)ucode_ptr;
 
 		mc_size = get_totalsize(mc_header);
@@ -529,7 +529,7 @@ int save_mc_for_early(u8 *mc)
 	 */
 	ret = save_microcode(&mc_saved_data, mc_saved_tmp, mc_saved_count);
 	if (ret) {
-		pr_err("Cannot save microcode patch.\n");
+		pr_err("Can not save microcode patch.\n");
 		goto out;
 	}
 
@@ -699,7 +699,7 @@ static int __cpuinit apply_microcode_early(struct mc_saved_data *mc_saved_data,
  * This function converts microcode patch offsets previously stored in
  * mc_saved_in_initrd to pointers and stores the pointers in mc_saved_data.
  */
-int __init save_microcode_in_initrd_intel(void)
+int __init save_microcode_in_initrd(void)
 {
 	unsigned int count = mc_saved_data.mc_saved_count;
 	struct microcode_intel *mc_saved[MAX_UCODE_COUNT];
@@ -711,7 +711,7 @@ int __init save_microcode_in_initrd_intel(void)
 	microcode_pointer(mc_saved, mc_saved_in_initrd, initrd_start, count);
 	ret = save_microcode(&mc_saved_data, mc_saved, count);
 	if (ret)
-		pr_err("Cannot save microcode patches from initrd.\n");
+		pr_err("Can not save microcod patches from initrd");
 
 	show_saved_mc();
 

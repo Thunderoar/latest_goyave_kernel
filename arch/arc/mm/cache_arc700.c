@@ -73,33 +73,6 @@
 #include <asm/cachectl.h>
 #include <asm/setup.h>
 
-/* Instruction cache related Auxiliary registers */
-#define ARC_REG_IC_BCR		0x77	/* Build Config reg */
-#define ARC_REG_IC_IVIC		0x10
-#define ARC_REG_IC_CTRL		0x11
-#define ARC_REG_IC_IVIL		0x19
-#if (CONFIG_ARC_MMU_VER > 2)
-#define ARC_REG_IC_PTAG		0x1E
-#endif
-
-/* Bit val in IC_CTRL */
-#define IC_CTRL_CACHE_DISABLE   0x1
-
-/* Data cache related Auxiliary registers */
-#define ARC_REG_DC_BCR		0x72	/* Build Config reg */
-#define ARC_REG_DC_IVDC		0x47
-#define ARC_REG_DC_CTRL		0x48
-#define ARC_REG_DC_IVDL		0x4A
-#define ARC_REG_DC_FLSH		0x4B
-#define ARC_REG_DC_FLDL		0x4C
-#if (CONFIG_ARC_MMU_VER > 2)
-#define ARC_REG_DC_PTAG		0x5C
-#endif
-
-/* Bit val in DC_CTRL */
-#define DC_CTRL_INV_MODE_FLUSH  0x40
-#define DC_CTRL_FLUSH_STATUS    0x100
-
 char *arc_cache_mumbojumbo(int cpu_id, char *buf, int len)
 {
 	int n = 0;
@@ -116,10 +89,8 @@ char *arc_cache_mumbojumbo(int cpu_id, char *buf, int len)
 			enb ?  "" : "DISABLED (kernel-build)");		\
 }
 
-	PR_CACHE(&cpuinfo_arc700[c].icache, IS_ENABLED(CONFIG_ARC_HAS_ICACHE),
-			"I-Cache");
-	PR_CACHE(&cpuinfo_arc700[c].dcache, IS_ENABLED(CONFIG_ARC_HAS_DCACHE),
-			"D-Cache");
+	PR_CACHE(&cpuinfo_arc700[c].icache, __CONFIG_ARC_HAS_ICACHE, "I-Cache");
+	PR_CACHE(&cpuinfo_arc700[c].dcache, __CONFIG_ARC_HAS_DCACHE, "D-Cache");
 
 	return buf;
 }
@@ -129,23 +100,17 @@ char *arc_cache_mumbojumbo(int cpu_id, char *buf, int len)
  * the cpuinfo structure for later use.
  * No Validation done here, simply read/convert the BCRs
  */
-void read_decode_cache_bcr(void)
+void __cpuinit read_decode_cache_bcr(void)
 {
+	struct bcr_cache ibcr, dbcr;
 	struct cpuinfo_arc_cache *p_ic, *p_dc;
 	unsigned int cpu = smp_processor_id();
-	struct bcr_cache {
-#ifdef CONFIG_CPU_BIG_ENDIAN
-		unsigned int pad:12, line_len:4, sz:4, config:4, ver:8;
-#else
-		unsigned int ver:8, config:4, sz:4, line_len:4, pad:12;
-#endif
-	} ibcr, dbcr;
 
 	p_ic = &cpuinfo_arc700[cpu].icache;
 	READ_BCR(ARC_REG_IC_BCR, ibcr);
 
-	BUG_ON(ibcr.config != 3);
-	p_ic->assoc = 2;		/* Fixed to 2w set assoc */
+	if (ibcr.config == 0x3)
+		p_ic->assoc = 2;
 	p_ic->line_len = 8 << ibcr.line_len;
 	p_ic->sz = 0x200 << ibcr.sz;
 	p_ic->ver = ibcr.ver;
@@ -153,8 +118,8 @@ void read_decode_cache_bcr(void)
 	p_dc = &cpuinfo_arc700[cpu].dcache;
 	READ_BCR(ARC_REG_DC_BCR, dbcr);
 
-	BUG_ON(dbcr.config != 2);
-	p_dc->assoc = 4;		/* Fixed to 4w set assoc */
+	if (dbcr.config == 0x2)
+		p_dc->assoc = 4;
 	p_dc->line_len = 16 << dbcr.line_len;
 	p_dc->sz = 0x200 << dbcr.sz;
 	p_dc->ver = dbcr.ver;
@@ -167,12 +132,14 @@ void read_decode_cache_bcr(void)
  * 3. Enable the Caches, setup default flush mode for D-Cache
  * 3. Calculate the SHMLBA used by user space
  */
-void arc_cache_init(void)
+void __cpuinit arc_cache_init(void)
 {
+	unsigned int temp;
 	unsigned int cpu = smp_processor_id();
 	struct cpuinfo_arc_cache *ic = &cpuinfo_arc700[cpu].icache;
 	struct cpuinfo_arc_cache *dc = &cpuinfo_arc700[cpu].dcache;
-	unsigned int dcache_does_alias, temp;
+	int way_pg_ratio = way_pg_ratio;
+	int dcache_does_alias;
 	char str[256];
 
 	printk(arc_cache_mumbojumbo(0, str, sizeof(str)));
@@ -182,11 +149,20 @@ void arc_cache_init(void)
 
 #ifdef CONFIG_ARC_HAS_ICACHE
 	/* 1. Confirm some of I-cache params which Linux assumes */
-	if (ic->line_len != ARC_ICACHE_LINE_LEN)
+	if ((ic->assoc != ARC_ICACHE_WAYS) ||
+	    (ic->line_len != ARC_ICACHE_LINE_LEN)) {
 		panic("Cache H/W doesn't match kernel Config");
+	}
+#if (CONFIG_ARC_MMU_VER > 2)
+	if (ic->ver != 3) {
+		if (running_on_hw)
+			panic("Cache ver doesn't match MMU ver\n");
 
-	if (ic->ver != CONFIG_ARC_MMU_VER)
-		panic("Cache ver doesn't match MMU ver\n");
+		/* For ISS - suggest the toggles to use */
+		pr_err("Use -prop=icache_version=3,-prop=dcache_version=3\n");
+
+	}
+#endif
 #endif
 
 	/* Enable/disable I-Cache */
@@ -205,12 +181,14 @@ chk_dc:
 		return;
 
 #ifdef CONFIG_ARC_HAS_DCACHE
-	if (dc->line_len != ARC_DCACHE_LINE_LEN)
+	if ((dc->assoc != ARC_DCACHE_WAYS) ||
+	    (dc->line_len != ARC_DCACHE_LINE_LEN)) {
 		panic("Cache H/W doesn't match kernel Config");
+	}
+
+	dcache_does_alias = (dc->sz / ARC_DCACHE_WAYS) > PAGE_SIZE;
 
 	/* check for D-Cache aliasing */
-	dcache_does_alias = (dc->sz / dc->assoc) > PAGE_SIZE;
-
 	if (dcache_does_alias && !cache_is_vipt_aliasing())
 		panic("Enable CONFIG_ARC_CACHE_VIPT_ALIASING\n");
 	else if (!dcache_does_alias && cache_is_vipt_aliasing())
@@ -261,8 +239,10 @@ static inline void wait_for_flush(void)
  */
 static inline void __dc_entire_op(const int cacheop)
 {
-	unsigned int tmp = tmp;
+	unsigned long flags, tmp = tmp;
 	int aux;
+
+	local_irq_save(flags);
 
 	if (cacheop == OP_FLUSH_N_INV) {
 		/* Dcache provides 2 cmd: FLUSH or INV
@@ -287,6 +267,8 @@ static inline void __dc_entire_op(const int cacheop)
 	/* Switch back the DISCARD ONLY Invalidate mode */
 	if (cacheop == OP_FLUSH_N_INV)
 		write_aux_reg(ARC_REG_DC_CTRL, tmp & ~DC_CTRL_INV_MODE_FLUSH);
+
+	local_irq_restore(flags);
 }
 
 /*
@@ -477,15 +459,8 @@ static void __ic_line_inv_vaddr(unsigned long paddr, unsigned long vaddr,
 	local_irq_restore(flags);
 }
 
-static inline void __ic_entire_inv(void)
-{
-	write_aux_reg(ARC_REG_IC_IVIC, 1);
-	read_aux_reg(ARC_REG_IC_CTRL);	/* blocks */
-}
-
 #else
 
-#define __ic_entire_inv()
 #define __ic_line_inv_vaddr(pstart, vstart, sz)
 
 #endif /* CONFIG_ARC_HAS_ICACHE */
@@ -512,7 +487,7 @@ void flush_dcache_page(struct page *page)
 	struct address_space *mapping;
 
 	if (!cache_is_vipt_aliasing()) {
-		clear_bit(PG_dc_clean, &page->flags);
+		set_bit(PG_arch_1, &page->flags);
 		return;
 	}
 
@@ -526,7 +501,7 @@ void flush_dcache_page(struct page *page)
 	 * Make a note that K-mapping is dirty
 	 */
 	if (!mapping_mapped(mapping)) {
-		clear_bit(PG_dc_clean, &page->flags);
+		set_bit(PG_arch_1, &page->flags);
 	} else if (page_mapped(page)) {
 
 		/* kernel reading from page with U-mapping */
@@ -654,13 +629,26 @@ void ___flush_dcache_page(unsigned long paddr, unsigned long vaddr)
 	__dc_line_op(paddr, vaddr & PAGE_MASK, PAGE_SIZE, OP_FLUSH_N_INV);
 }
 
+void flush_icache_all(void)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+
+	write_aux_reg(ARC_REG_IC_IVIC, 1);
+
+	/* lr will not complete till the icache inv operation is not over */
+	read_aux_reg(ARC_REG_IC_CTRL);
+	local_irq_restore(flags);
+}
+
 noinline void flush_cache_all(void)
 {
 	unsigned long flags;
 
 	local_irq_save(flags);
 
-	__ic_entire_inv();
+	flush_icache_all();
 	__dc_entire_op(OP_FLUSH_N_INV);
 
 	local_irq_restore(flags);
@@ -679,12 +667,7 @@ void flush_cache_page(struct vm_area_struct *vma, unsigned long u_vaddr,
 {
 	unsigned int paddr = pfn << PAGE_SHIFT;
 
-	u_vaddr &= PAGE_MASK;
-
-	___flush_dcache_page(paddr, u_vaddr);
-
-	if (vma->vm_flags & VM_EXEC)
-		__inv_icache_page(paddr, u_vaddr);
+	__sync_icache_dcache(paddr, u_vaddr, PAGE_SIZE);
 }
 
 void flush_cache_range(struct vm_area_struct *vma, unsigned long start,
@@ -734,7 +717,7 @@ void copy_user_highpage(struct page *to, struct page *from,
 	 * non copied user pages (e.g. read faults which wire in pagecache page
 	 * directly).
 	 */
-	clear_bit(PG_dc_clean, &to->flags);
+	set_bit(PG_arch_1, &to->flags);
 
 	/*
 	 * if SRC was already usermapped and non-congruent to kernel mapping
@@ -742,16 +725,15 @@ void copy_user_highpage(struct page *to, struct page *from,
 	 */
 	if (clean_src_k_mappings) {
 		__flush_dcache_page(kfrom, kfrom);
-		set_bit(PG_dc_clean, &from->flags);
 	} else {
-		clear_bit(PG_dc_clean, &from->flags);
+		set_bit(PG_arch_1, &from->flags);
 	}
 }
 
 void clear_user_page(void *to, unsigned long u_vaddr, struct page *page)
 {
 	clear_page(to);
-	clear_bit(PG_dc_clean, &page->flags);
+	set_bit(PG_arch_1, &page->flags);
 }
 
 

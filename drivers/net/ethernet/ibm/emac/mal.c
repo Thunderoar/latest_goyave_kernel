@@ -696,7 +696,7 @@ static int mal_probe(struct platform_device *ofdev)
 
 	/* Advertise this instance to the rest of the world */
 	wmb();
-	platform_set_drvdata(ofdev, mal);
+	dev_set_drvdata(&ofdev->dev, mal);
 
 	mal_dbg_register(mal);
 
@@ -722,7 +722,7 @@ static int mal_probe(struct platform_device *ofdev)
 
 static int mal_remove(struct platform_device *ofdev)
 {
-	struct mal_instance *mal = platform_get_drvdata(ofdev);
+	struct mal_instance *mal = dev_get_drvdata(&ofdev->dev);
 
 	MAL_DBG(mal, "remove" NL);
 
@@ -734,6 +734,8 @@ static int mal_remove(struct platform_device *ofdev)
 		WARN(1, KERN_EMERG
 		       "mal%d: commac list is not empty on remove!\n",
 		       mal->index);
+
+	dev_set_drvdata(&ofdev->dev, NULL);
 
 	free_irq(mal->serr_irq, mal);
 	free_irq(mal->txde_irq, mal);

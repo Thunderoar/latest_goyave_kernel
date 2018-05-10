@@ -176,7 +176,7 @@ xfs_growfs_data_private(
 	if (!bp)
 		return EIO;
 	if (bp->b_error) {
-		error = bp->b_error;
+		int	error = bp->b_error;
 		xfs_buf_relse(bp);
 		return error;
 	}
@@ -216,8 +216,6 @@ xfs_growfs_data_private(
 	 */
 	nfree = 0;
 	for (agno = nagcount - 1; agno >= oagcount; agno--, new -= agsize) {
-		__be32	*agfl_bno;
-
 		/*
 		 * AG freespace header block
 		 */
@@ -277,10 +275,8 @@ xfs_growfs_data_private(
 			agfl->agfl_seqno = cpu_to_be32(agno);
 			uuid_copy(&agfl->agfl_uuid, &mp->m_sb.sb_uuid);
 		}
-
-		agfl_bno = XFS_BUF_TO_AGFL_BNO(mp, bp);
 		for (bucket = 0; bucket < XFS_AGFL_SIZE(mp); bucket++)
-			agfl_bno[bucket] = cpu_to_be32(NULLAGBLOCK);
+			agfl->agfl_bno[bucket] = cpu_to_be32(NULLAGBLOCK);
 
 		error = xfs_bwrite(bp);
 		xfs_buf_relse(bp);

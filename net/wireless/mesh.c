@@ -18,7 +18,6 @@
 #define MESH_PATH_TO_ROOT_TIMEOUT      6000
 #define MESH_ROOT_INTERVAL     5000
 #define MESH_ROOT_CONFIRMATION_INTERVAL 2000
-#define MESH_DEFAULT_PLINK_TIMEOUT	1800 /* timeout in seconds */
 
 /*
  * Minimum interval between two consecutive PREQs originated by the same
@@ -76,7 +75,6 @@ const struct mesh_config default_mesh_config = {
 	.dot11MeshHWMPconfirmationInterval = MESH_ROOT_CONFIRMATION_INTERVAL,
 	.power_mode = NL80211_MESH_POWER_ACTIVE,
 	.dot11MeshAwakeWindowDuration = MESH_DEFAULT_AWAKE_WINDOW,
-	.plink_timeout = MESH_DEFAULT_PLINK_TIMEOUT,
 };
 
 const struct mesh_setup default_mesh_setup = {
@@ -84,7 +82,6 @@ const struct mesh_setup default_mesh_setup = {
 	.sync_method = IEEE80211_SYNC_METHOD_NEIGHBOR_OFFSET,
 	.path_sel_proto = IEEE80211_PATH_PROTOCOL_HWMP,
 	.path_metric = IEEE80211_PATH_METRIC_AIRTIME,
-	.auth_id = 0, /* open */
 	.ie = NULL,
 	.ie_len = 0,
 	.is_secure = false,
@@ -160,18 +157,6 @@ int __cfg80211_join_mesh(struct cfg80211_registered_device *rdev,
 
 		setup->chandef.width = NL80211_CHAN_WIDTH_20_NOHT;
 		setup->chandef.center_freq1 = setup->chandef.chan->center_freq;
-	}
-
-	/*
-	 * check if basic rates are available otherwise use mandatory rates as
-	 * basic rates
-	 */
-	if (!setup->basic_rates) {
-		enum nl80211_bss_scan_width scan_width;
-		struct ieee80211_supported_band *sband =
-				rdev->wiphy.bands[setup->chandef.chan->band];
-			setup->basic_rates = ieee80211_mandatory_rates(sband,
-								       scan_width);
 	}
 
 	if (!cfg80211_reg_can_beacon(&rdev->wiphy, &setup->chandef))

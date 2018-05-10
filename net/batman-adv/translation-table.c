@@ -163,19 +163,10 @@ batadv_tt_orig_list_entry_free_ref(struct batadv_tt_orig_list_entry *orig_entry)
 	call_rcu(&orig_entry->rcu, batadv_tt_orig_list_entry_free_rcu);
 }
 
-/**
- * batadv_tt_local_event - store a local TT event (ADD/DEL)
- * @bat_priv: the bat priv with all the soft interface information
- * @tt_local_entry: the TT entry involved in the event
- * @event_flags: flags to store in the event structure
- */
 static void batadv_tt_local_event(struct batadv_priv *bat_priv,
-				  struct batadv_tt_local_entry *tt_local_entry,
-				  uint8_t event_flags)
+				  const uint8_t *addr, uint8_t flags)
 {
 	struct batadv_tt_change_node *tt_change_node, *entry, *safe;
-	struct batadv_tt_common_entry *common = &tt_local_entry->common;
-	uint8_t flags = common->flags | event_flags;
 	bool event_removed = false;
 	bool del_op_requested, del_op_entry;
 
@@ -185,7 +176,7 @@ static void batadv_tt_local_event(struct batadv_priv *bat_priv,
 		return;
 
 	tt_change_node->change.flags = flags;
-	memcpy(tt_change_node->change.addr, common->addr, ETH_ALEN);
+	memcpy(tt_change_node->change.addr, addr, ETH_ALEN);
 
 	del_op_requested = flags & BATADV_TT_CLIENT_DEL;
 
@@ -193,7 +184,7 @@ static void batadv_tt_local_event(struct batadv_priv *bat_priv,
 	spin_lock_bh(&bat_priv->tt.changes_list_lock);
 	list_for_each_entry_safe(entry, safe, &bat_priv->tt.changes_list,
 				 list) {
-		if (!batadv_compare_eth(entry->change.addr, common->addr))
+		if (!batadv_compare_eth(entry->change.addr, addr))
 			continue;
 
 		/* DEL+ADD in the same orig interval have no effect and can be
@@ -341,7 +332,7 @@ void batadv_tt_local_add(struct net_device *soft_iface, const uint8_t *addr,
 	}
 
 add_event:
-	batadv_tt_local_event(bat_priv, tt_local, BATADV_NO_FLAGS);
+	batadv_tt_local_event(bat_priv, addr, tt_local->common.flags);
 
 check_roaming:
 	/* Check whether it is a roaming, but don't do anything if the roaming
@@ -538,7 +529,8 @@ batadv_tt_local_set_pending(struct batadv_priv *bat_priv,
 			    struct batadv_tt_local_entry *tt_local_entry,
 			    uint16_t flags, const char *message)
 {
-	batadv_tt_local_event(bat_priv, tt_local_entry, flags);
+	batadv_tt_local_event(bat_priv, tt_local_entry->common.addr,
+			      tt_local_entry->common.flags | flags);
 
 	/* The local client has to be marked as "pending to be removed" but has
 	 * to be kept in the table in order to send it in a full table
@@ -592,7 +584,8 @@ uint16_t batadv_tt_local_remove(struct batadv_priv *bat_priv,
 	/* if this client has been added right now, it is possible to
 	 * immediately purge it
 	 */
-	batadv_tt_local_event(bat_priv, tt_local_entry, BATADV_TT_CLIENT_DEL);
+	batadv_tt_local_event(bat_priv, tt_local_entry->common.addr,
+			      curr_flags | BATADV_TT_CLIENT_DEL);
 	hlist_del_rcu(&tt_local_entry->common.hash_entry);
 	batadv_tt_local_entry_free_ref(tt_local_entry);
 
@@ -798,25 +791,10 @@ out:
 		batadv_tt_orig_list_entry_free_ref(orig_entry);
 }
 
-/**
- * batadv_tt_global_add - add a new TT global entry or update an existing one
- * @bat_priv: the bat priv with all the soft interface information
- * @orig_node: the originator announcing the client
- * @tt_addr: the mac address of the non-mesh client
- * @flags: TT flags that have to be set for this non-mesh client
- * @ttvn: the tt version number ever announcing this non-mesh client
- *
- * Add a new TT global entry for the given originator. If the entry already
- * exists add a new reference to the given originator (a global entry can have
- * references to multiple originators) and adjust the flags attribute to reflect
- * the function argument.
- * If a TT local entry exists for this non-mesh client remove it.
- *
- * The caller must hold orig_node refcount.
- */
+/* caller must hold orig_node refcount */
 int batadv_tt_global_add(struct batadv_priv *bat_priv,
 			 struct batadv_orig_node *orig_node,
-			 const unsigned char *tt_addr, uint16_t flags,
+			 const unsigned char *tt_addr, uint8_t flags,
 			 uint8_t ttvn)
 {
 	struct batadv_tt_global_entry *tt_global_entry;
@@ -1622,11 +1600,11 @@ batadv_tt_response_fill_table(uint16_t tt_len, uint8_t ttvn,
 	tt_tot = tt_len / sizeof(struct batadv_tt_change);
 
 	len = tt_query_size + tt_len;
-	skb = netdev_alloc_skb_ip_align(NULL, len + ETH_HLEN);
+	skb = dev_alloc_skb(len + ETH_HLEN + NET_IP_ALIGN);
 	if (!skb)
 		goto out;
 
-	skb_reserve(skb, ETH_HLEN);
+	skb_reserve(skb, ETH_HLEN + NET_IP_ALIGN);
 	tt_response = (struct batadv_tt_query_packet *)skb_put(skb, len);
 	tt_response->ttvn = ttvn;
 
@@ -1687,11 +1665,11 @@ static int batadv_send_tt_request(struct batadv_priv *bat_priv,
 	if (!tt_req_node)
 		goto out;
 
-	skb = netdev_alloc_skb_ip_align(NULL, sizeof(*tt_request) + ETH_HLEN);
+	skb = dev_alloc_skb(sizeof(*tt_request) + ETH_HLEN + NET_IP_ALIGN);
 	if (!skb)
 		goto out;
 
-	skb_reserve(skb, ETH_HLEN);
+	skb_reserve(skb, ETH_HLEN + NET_IP_ALIGN);
 
 	tt_req_len = sizeof(*tt_request);
 	tt_request = (struct batadv_tt_query_packet *)skb_put(skb, tt_req_len);
@@ -1713,7 +1691,7 @@ static int batadv_send_tt_request(struct batadv_priv *bat_priv,
 
 	batadv_inc_counter(bat_priv, BATADV_CNT_TT_REQUEST_TX);
 
-	if (batadv_send_skb_to_orig(skb, dst_orig_node, NULL) != NET_XMIT_DROP)
+	if (batadv_send_skb_to_orig(skb, dst_orig_node, NULL))
 		ret = 0;
 
 out:
@@ -1737,7 +1715,7 @@ batadv_send_other_tt_response(struct batadv_priv *bat_priv,
 	struct batadv_orig_node *req_dst_orig_node;
 	struct batadv_orig_node *res_dst_orig_node = NULL;
 	uint8_t orig_ttvn, req_ttvn, ttvn;
-	int res, ret = false;
+	int ret = false;
 	unsigned char *tt_buff;
 	bool full_table;
 	uint16_t tt_len, tt_tot;
@@ -1784,11 +1762,11 @@ batadv_send_other_tt_response(struct batadv_priv *bat_priv,
 		tt_tot = tt_len / sizeof(struct batadv_tt_change);
 
 		len = sizeof(*tt_response) + tt_len;
-		skb = netdev_alloc_skb_ip_align(NULL, len + ETH_HLEN);
+		skb = dev_alloc_skb(len + ETH_HLEN + NET_IP_ALIGN);
 		if (!skb)
 			goto unlock;
 
-		skb_reserve(skb, ETH_HLEN);
+		skb_reserve(skb, ETH_HLEN + NET_IP_ALIGN);
 		packet_pos = skb_put(skb, len);
 		tt_response = (struct batadv_tt_query_packet *)packet_pos;
 		tt_response->ttvn = req_ttvn;
@@ -1832,10 +1810,8 @@ batadv_send_other_tt_response(struct batadv_priv *bat_priv,
 
 	batadv_inc_counter(bat_priv, BATADV_CNT_TT_RESPONSE_TX);
 
-	res = batadv_send_skb_to_orig(skb, res_dst_orig_node, NULL);
-	if (res != NET_XMIT_DROP)
+	if (batadv_send_skb_to_orig(skb, res_dst_orig_node, NULL))
 		ret = true;
-
 	goto out;
 
 unlock:
@@ -1902,11 +1878,11 @@ batadv_send_my_tt_response(struct batadv_priv *bat_priv,
 		tt_tot = tt_len / sizeof(struct batadv_tt_change);
 
 		len = sizeof(*tt_response) + tt_len;
-		skb = netdev_alloc_skb_ip_align(NULL, len + ETH_HLEN);
+		skb = dev_alloc_skb(len + ETH_HLEN + NET_IP_ALIGN);
 		if (!skb)
 			goto unlock;
 
-		skb_reserve(skb, ETH_HLEN);
+		skb_reserve(skb, ETH_HLEN + NET_IP_ALIGN);
 		packet_pos = skb_put(skb, len);
 		tt_response = (struct batadv_tt_query_packet *)packet_pos;
 		tt_response->ttvn = req_ttvn;
@@ -1949,7 +1925,7 @@ batadv_send_my_tt_response(struct batadv_priv *bat_priv,
 
 	batadv_inc_counter(bat_priv, BATADV_CNT_TT_RESPONSE_TX);
 
-	if (batadv_send_skb_to_orig(skb, orig_node, NULL) != NET_XMIT_DROP)
+	if (batadv_send_skb_to_orig(skb, orig_node, NULL))
 		ret = true;
 	goto out;
 
@@ -2236,11 +2212,11 @@ static void batadv_send_roam_adv(struct batadv_priv *bat_priv, uint8_t *client,
 	if (!batadv_tt_check_roam_count(bat_priv, client))
 		goto out;
 
-	skb = netdev_alloc_skb_ip_align(NULL, len + ETH_HLEN);
+	skb = dev_alloc_skb(sizeof(*roam_adv_packet) + ETH_HLEN + NET_IP_ALIGN);
 	if (!skb)
 		goto out;
 
-	skb_reserve(skb, ETH_HLEN);
+	skb_reserve(skb, ETH_HLEN + NET_IP_ALIGN);
 
 	roam_adv_packet = (struct batadv_roam_adv_packet *)skb_put(skb, len);
 
@@ -2262,7 +2238,7 @@ static void batadv_send_roam_adv(struct batadv_priv *bat_priv, uint8_t *client,
 
 	batadv_inc_counter(bat_priv, BATADV_CNT_TT_ROAM_ADV_TX);
 
-	if (batadv_send_skb_to_orig(skb, orig_node, NULL) != NET_XMIT_DROP)
+	if (batadv_send_skb_to_orig(skb, orig_node, NULL))
 		ret = 0;
 
 out:

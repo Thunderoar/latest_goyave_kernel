@@ -2246,4 +2246,15 @@ static struct pci_driver skfddi_pci_driver = {
 	.remove		= skfp_remove_one,
 };
 
-module_pci_driver(skfddi_pci_driver);
+static int __init skfd_init(void)
+{
+	return pci_register_driver(&skfddi_pci_driver);
+}
+
+static void __exit skfd_exit(void)
+{
+	pci_unregister_driver(&skfddi_pci_driver);
+}
+
+module_init(skfd_init);
+module_exit(skfd_exit);

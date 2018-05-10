@@ -348,16 +348,11 @@ config SENSORS_DS620
 	  will be called ds620.
 
 config SENSORS_DS1621
-	tristate "Dallas Semiconductor DS1621 and compatibles"
+	tristate "Dallas Semiconductor DS1621 and DS1625"
 	depends on I2C
 	help
-	  If you say yes here you get support for Dallas Semiconductor/Maxim
-	  Integrated DS1621 sensor chips and compatible models including:
-
-	  - Dallas Semiconductor DS1625
-	  - Maxim Integrated DS1631
-	  - Maxim Integrated DS1721
-	  - Maxim Integrated DS1731
+	  If you say yes here you get support for Dallas Semiconductor
+	  DS1621 and DS1625 sensor chips.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called ds1621.
@@ -460,16 +455,6 @@ config SENSORS_G760A
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called g760a.
-
-config SENSORS_G762
-	tristate "GMT G762 and G763"
-	depends on I2C
-	help
-	  If you say yes here you get support for Global Mixed-mode
-	  Technology Inc G762 and G763 fan speed PWM controller chips.
-
-	  This driver can also be built as a module.  If so, the module
-	  will be called g762.
 
 config SENSORS_GL518SM
 	tristate "Genesys Logic GL518SM"
@@ -959,7 +944,7 @@ config SENSORS_NCT6775
 
 config SENSORS_NTC_THERMISTOR
 	tristate "NTC thermistor support"
-	depends on !OF || IIO=n || IIO
+	depends on (!OF && !IIO) || (OF && IIO)
 	help
 	  This driver supports NTC thermistors sensor reading and its
 	  interpretation. The driver can also monitor the temperature and

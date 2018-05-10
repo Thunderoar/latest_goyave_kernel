@@ -77,7 +77,6 @@ static void __init setup_bvci_lat_unit(void)
 
 /*----------------------- Platform Devices -----------------------------*/
 
-#if IS_ENABLED(CONFIG_SERIAL_ARC)
 static unsigned long arc_uart_info[] = {
 	0,	/* uart->is_emulated (runtime @running_on_hw) */
 	0,	/* uart->port.uartclk */
@@ -116,7 +115,7 @@ static struct platform_device arc_uart0_dev = {
 static struct platform_device *fpga_early_devs[] __initdata = {
 	&arc_uart0_dev,
 };
-#endif	/* CONFIG_SERIAL_ARC_CONSOLE */
+#endif
 
 static void arc_fpga_serial_init(void)
 {
@@ -153,13 +152,8 @@ static void arc_fpga_serial_init(void)
 	 * otherwise the early console never gets a chance to run.
 	 */
 	add_preferred_console("ttyARC", 0, "115200");
-#endif	/* CONFIG_SERIAL_ARC_CONSOLE */
-}
-#else	/* !IS_ENABLED(CONFIG_SERIAL_ARC) */
-static void arc_fpga_serial_init(void)
-{
-}
 #endif
+}
 
 static void __init plat_fpga_early_init(void)
 {
@@ -175,7 +169,7 @@ static void __init plat_fpga_early_init(void)
 }
 
 static struct of_dev_auxdata plat_auxdata_lookup[] __initdata = {
-#if IS_ENABLED(CONFIG_SERIAL_ARC)
+#if defined(CONFIG_SERIAL_ARC) || defined(CONFIG_SERIAL_ARC_MODULE)
 	OF_DEV_AUXDATA("snps,arc-uart", UART0_BASE, "arc-uart", arc_uart_info),
 #endif
 	{}

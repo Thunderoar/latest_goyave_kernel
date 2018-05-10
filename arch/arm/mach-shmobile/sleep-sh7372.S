@@ -40,10 +40,7 @@
 	.global sh7372_resume_core_standby_sysc
 sh7372_resume_core_standby_sysc:
 	ldr     pc, 1f
-
-	.globl	sh7372_cpu_resume
-sh7372_cpu_resume:
-1:	.space	4
+1:	.long   cpu_resume - PAGE_OFFSET + PLAT_PHYS_OFFSET
 
 #define SPDCR 0xe6180008
 

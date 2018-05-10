@@ -14,7 +14,7 @@
 
 #include <linux/genalloc.h>
 #include <linux/platform_data/davinci_asp.h>
-#include <linux/platform_data/edma.h>
+#include <mach/edma.h>
 
 struct davinci_pcm_dma_params {
 	int channel;			/* sync dma channel ID */

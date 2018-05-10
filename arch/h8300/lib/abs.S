@@ -9,10 +9,10 @@
 	.h8300s
 #endif
 	.text
-.global _abs
+.global SYMBOL_NAME(abs)
 
 ;;; int abs(int n)
-_abs:
+SYMBOL_NAME_LABEL(abs)
 	mov.l	er0,er0
 	bpl	1f
 	neg.l	er0

@@ -65,10 +65,7 @@ asmlinkage void secondary_start_kernel(void);
  * Initial data for bringing up a secondary CPU.
  */
 struct secondary_data {
-	union {
-		unsigned long mpu_rgn_szr;
-		unsigned long pgdir;
-	};
+	unsigned long pgdir;
 	unsigned long swapper_pg_dir;
 	void *stack;
 };

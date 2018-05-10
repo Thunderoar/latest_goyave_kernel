@@ -323,20 +323,13 @@ static void hists__baseline_only(struct hists *hists)
 
 static void hists__precompute(struct hists *hists)
 {
-	struct rb_root *root;
-	struct rb_node *next;
+	struct rb_node *next = rb_first(&hists->entries);
 
-	if (sort__need_collapse)
-		root = &hists->entries_collapsed;
-	else
-		root = hists->entries_in;
-
-	next = rb_first(root);
 	while (next != NULL) {
-		struct hist_entry *he = rb_entry(next, struct hist_entry, rb_node_in);
+		struct hist_entry *he = rb_entry(next, struct hist_entry, rb_node);
 		struct hist_entry *pair = hist_entry__next_pair(he);
 
-		next = rb_next(&he->rb_node_in);
+		next = rb_next(&he->rb_node);
 		if (!pair)
 			continue;
 
@@ -464,7 +457,7 @@ static void hists__process(struct hists *old, struct hists *new)
 		hists__output_resort(new);
 	}
 
-	hists__fprintf(new, true, 0, 0, 0, stdout);
+	hists__fprintf(new, true, 0, 0, stdout);
 }
 
 static int __cmd_diff(void)
@@ -618,7 +611,9 @@ int cmd_diff(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	setup_pager();
 
-	sort__setup_elide(NULL);
+	sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "dso", NULL);
+	sort_entry__setup_elide(&sort_comm, symbol_conf.comm_list, "comm", NULL);
+	sort_entry__setup_elide(&sort_sym, symbol_conf.sym_list, "symbol", NULL);
 
 	return __cmd_diff();
 }

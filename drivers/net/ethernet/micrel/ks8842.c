@@ -1250,6 +1250,7 @@ static int ks8842_remove(struct platform_device *pdev)
 	iounmap(adapter->hw_addr);
 	free_netdev(netdev);
 	release_mem_region(iomem->start, resource_size(iomem));
+	platform_set_drvdata(pdev, NULL);
 	return 0;
 }
 

@@ -29,10 +29,7 @@ struct cfg80211_conn {
 		CFG80211_CONN_AUTHENTICATING,
 		CFG80211_CONN_ASSOCIATE_NEXT,
 		CFG80211_CONN_ASSOCIATING,
-		CFG80211_CONN_ASSOC_FAILED,
-		CFG80211_CONN_ASSOC_FAILED_TIMEOUT,
- 		CFG80211_CONN_DEAUTH_ASSOC_FAIL,
-		CFG80211_CONN_CONNECTED,
+		CFG80211_CONN_DEAUTH_ASSOC_FAIL,
 	} state;
 	u8 bssid[ETH_ALEN], prev_bssid[ETH_ALEN];
 	u8 *ie;
@@ -265,7 +262,6 @@ void cfg80211_conn_work(struct work_struct *work)
 	rtnl_unlock();
 }
 
-/* Returned bss is reference counted and must be cleaned up appropriately. */
 static struct cfg80211_bss *cfg80211_get_conn_bss(struct wireless_dev *wdev)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_dev(wdev->wiphy);
@@ -392,35 +388,6 @@ void cfg80211_sme_rx_auth(struct net_device *dev,
 	}
 }
 
-bool cfg80211_sme_rx_assoc_resp(struct wireless_dev *wdev, u16 status)
-{
-	struct cfg80211_registered_device *rdev = wiphy_to_dev(wdev->wiphy);
-
-	if (!wdev->conn)
-		return false;
-
-	if (status == WLAN_STATUS_SUCCESS) {
-		wdev->conn->state = CFG80211_CONN_CONNECTED;
-		return false;
-	}
-
-	if (wdev->conn->prev_bssid_valid) {
-		/*
-		 * Some stupid APs don't accept reassoc, so we
-		 * need to fall back to trying regular assoc;
-		 * return true so no event is sent to userspace.
-		 */
-		wdev->conn->prev_bssid_valid = false;
-		wdev->conn->state = CFG80211_CONN_ASSOCIATE_NEXT;
-		schedule_work(&rdev->conn_work);
-		return true;
-	}
-
-	wdev->conn->state = CFG80211_CONN_ASSOC_FAILED;
-	schedule_work(&rdev->conn_work);
-	return false;
-}
-
 bool cfg80211_sme_failed_reassoc(struct wireless_dev *wdev)
 {
 	struct wiphy *wiphy = wdev->wiphy;
@@ -452,12 +419,6 @@ void cfg80211_sme_failed_assoc(struct wireless_dev *wdev)
 	schedule_work(&rdev->conn_work);
 }
 
-/*
- * API calls for drivers implementing connect/disconnect and
- * SME event handling
- */
-
-/* This method must consume bss one way or another */
 void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 			       const u8 *req_ie, size_t req_ie_len,
 			       const u8 *resp_ie, size_t resp_ie_len,
@@ -473,10 +434,8 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 	ASSERT_WDEV_LOCK(wdev);
 
 	if (WARN_ON(wdev->iftype != NL80211_IFTYPE_STATION &&
-		    wdev->iftype != NL80211_IFTYPE_P2P_CLIENT)) {
-		cfg80211_put_bss(wdev->wiphy, bss);
+		    wdev->iftype != NL80211_IFTYPE_P2P_CLIENT))
 		return;
-	}
 
 	if (wdev->sme_state != CFG80211_SME_CONNECTING)
 		return;
@@ -529,24 +488,23 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 		kfree(wdev->connect_keys);
 		wdev->connect_keys = NULL;
 		wdev->ssid_len = 0;
-		if (bss) {
-			cfg80211_unhold_bss(bss_from_pub(bss));
-			cfg80211_put_bss(wdev->wiphy, bss);
-		}
+		cfg80211_put_bss(wdev->wiphy, bss);
 		return;
 	}
 
-	if (!bss) {
-		WARN_ON_ONCE(!wiphy_to_dev(wdev->wiphy)->ops->connect);
-		bss = cfg80211_get_bss(wdev->wiphy, NULL, bssid,
+	if (!bss)
+		bss = cfg80211_get_bss(wdev->wiphy,
+				       wdev->conn ? wdev->conn->params.channel :
+				       NULL,
+				       bssid,
 				       wdev->ssid, wdev->ssid_len,
 				       WLAN_CAPABILITY_ESS,
 				       WLAN_CAPABILITY_ESS);
-		if (WARN_ON(!bss))
-			return;
-		cfg80211_hold_bss(bss_from_pub(bss));
-	}
 
+	if (WARN_ON(!bss))
+		return;
+
+	cfg80211_hold_bss(bss_from_pub(bss));
 	wdev->current_bss = bss_from_pub(bss);
 
 	wdev->sme_state = CFG80211_SME_CONNECTED;
@@ -613,7 +571,6 @@ void cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 }
 EXPORT_SYMBOL(cfg80211_connect_result);
 
-/* Consumes bss object one way or another */
 void __cfg80211_roamed(struct wireless_dev *wdev,
 		       struct cfg80211_bss *bss,
 		       const u8 *req_ie, size_t req_ie_len,
@@ -697,7 +654,6 @@ void cfg80211_roamed(struct net_device *dev,
 }
 EXPORT_SYMBOL(cfg80211_roamed);
 
-/* Consumes bss object one way or another */
 void cfg80211_roamed_bss(struct net_device *dev,
 			 struct cfg80211_bss *bss, const u8 *req_ie,
 			 size_t req_ie_len, const u8 *resp_ie,
@@ -1088,15 +1044,4 @@ void cfg80211_sme_disassoc(struct net_device *dev,
 
 	__cfg80211_mlme_deauth(rdev, dev, bssid, NULL, 0,
 			       WLAN_REASON_DEAUTH_LEAVING, false);
-}
-
-void cfg80211_sme_assoc_timeout(struct wireless_dev *wdev)
-{
-	struct cfg80211_registered_device *rdev = wiphy_to_dev(wdev->wiphy);
-
-	if (!wdev->conn)
-		return;
-
-	wdev->conn->state = CFG80211_CONN_ASSOC_FAILED_TIMEOUT;
-	schedule_work(&rdev->conn_work);
 }

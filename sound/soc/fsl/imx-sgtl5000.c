@@ -128,18 +128,28 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	data->codec_clk = devm_clk_get(&codec_dev->dev, NULL);
-	if (IS_ERR(data->codec_clk))
-		goto fail;
-
-	data->clk_frequency = clk_get_rate(data->codec_clk);
+	data->codec_clk = clk_get(&codec_dev->dev, NULL);
+	if (IS_ERR(data->codec_clk)) {
+		/* assuming clock enabled by default */
+		data->codec_clk = NULL;
+		ret = of_property_read_u32(codec_np, "clock-frequency",
+					&data->clk_frequency);
+		if (ret) {
+			dev_err(&codec_dev->dev,
+				"clock-frequency missing or invalid\n");
+			goto fail;
+		}
+	} else {
+		data->clk_frequency = clk_get_rate(data->codec_clk);
+		clk_prepare_enable(data->codec_clk);
+	}
 
 	data->dai.name = "HiFi";
 	data->dai.stream_name = "HiFi";
 	data->dai.codec_dai_name = "sgtl5000";
 	data->dai.codec_of_node = codec_np;
 	data->dai.cpu_of_node = ssi_np;
-	data->dai.platform_of_node = ssi_np;
+	data->dai.platform_name = "imx-pcm-audio";
 	data->dai.init = &imx_sgtl5000_dai_init;
 	data->dai.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			    SND_SOC_DAIFMT_CBM_CFM;
@@ -147,10 +157,10 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 	data->card.dev = &pdev->dev;
 	ret = snd_soc_of_parse_card_name(&data->card, "model");
 	if (ret)
-		goto fail;
+		goto clk_fail;
 	ret = snd_soc_of_parse_audio_routing(&data->card, "audio-routing");
 	if (ret)
-		goto fail;
+		goto clk_fail;
 	data->card.num_links = 1;
 	data->card.owner = THIS_MODULE;
 	data->card.dai_link = &data->dai;
@@ -160,15 +170,12 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 	ret = snd_soc_register_card(&data->card);
 	if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
-		goto fail;
+		goto clk_fail;
 	}
 
 	platform_set_drvdata(pdev, data);
-	of_node_put(ssi_np);
-	of_node_put(codec_np);
-
-	return 0;
-
+clk_fail:
+	clk_put(data->codec_clk);
 fail:
 	if (ssi_np)
 		of_node_put(ssi_np);
@@ -182,6 +189,10 @@ static int imx_sgtl5000_remove(struct platform_device *pdev)
 {
 	struct imx_sgtl5000_data *data = platform_get_drvdata(pdev);
 
+	if (data->codec_clk) {
+		clk_disable_unprepare(data->codec_clk);
+		clk_put(data->codec_clk);
+	}
 	snd_soc_unregister_card(&data->card);
 
 	return 0;

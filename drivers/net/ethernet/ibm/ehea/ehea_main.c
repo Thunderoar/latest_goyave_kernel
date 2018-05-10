@@ -98,7 +98,8 @@ static struct ehea_fw_handle_array ehea_fw_handles;
 static struct ehea_bcmc_reg_array ehea_bcmc_regs;
 
 
-static int ehea_probe_adapter(struct platform_device *dev);
+static int ehea_probe_adapter(struct platform_device *dev,
+			      const struct of_device_id *id);
 
 static int ehea_remove(struct platform_device *dev);
 
@@ -111,7 +112,7 @@ static struct of_device_id ehea_device_table[] = {
 };
 MODULE_DEVICE_TABLE(of, ehea_device_table);
 
-static struct platform_driver ehea_driver = {
+static struct of_platform_driver ehea_driver = {
 	.driver = {
 		.name = "ehea",
 		.owner = THIS_MODULE,
@@ -3022,7 +3023,7 @@ static struct ehea_port *ehea_setup_single_port(struct ehea_adapter *adapter,
 
 	dev->hw_features = NETIF_F_SG | NETIF_F_TSO |
 		      NETIF_F_IP_CSUM | NETIF_F_HW_VLAN_CTAG_TX;
-	dev->features = NETIF_F_SG | NETIF_F_TSO |
+	dev->features = NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_TSO |
 		      NETIF_F_HIGHDMA | NETIF_F_IP_CSUM |
 		      NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_CTAG_RX |
 		      NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_RXCSUM;
@@ -3250,7 +3251,8 @@ static void ehea_remove_device_sysfs(struct platform_device *dev)
 	device_remove_file(&dev->dev, &dev_attr_remove_port);
 }
 
-static int ehea_probe_adapter(struct platform_device *dev)
+static int ehea_probe_adapter(struct platform_device *dev,
+			      const struct of_device_id *id)
 {
 	struct ehea_adapter *adapter;
 	const u64 *adapter_handle;
@@ -3287,7 +3289,7 @@ static int ehea_probe_adapter(struct platform_device *dev)
 
 	adapter->pd = EHEA_PD_ID;
 
-	platform_set_drvdata(dev, adapter);
+	dev_set_drvdata(&dev->dev, adapter);
 
 
 	/* initialize adapter and ports */
@@ -3358,7 +3360,7 @@ out:
 
 static int ehea_remove(struct platform_device *dev)
 {
-	struct ehea_adapter *adapter = platform_get_drvdata(dev);
+	struct ehea_adapter *adapter = dev_get_drvdata(&dev->dev);
 	int i;
 
 	for (i = 0; i < EHEA_MAX_PORTS; i++)

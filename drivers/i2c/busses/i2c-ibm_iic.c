@@ -705,7 +705,7 @@ static int iic_probe(struct platform_device *ofdev)
 		return -ENOMEM;
 	}
 
-	platform_set_drvdata(ofdev, dev);
+	dev_set_drvdata(&ofdev->dev, dev);
 
 	dev->vaddr = of_iomap(np, 0);
 	if (dev->vaddr == NULL) {
@@ -782,7 +782,7 @@ error_cleanup:
  */
 static int iic_remove(struct platform_device *ofdev)
 {
-	struct ibm_iic_private *dev = platform_get_drvdata(ofdev);
+	struct ibm_iic_private *dev = dev_get_drvdata(&ofdev->dev);
 
 	i2c_del_adapter(&dev->adap);
 

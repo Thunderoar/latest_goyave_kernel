@@ -250,19 +250,12 @@ static efi_status_t __init phys_efi_set_virtual_address_map(
 	efi_memory_desc_t *virtual_map)
 {
 	efi_status_t status;
-	unsigned long flags;
 
 	efi_call_phys_prelog();
-
-	/* Disable interrupts around EFI calls: */
-	local_irq_save(flags);
 	status = efi_call_phys4(efi_phys.set_virtual_address_map,
 				memory_map_size, descriptor_size,
 				descriptor_version, virtual_map);
-	local_irq_restore(flags);
-
 	efi_call_phys_epilog();
-
 	return status;
 }
 
@@ -281,9 +274,8 @@ static efi_status_t __init phys_efi_get_time(efi_time_t *tm,
 	return status;
 }
 
-int efi_set_rtc_mmss(const struct timespec *now)
+int efi_set_rtc_mmss(unsigned long nowtime)
 {
-	unsigned long nowtime = now->tv_sec;
 	efi_status_t 	status;
 	efi_time_t 	eft;
 	efi_time_cap_t 	cap;
@@ -318,7 +310,7 @@ int efi_set_rtc_mmss(const struct timespec *now)
 	return 0;
 }
 
-void efi_get_time(struct timespec *now)
+unsigned long efi_get_time(void)
 {
 	efi_status_t status;
 	efi_time_t eft;
@@ -328,9 +320,8 @@ void efi_get_time(struct timespec *now)
 	if (status != EFI_SUCCESS)
 		pr_err("Oops: efitime: can't read time!\n");
 
-	now->tv_sec = mktime(eft.year, eft.month, eft.day, eft.hour,
-			     eft.minute, eft.second);
-	now->tv_nsec = 0;
+	return mktime(eft.year, eft.month, eft.day, eft.hour,
+		      eft.minute, eft.second);
 }
 
 /*
@@ -447,7 +438,7 @@ void __init efi_reserve_boot_services(void)
 		 * - Not within any part of the kernel
 		 * - Not the bios reserved area
 		*/
-		if ((start + size > __pa_symbol(_text)
+		if ((start+size >= __pa_symbol(_text)
 				&& start <= __pa_symbol(_end)) ||
 			!e820_all_mapped(start, start+size, E820_RAM) ||
 			memblock_is_region_reserved(start, size)) {
@@ -775,6 +766,13 @@ void __init efi_init(void)
 
 	set_bit(EFI_MEMMAP, &x86_efi_facility);
 
+#ifdef CONFIG_X86_32
+	if (efi_is_native()) {
+		x86_platform.get_wallclock = efi_get_time;
+		x86_platform.set_wallclock = efi_set_rtc_mmss;
+	}
+#endif
+
 #if EFI_DEBUG
 	print_efi_memmap();
 #endif
@@ -933,13 +931,6 @@ void __init efi_enter_virtual_mode(void)
 		} else
 			va = efi_ioremap(md->phys_addr, size,
 					 md->type, md->attribute);
-
-		if (!(md->attribute & EFI_MEMORY_RUNTIME)) {
-			if (!va)
-				pr_err("ioremap of 0x%llX failed!\n",
-				       (unsigned long long)md->phys_addr);
-			continue;
-		}
 
 		md->virt_addr = (u64) (unsigned long) va;
 

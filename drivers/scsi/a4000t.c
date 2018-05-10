@@ -116,7 +116,20 @@ static struct platform_driver amiga_a4000t_scsi_driver = {
 	},
 };
 
-module_platform_driver_probe(amiga_a4000t_scsi_driver, amiga_a4000t_scsi_probe);
+static int __init amiga_a4000t_scsi_init(void)
+{
+	return platform_driver_probe(&amiga_a4000t_scsi_driver,
+				     amiga_a4000t_scsi_probe);
+}
+
+module_init(amiga_a4000t_scsi_init);
+
+static void __exit amiga_a4000t_scsi_exit(void)
+{
+	platform_driver_unregister(&amiga_a4000t_scsi_driver);
+}
+
+module_exit(amiga_a4000t_scsi_exit);
 
 MODULE_AUTHOR("Alan Hourihane <alanh@fairlite.demon.co.uk> / "
 	      "Kars de Jong <jongk@linux-m68k.org>");

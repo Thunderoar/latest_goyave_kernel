@@ -377,27 +377,27 @@ static void do_catch_up(struct spk_synth *synth)
 
 	jiffy_delta = spk_get_var(JIFFY);
 	delay_time = spk_get_var(DELAY);
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	jiffy_delta_val = jiffy_delta->u.n.value;
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	jiff_max = jiffies + jiffy_delta_val;
 
 	while (!kthread_should_stop()) {
-		spin_lock_irqsave(&speakup_info.spinlock, flags);
+		spk_lock(flags);
 		if (speakup_info.flushing) {
 			speakup_info.flushing = 0;
-			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+			spk_unlock(flags);
 			synth->flush(synth);
 			continue;
 		}
 		if (synth_buffer_empty()) {
-			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+			spk_unlock(flags);
 			break;
 		}
 		ch = synth_buffer_peek();
 		set_current_state(TASK_INTERRUPTIBLE);
 		delay_time_val = delay_time->u.n.value;
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		if (ch == '\n')
 			ch = 0x0D;
 		if (dt_sendchar(ch)) {
@@ -405,9 +405,9 @@ static void do_catch_up(struct spk_synth *synth)
 			continue;
 		}
 		set_current_state(TASK_RUNNING);
-		spin_lock_irqsave(&speakup_info.spinlock, flags);
+		spk_lock(flags);
 		synth_buffer_getc();
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		if (ch == '[')
 			in_escape = 1;
 		else if (ch == ']')
@@ -418,10 +418,10 @@ static void do_catch_up(struct spk_synth *synth)
 			if (jiffies >= jiff_max) {
 				if (!in_escape)
 					dt_sendchar(PROCSPEECH);
-				spin_lock_irqsave(&speakup_info.spinlock, flags);
+				spk_lock(flags);
 				jiffy_delta_val = jiffy_delta->u.n.value;
 				delay_time_val = delay_time->u.n.value;
-				spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+				spk_unlock(flags);
 				schedule_timeout(msecs_to_jiffies
 						 (delay_time_val));
 				jiff_max = jiffies + jiffy_delta_val;
@@ -444,7 +444,7 @@ static const char *synth_immediate(struct spk_synth *synth, const char *buf)
 			return buf;
 		buf++;
 	}
-	return NULL;
+	return 0;
 }
 
 static int synth_probe(struct spk_synth *synth)

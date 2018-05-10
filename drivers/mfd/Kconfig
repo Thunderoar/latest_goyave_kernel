@@ -128,7 +128,7 @@ config MFD_CROS_EC
 	help
 	  If you say Y here you get support for the ChromeOS Embedded
 	  Controller (EC) providing keyboard, battery and power services.
-	  You also need to enable the driver for the bus you are using. The
+	  You also ned to enable the driver for the bus you are using. The
 	  protocol for talking to the EC is defined by the bus driver.
 
 config MFD_CROS_EC_I2C
@@ -317,27 +317,6 @@ config MFD_JZ4740_ADC
 	  Say yes here if you want support for the ADC unit in the JZ4740 SoC.
 	  This driver is necessary for jz4740-battery and jz4740-hwmon driver.
 
-config MFD_KEMPLD
-	tristate "Kontron module PLD device"
-	select MFD_CORE
-	help
-	  This is the core driver for the PLD (Programmable Logic Device) found
-	  on some Kontron ETX and COMexpress (ETXexpress) modules. The PLD
-	  device may provide functions like watchdog, GPIO, UART and I2C bus.
-
-	  The following modules are supported:
-		* COMe-bIP#
-		* COMe-bPC2 (ETXexpress-PC)
-		* COMe-bSC# (ETXexpress-SC T#)
-		* COMe-cCT6
-		* COMe-cDC2 (microETXexpress-DC)
-		* COMe-cPC2 (microETXexpress-PC)
-		* COMe-mCT10
-		* ETX-OH
-
-	  This driver can also be built as a module. If so, the module
-	  will be called kempld-core.
-
 config MFD_88PM800
 	tristate "Marvell 88PM800"
 	depends on I2C=y && GENERIC_HARDIRQS
@@ -515,8 +494,7 @@ config MFD_PM8XXX
 
 config MFD_PM8921_CORE
 	tristate "Qualcomm PM8921 PMIC chip"
-	depends on (ARCH_MSM || HEXAGON)
-	depends on BROKEN
+	depends on SSBI && BROKEN
 	select MFD_CORE
 	select MFD_PM8XXX
 	help
@@ -1143,12 +1121,6 @@ config MFD_WM5110
 	help
 	  Support for Wolfson Microelectronics WM5110 low power audio SoC
 
-config MFD_WM8997
-	bool "Support Wolfson Microelectronics WM8997"
-	depends on MFD_ARIZONA
-	help
-	  Support for Wolfson Microelectronics WM8997 low power audio SoC
-
 config MFD_WM8400
 	bool "Wolfson Microelectronics WM8400"
 	select MFD_CORE
@@ -1247,8 +1219,7 @@ config MCP_UCB1200_TS
 endmenu
 
 config VEXPRESS_CONFIG
-	bool "ARM Versatile Express platform infrastructure"
-	depends on ARM || ARM64
+	bool
 	help
 	  Platform configuration infrastructure for the ARM Ltd.
 	  Versatile Express.

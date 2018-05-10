@@ -275,11 +275,11 @@ static unsigned char lcd_bits[LCD_PORTS][LCD_BITS][BIT_STATES];
  * LCD types
  */
 #define LCD_TYPE_NONE		0
-#define LCD_TYPE_CUSTOM		1
-#define LCD_TYPE_OLD		2
-#define LCD_TYPE_KS0074		3
-#define LCD_TYPE_HANTRONIX	4
-#define LCD_TYPE_NEXCOM		5
+#define LCD_TYPE_OLD		1
+#define LCD_TYPE_KS0074		2
+#define LCD_TYPE_HANTRONIX	3
+#define LCD_TYPE_NEXCOM		4
+#define LCD_TYPE_CUSTOM		5
 
 /*
  * keypad types
@@ -457,7 +457,8 @@ MODULE_PARM_DESC(keypad_enabled, "Deprecated option, use keypad_type instead");
 static int lcd_type = -1;
 module_param(lcd_type, int, 0000);
 MODULE_PARM_DESC(lcd_type,
-		"LCD type: 0=none, 1=compiled-in, 2=old, 3=serial ks0074, 4=hantronix, 5=nexcom");
+		 "LCD type: 0=none, 1=old //, 2=serial ks0074, "
+		 "3=hantronix //, 4=nexcom //, 5=compiled-in");
 
 static int lcd_proto = -1;
 module_param(lcd_proto, int, 0000);
@@ -1755,18 +1756,17 @@ static inline int input_state_high(struct logical_input *input)
 
 			if (input->high_timer == 0) {
 				char *press_str = input->u.kbd.press_str;
-				if (press_str[0]) {
-					int s = sizeof(input->u.kbd.press_str);
-					keypad_send_key(press_str, s);
-				}
+				if (press_str[0])
+					keypad_send_key(press_str,
+							sizeof(input->u.kbd.press_str));
 			}
 
 			if (input->u.kbd.repeat_str[0]) {
 				char *repeat_str = input->u.kbd.repeat_str;
 				if (input->high_timer >= KEYPAD_REP_START) {
-					int s = sizeof(input->u.kbd.repeat_str);
 					input->high_timer -= KEYPAD_REP_DELAY;
-					keypad_send_key(repeat_str, s);
+					keypad_send_key(repeat_str,
+							sizeof(input->u.kbd.repeat_str));
 				}
 				/* we will need to come back here soon */
 				inputs_stable = 0;
@@ -1802,11 +1802,10 @@ static inline void input_state_falling(struct logical_input *input)
 
 			if (input->u.kbd.repeat_str[0]) {
 				char *repeat_str = input->u.kbd.repeat_str;
-				if (input->high_timer >= KEYPAD_REP_START) {
-					int s = sizeof(input->u.kbd.repeat_str);
+				if (input->high_timer >= KEYPAD_REP_START)
 					input->high_timer -= KEYPAD_REP_DELAY;
-					keypad_send_key(repeat_str, s);
-				}
+					keypad_send_key(repeat_str,
+							sizeof(input->u.kbd.repeat_str));
 				/* we will need to come back here soon */
 				inputs_stable = 0;
 			}
@@ -1823,10 +1822,9 @@ static inline void input_state_falling(struct logical_input *input)
 				release_fct(input->u.std.release_data);
 		} else if (input->type == INPUT_TYPE_KBD) {
 			char *release_str = input->u.kbd.release_str;
-			if (release_str[0]) {
-				int s = sizeof(input->u.kbd.release_str);
-				keypad_send_key(release_str, s);
-			}
+			if (release_str[0])
+				keypad_send_key(release_str,
+						sizeof(input->u.kbd.release_str));
 		}
 
 		input->state = INPUT_ST_LOW;

@@ -584,13 +584,6 @@ static void atmci_timeout_timer(unsigned long data)
 	if (host->mrq->cmd->data) {
 		host->mrq->cmd->data->error = -ETIMEDOUT;
 		host->data = NULL;
-		/*
-		 * With some SDIO modules, sometimes DMA transfer hangs. If
-		 * stop_transfer() is not called then the DMA request is not
-		 * removed, following ones are queued and never computed.
-		 */
-		if (host->state == STATE_DATA_XFER)
-			host->stop_transfer(host);
 	} else {
 		host->mrq->cmd->error = -ETIMEDOUT;
 		host->cmd = NULL;
@@ -1188,21 +1181,10 @@ static void atmci_start_request(struct atmel_mci *host,
 	iflags |= ATMCI_CMDRDY;
 	cmd = mrq->cmd;
 	cmdflags = atmci_prepare_command(slot->mmc, cmd);
-
-	/*
-	 * DMA transfer should be started before sending the command to avoid
-	 * unexpected errors especially for read operations in SDIO mode.
-	 * Unfortunately, in PDC mode, command has to be sent before starting
-	 * the transfer.
-	 */
-	if (host->submit_data != &atmci_submit_data_dma)
-		atmci_send_command(host, cmd, cmdflags);
+	atmci_send_command(host, cmd, cmdflags);
 
 	if (data)
 		host->submit_data(host, data);
-
-	if (host->submit_data == &atmci_submit_data_dma)
-		atmci_send_command(host, cmd, cmdflags);
 
 	if (mrq->stop) {
 		host->stop_cmdr = atmci_prepare_command(slot->mmc, mrq->stop);
@@ -1295,7 +1277,7 @@ static void atmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	if (ios->clock) {
 		unsigned int clock_min = ~0U;
-		int clkdiv;
+		u32 clkdiv;
 
 		spin_lock_bh(&host->lock);
 		if (!host->mode_reg) {
@@ -1320,12 +1302,7 @@ static void atmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		/* Calculate clock divider */
 		if (host->caps.has_odd_clk_div) {
 			clkdiv = DIV_ROUND_UP(host->bus_hz, clock_min) - 2;
-			if (clkdiv < 0) {
-				dev_warn(&mmc->class_dev,
-					 "clock %u too fast; using %lu\n",
-					 clock_min, host->bus_hz / 2);
-				clkdiv = 0;
-			} else if (clkdiv > 511) {
+			if (clkdiv > 511) {
 				dev_warn(&mmc->class_dev,
 				         "clock %u too slow; using %lu\n",
 				         clock_min, host->bus_hz / (511 + 2));
@@ -1810,14 +1787,12 @@ static void atmci_tasklet_func(unsigned long priv)
 			if (unlikely(status)) {
 				host->stop_transfer(host);
 				host->data = NULL;
-				if (data) {
-					if (status & ATMCI_DTOE) {
-						data->error = -ETIMEDOUT;
-					} else if (status & ATMCI_DCRCE) {
-						data->error = -EILSEQ;
-					} else {
-						data->error = -EIO;
-					}
+				if (status & ATMCI_DTOE) {
+					data->error = -ETIMEDOUT;
+				} else if (status & ATMCI_DCRCE) {
+					data->error = -EILSEQ;
+				} else {
+					data->error = -EIO;
 				}
 			}
 
@@ -2500,6 +2475,8 @@ static int __exit atmci_remove(struct platform_device *pdev)
 	struct atmel_mci	*host = platform_get_drvdata(pdev);
 	unsigned int		i;
 
+	platform_set_drvdata(pdev, NULL);
+
 	if (host->buffer)
 		dma_free_coherent(&pdev->dev, host->buf_size,
 		                  host->buffer, host->buf_phys_addr);
@@ -2527,7 +2504,7 @@ static int __exit atmci_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_PM
 static int atmci_suspend(struct device *dev)
 {
 	struct atmel_mci *host = dev_get_drvdata(dev);
@@ -2582,15 +2559,17 @@ static int atmci_resume(struct device *dev)
 
 	return ret;
 }
-#endif
-
 static SIMPLE_DEV_PM_OPS(atmci_pm, atmci_suspend, atmci_resume);
+#define ATMCI_PM_OPS	(&atmci_pm)
+#else
+#define ATMCI_PM_OPS	NULL
+#endif
 
 static struct platform_driver atmci_driver = {
 	.remove		= __exit_p(atmci_remove),
 	.driver		= {
 		.name		= "atmel_mci",
-		.pm		= &atmci_pm,
+		.pm		= ATMCI_PM_OPS,
 		.of_match_table	= of_match_ptr(atmci_dt_ids),
 	},
 };

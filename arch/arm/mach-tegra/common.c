@@ -22,15 +22,13 @@
 #include <linux/io.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
-#include <linux/of.h>
 #include <linux/irqchip.h>
-#include <linux/clk-provider.h>
+#include <linux/clk/tegra.h>
 
 #include <asm/hardware/cache-l2x0.h>
 
 #include "board.h"
 #include "common.h"
-#include "cpuidle.h"
 #include "fuse.h"
 #include "iomap.h"
 #include "irq.h"
@@ -61,7 +59,7 @@ u32 tegra_uart_config[4] = {
 #ifdef CONFIG_OF
 void __init tegra_dt_init_irq(void)
 {
-	of_clk_init(NULL);
+	tegra_clocks_init();
 	tegra_pmc_init();
 	tegra_init_irq();
 	irqchip_init();
@@ -82,19 +80,9 @@ void tegra_assert_system_reset(char mode, const char *cmd)
 static void __init tegra_init_cache(void)
 {
 #ifdef CONFIG_CACHE_L2X0
-	static const struct of_device_id pl310_ids[] __initconst = {
-		{ .compatible = "arm,pl310-cache",  },
-		{}
-	};
-
-	struct device_node *np;
 	int ret;
 	void __iomem *p = IO_ADDRESS(TEGRA_ARM_PERIF_BASE) + 0x3000;
 	u32 aux_ctrl, cache_type;
-
-	np = of_find_matching_node(NULL, pl310_ids);
-	if (!np)
-		return;
 
 	cache_type = readl(p + L2X0_CACHE_TYPE);
 	aux_ctrl = (cache_type & 0x700) << (17-8);
@@ -120,6 +108,5 @@ void __init tegra_init_early(void)
 void __init tegra_init_late(void)
 {
 	tegra_init_suspend();
-	tegra_cpuidle_init();
 	tegra_powergate_debugfs_init();
 }

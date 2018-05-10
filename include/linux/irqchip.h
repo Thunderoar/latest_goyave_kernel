@@ -11,10 +11,6 @@
 #ifndef _LINUX_IRQCHIP_H
 #define _LINUX_IRQCHIP_H
 
-#ifdef CONFIG_IRQCHIP
 void irqchip_init(void);
-#else
-static inline void irqchip_init(void) {}
-#endif
 
 #endif

@@ -236,6 +236,7 @@ int clp_disable_fh(struct zpci_dev *zdev)
 	if (!zdev_enabled(zdev))
 		return 0;
 
+	dev_info(&zdev->pdev->dev, "disabling fn handle: 0x%x\n", fh);
 	rc = clp_set_pci_fn(&fh, 0, CLP_SET_DISABLE_PCI_FN);
 	if (!rc)
 		/* Success -> store disabled handle in zdev */

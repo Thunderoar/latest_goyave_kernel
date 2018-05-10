@@ -109,7 +109,7 @@ ENTRY(stext)
 	sub	r4, r3, r4			@ (PHYS_OFFSET - PAGE_OFFSET)
 	add	r8, r8, r4			@ PHYS_OFFSET
 #else
-	ldr	r8, =PLAT_PHYS_OFFSET		@ always constant in this case
+	ldr	r8, =PHYS_OFFSET		@ always constant in this case
 #endif
 
 	/*
@@ -156,7 +156,7 @@ ENDPROC(stext)
  *
  * Returns:
  *  r0, r3, r5-r7 corrupted
- *  r4 = page table (see ARCH_PGD_SHIFT in asm/memory.h)
+ *  r4 = physical page table address
  */
 __create_page_tables:
 	pgtbl	r4, r8				@ page table address
@@ -331,7 +331,6 @@ __create_page_tables:
 #endif
 #ifdef CONFIG_ARM_LPAE
 	sub	r4, r4, #0x1000		@ point to the PGD table
-	mov	r4, r4, lsr #ARCH_PGD_SHIFT
 #endif
 	mov	pc, lr
 ENDPROC(__create_page_tables)
@@ -409,7 +408,7 @@ __secondary_data:
  *  r0  = cp#15 control register
  *  r1  = machine ID
  *  r2  = atags or dtb pointer
- *  r4  = page table (see ARCH_PGD_SHIFT in asm/memory.h)
+ *  r4  = page table pointer
  *  r9  = processor ID
  *  r13 = *virtual* address to jump to upon completion
  */
@@ -428,7 +427,10 @@ __enable_mmu:
 #ifdef CONFIG_CPU_ICACHE_DISABLE
 	bic	r0, r0, #CR_I
 #endif
-#ifndef CONFIG_ARM_LPAE
+#ifdef CONFIG_ARM_LPAE
+	mov	r5, #0
+	mcrr	p15, 0, r4, r5, c2		@ load TTBR0
+#else
 	mov	r5, #(domain_val(DOMAIN_USER, DOMAIN_MANAGER) | \
 		      domain_val(DOMAIN_KERNEL, DOMAIN_MANAGER) | \
 		      domain_val(DOMAIN_TABLE, DOMAIN_MANAGER) | \

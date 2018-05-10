@@ -567,6 +567,8 @@ static int wm831x_buckv_remove(struct platform_device *pdev)
 	struct wm831x_dcdc *dcdc = platform_get_drvdata(pdev);
 	struct wm831x *wm831x = dcdc->wm831x;
 
+	platform_set_drvdata(pdev, NULL);
+
 	free_irq(wm831x_irq(wm831x, platform_get_irq_byname(pdev, "HC")),
 			    dcdc);
 	free_irq(wm831x_irq(wm831x, platform_get_irq_byname(pdev, "UV")),
@@ -712,6 +714,8 @@ static int wm831x_buckp_remove(struct platform_device *pdev)
 {
 	struct wm831x_dcdc *dcdc = platform_get_drvdata(pdev);
 
+	platform_set_drvdata(pdev, NULL);
+
 	free_irq(wm831x_irq(dcdc->wm831x, platform_get_irq_byname(pdev, "UV")),
 			    dcdc);
 	regulator_unregister(dcdc->regulator);
@@ -845,6 +849,8 @@ static int wm831x_boostp_remove(struct platform_device *pdev)
 {
 	struct wm831x_dcdc *dcdc = platform_get_drvdata(pdev);
 
+	platform_set_drvdata(pdev, NULL);
+
 	free_irq(wm831x_irq(dcdc->wm831x, platform_get_irq_byname(pdev, "UV")),
 		 dcdc);
 	regulator_unregister(dcdc->regulator);
@@ -934,6 +940,7 @@ static int wm831x_epe_remove(struct platform_device *pdev)
 {
 	struct wm831x_dcdc *dcdc = platform_get_drvdata(pdev);
 
+	platform_set_drvdata(pdev, NULL);
 	regulator_unregister(dcdc->regulator);
 
 	return 0;

@@ -51,6 +51,7 @@
 #include "print-tree.h"
 #include "xattr.h"
 #include "volumes.h"
+#include "version.h"
 #include "export.h"
 #include "compression.h"
 #include "rcu-string.h"
@@ -775,6 +776,9 @@ find_root:
 	if (IS_ERR(new_root))
 		return ERR_CAST(new_root);
 
+	if (btrfs_root_refs(&new_root->root_item) == 0)
+		return ERR_PTR(-ENOENT);
+
 	dir_id = btrfs_root_dirid(&new_root->root_item);
 setup_root:
 	location.objectid = dir_id;
@@ -862,7 +866,7 @@ int btrfs_sync_fs(struct super_block *sb, int wait)
 		return 0;
 	}
 
-	btrfs_wait_all_ordered_extents(fs_info, 1);
+	btrfs_wait_ordered_extents(root, 1);
 
 	trans = btrfs_attach_transaction_barrier(root);
 	if (IS_ERR(trans)) {
@@ -1681,18 +1685,6 @@ static void btrfs_interface_exit(void)
 		printk(KERN_INFO "btrfs: misc_deregister failed for control device\n");
 }
 
-static void btrfs_print_info(void)
-{
-	printk(KERN_INFO "Btrfs loaded"
-#ifdef CONFIG_BTRFS_DEBUG
-			", debug=on"
-#endif
-#ifdef CONFIG_BTRFS_FS_CHECK_INTEGRITY
-			", integrity-checker=on"
-#endif
-			"\n");
-}
-
 static int __init init_btrfs_fs(void)
 {
 	int err;
@@ -1741,9 +1733,11 @@ static int __init init_btrfs_fs(void)
 
 	btrfs_init_lockdep();
 
-	btrfs_print_info();
+#ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
 	btrfs_test_free_space_cache();
+#endif
 
+	printk(KERN_INFO "%s loaded\n", BTRFS_BUILD_VERSION);
 	return 0;
 
 unregister_ioctl:

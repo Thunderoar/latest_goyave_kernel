@@ -449,7 +449,8 @@ cifs_negotiate_wsize(struct cifs_tcon *tcon, struct smb_vol *volume_info)
 	 * WRITEX header, not including the 4 byte RFC1001 length.
 	 */
 	if (!(server->capabilities & CAP_LARGE_WRITE_X) ||
-	    (!(server->capabilities & CAP_UNIX) && server->sign))
+	    (!(server->capabilities & CAP_UNIX) &&
+	     (server->sec_mode & (SECMODE_SIGN_ENABLED|SECMODE_SIGN_REQUIRED))))
 		wsize = min_t(unsigned int, wsize,
 				server->maxBuf - sizeof(WRITE_REQ) + 4);
 
@@ -764,14 +765,20 @@ smb_set_file_info(struct inode *inode, const char *full_path,
 	}
 	tcon = tlink_tcon(tlink);
 
-	rc = CIFSSMBSetPathInfo(xid, tcon, full_path, buf, cifs_sb->local_nls,
+	/*
+	 * NT4 apparently returns success on this call, but it doesn't really
+	 * work.
+	 */
+	if (!(tcon->ses->flags & CIFS_SES_NT4)) {
+		rc = CIFSSMBSetPathInfo(xid, tcon, full_path, buf,
+					cifs_sb->local_nls,
 					cifs_sb->mnt_cifs_flags &
 						CIFS_MOUNT_MAP_SPECIAL_CHR);
-	if (rc == 0) {
-		cinode->cifsAttrs = le32_to_cpu(buf->Attributes);
-		goto out;
-	} else if (rc != -EOPNOTSUPP && rc != -EINVAL) {
-		goto out;
+		if (rc == 0) {
+			cinode->cifsAttrs = le32_to_cpu(buf->Attributes);
+			goto out;
+		} else if (rc != -EOPNOTSUPP && rc != -EINVAL)
+			goto out;
 	}
 
 	cifs_dbg(FYI, "calling SetFileInfo since SetPathInfo for times not supported by this server\n");
@@ -878,21 +885,6 @@ cifs_mand_lock(const unsigned int xid, struct cifsFileInfo *cfile, __u64 offset,
 			   (__u8)type, wait, 0);
 }
 
-static bool
-cifs_dir_needs_close(struct cifsFileInfo *cfile)
-{
-	return !cfile->srch_inf.endOfSearch && !cfile->invalidHandle;
-}
-
-static bool
-cifs_can_echo(struct TCP_Server_Info *server)
-{
-	if (server->tcpStatus == CifsGood)
-		return true;
-
-	return false;
-}
-
 struct smb_version_operations smb1_operations = {
 	.send_cancel = send_nt_cancel,
 	.compare_fids = cifs_compare_fids,
@@ -925,7 +917,6 @@ struct smb_version_operations smb1_operations = {
 	.get_dfs_refer = CIFSGetDFSRefer,
 	.qfs_tcon = cifs_qfs_tcon,
 	.is_path_accessible = cifs_is_path_accessible,
-	.can_echo = cifs_can_echo,
 	.query_path_info = cifs_query_path_info,
 	.query_file_info = cifs_query_file_info,
 	.get_srv_inum = cifs_get_srv_inum,
@@ -957,15 +948,6 @@ struct smb_version_operations smb1_operations = {
 	.mand_lock = cifs_mand_lock,
 	.mand_unlock_range = cifs_unlock_range,
 	.push_mand_locks = cifs_push_mandatory_locks,
-	.dir_needs_close = cifs_dir_needs_close,
-#ifdef CONFIG_CIFS_XATTR
-	.query_all_EAs = CIFSSMBQAllEAs,
-	.set_EA = CIFSSMBSetEA,
-#endif /* CIFS_XATTR */
-#ifdef CONFIG_CIFS_ACL
-	.get_acl = get_cifs_acl,
-	.set_acl = set_cifs_acl,
-#endif /* CIFS_ACL */
 };
 
 struct smb_version_values smb1_values = {
@@ -982,6 +964,4 @@ struct smb_version_values smb1_values = {
 	.cap_nt_find = CAP_NT_SMBS | CAP_NT_FIND,
 	.cap_large_files = CAP_LARGE_FILES,
 	.oplock_read = OPLOCK_READ,
-	.signing_enabled = SECMODE_SIGN_ENABLED,
-	.signing_required = SECMODE_SIGN_REQUIRED,
 };

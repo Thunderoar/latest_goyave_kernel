@@ -138,7 +138,8 @@ static __u32 cifs_ssetup_hdr(struct cifs_ses *ses, SESSION_SETUP_ANDX *pSMB)
 	capabilities = CAP_LARGE_FILES | CAP_NT_SMBS | CAP_LEVEL_II_OPLOCKS |
 			CAP_LARGE_WRITE_X | CAP_LARGE_READ_X;
 
-	if (ses->server->sign)
+	if (ses->server->sec_mode &
+	    (SECMODE_SIGN_REQUIRED | SECMODE_SIGN_ENABLED))
 		pSMB->req.hdr.Flags2 |= SMBFLG2_SECURITY_SIGNATURE;
 
 	if (ses->capabilities & CAP_UNICODE) {
@@ -309,10 +310,11 @@ decode_unicode_ssetup(char **pbcc_area, int bleft, struct cifs_ses *ses,
 	return;
 }
 
-static void decode_ascii_ssetup(char **pbcc_area, __u16 bleft,
-				struct cifs_ses *ses,
-				const struct nls_table *nls_cp)
+static int decode_ascii_ssetup(char **pbcc_area, __u16 bleft,
+			       struct cifs_ses *ses,
+			       const struct nls_table *nls_cp)
 {
+	int rc = 0;
 	int len;
 	char *bcc_ptr = *pbcc_area;
 
@@ -320,22 +322,24 @@ static void decode_ascii_ssetup(char **pbcc_area, __u16 bleft,
 
 	len = strnlen(bcc_ptr, bleft);
 	if (len >= bleft)
-		return;
+		return rc;
 
 	kfree(ses->serverOS);
 
 	ses->serverOS = kzalloc(len + 1, GFP_KERNEL);
 	if (ses->serverOS)
 		strncpy(ses->serverOS, bcc_ptr, len);
-	if (strncmp(ses->serverOS, "OS/2", 4) == 0)
+	if (strncmp(ses->serverOS, "OS/2", 4) == 0) {
 		cifs_dbg(FYI, "OS/2 server\n");
+			ses->flags |= CIFS_SES_OS2;
+	}
 
 	bcc_ptr += len + 1;
 	bleft -= len + 1;
 
 	len = strnlen(bcc_ptr, bleft);
 	if (len >= bleft)
-		return;
+		return rc;
 
 	kfree(ses->serverNOS);
 
@@ -348,7 +352,7 @@ static void decode_ascii_ssetup(char **pbcc_area, __u16 bleft,
 
 	len = strnlen(bcc_ptr, bleft);
 	if (len > bleft)
-		return;
+		return rc;
 
 	/* No domain field in LANMAN case. Domain is
 	   returned by old servers in the SMB negprot response */
@@ -356,6 +360,8 @@ static void decode_ascii_ssetup(char **pbcc_area, __u16 bleft,
 	   but thus do return domain here we could add parsing
 	   for it later, but it is not very important */
 	cifs_dbg(FYI, "ascii: bytes left %d\n", bleft);
+
+	return rc;
 }
 
 int decode_ntlmssp_challenge(char *bcc_ptr, int blob_len,
@@ -426,7 +432,8 @@ void build_ntlmssp_negotiate_blob(unsigned char *pbuffer,
 	flags = NTLMSSP_NEGOTIATE_56 |	NTLMSSP_REQUEST_TARGET |
 		NTLMSSP_NEGOTIATE_128 | NTLMSSP_NEGOTIATE_UNICODE |
 		NTLMSSP_NEGOTIATE_NTLM | NTLMSSP_NEGOTIATE_EXTENDED_SEC;
-	if (ses->server->sign) {
+	if (ses->server->sec_mode &
+			(SECMODE_SIGN_REQUIRED | SECMODE_SIGN_ENABLED)) {
 		flags |= NTLMSSP_NEGOTIATE_SIGN;
 		if (!ses->server->session_estab)
 			flags |= NTLMSSP_NEGOTIATE_KEY_XCH;
@@ -464,7 +471,8 @@ int build_ntlmssp_auth_blob(unsigned char *pbuffer,
 		NTLMSSP_REQUEST_TARGET | NTLMSSP_NEGOTIATE_TARGET_INFO |
 		NTLMSSP_NEGOTIATE_128 | NTLMSSP_NEGOTIATE_UNICODE |
 		NTLMSSP_NEGOTIATE_NTLM | NTLMSSP_NEGOTIATE_EXTENDED_SEC;
-	if (ses->server->sign) {
+	if (ses->server->sec_mode &
+	   (SECMODE_SIGN_REQUIRED | SECMODE_SIGN_ENABLED)) {
 		flags |= NTLMSSP_NEGOTIATE_SIGN;
 		if (!ses->server->session_estab)
 			flags |= NTLMSSP_NEGOTIATE_KEY_XCH;
@@ -479,27 +487,19 @@ int build_ntlmssp_auth_blob(unsigned char *pbuffer,
 	sec_blob->LmChallengeResponse.MaximumLength = 0;
 
 	sec_blob->NtChallengeResponse.BufferOffset = cpu_to_le32(tmp - pbuffer);
-	if (ses->user_name != NULL) {
-		rc = setup_ntlmv2_rsp(ses, nls_cp);
-		if (rc) {
-			cifs_dbg(VFS, "Error %d during NTLMSSP authentication\n", rc);
-			goto setup_ntlmv2_ret;
-		}
-		memcpy(tmp, ses->auth_key.response + CIFS_SESS_KEY_SIZE,
-				ses->auth_key.len - CIFS_SESS_KEY_SIZE);
-		tmp += ses->auth_key.len - CIFS_SESS_KEY_SIZE;
-
-		sec_blob->NtChallengeResponse.Length =
-				cpu_to_le16(ses->auth_key.len - CIFS_SESS_KEY_SIZE);
-		sec_blob->NtChallengeResponse.MaximumLength =
-				cpu_to_le16(ses->auth_key.len - CIFS_SESS_KEY_SIZE);
-	} else {
-		/*
-		 * don't send an NT Response for anonymous access
-		 */
-		sec_blob->NtChallengeResponse.Length = 0;
-		sec_blob->NtChallengeResponse.MaximumLength = 0;
+	rc = setup_ntlmv2_rsp(ses, nls_cp);
+	if (rc) {
+		cifs_dbg(VFS, "Error %d during NTLMSSP authentication\n", rc);
+		goto setup_ntlmv2_ret;
 	}
+	memcpy(tmp, ses->auth_key.response + CIFS_SESS_KEY_SIZE,
+			ses->auth_key.len - CIFS_SESS_KEY_SIZE);
+	tmp += ses->auth_key.len - CIFS_SESS_KEY_SIZE;
+
+	sec_blob->NtChallengeResponse.Length =
+			cpu_to_le16(ses->auth_key.len - CIFS_SESS_KEY_SIZE);
+	sec_blob->NtChallengeResponse.MaximumLength =
+			cpu_to_le16(ses->auth_key.len - CIFS_SESS_KEY_SIZE);
 
 	if (ses->domainName == NULL) {
 		sec_blob->DomainName.BufferOffset = cpu_to_le32(tmp - pbuffer);
@@ -558,56 +558,6 @@ setup_ntlmv2_ret:
 	return rc;
 }
 
-enum securityEnum
-select_sectype(struct TCP_Server_Info *server, enum securityEnum requested)
-{
-	switch (server->negflavor) {
-	case CIFS_NEGFLAVOR_EXTENDED:
-		switch (requested) {
-		case Kerberos:
-		case RawNTLMSSP:
-			return requested;
-		case Unspecified:
-			if (server->sec_ntlmssp &&
-			    (global_secflags & CIFSSEC_MAY_NTLMSSP))
-				return RawNTLMSSP;
-			if ((server->sec_kerberos || server->sec_mskerberos) &&
-			    (global_secflags & CIFSSEC_MAY_KRB5))
-				return Kerberos;
-			/* Fallthrough */
-		default:
-			return Unspecified;
-		}
-	case CIFS_NEGFLAVOR_UNENCAP:
-		switch (requested) {
-		case NTLM:
-		case NTLMv2:
-			return requested;
-		case Unspecified:
-			if (global_secflags & CIFSSEC_MAY_NTLMV2)
-				return NTLMv2;
-			if (global_secflags & CIFSSEC_MAY_NTLM)
-				return NTLM;
-			/* Fallthrough */
-		default:
-			return Unspecified;
-		}
-	case CIFS_NEGFLAVOR_LANMAN:
-		switch (requested) {
-		case LANMAN:
-			return requested;
-		case Unspecified:
-			if (global_secflags & CIFSSEC_MAY_LANMAN)
-				return LANMAN;
-			/* Fallthrough */
-		default:
-			return Unspecified;
-		}
-	default:
-		return Unspecified;
-	}
-}
-
 int
 CIFS_SessSetup(const unsigned int xid, struct cifs_ses *ses,
 	       const struct nls_table *nls_cp)
@@ -629,18 +579,11 @@ CIFS_SessSetup(const unsigned int xid, struct cifs_ses *ses,
 	u16 blob_len;
 	char *ntlmsspblob = NULL;
 
-	if (ses == NULL) {
-		WARN(1, "%s: ses == NULL!", __func__);
+	if (ses == NULL)
 		return -EINVAL;
-	}
 
-	type = select_sectype(ses->server, ses->sectype);
+	type = ses->server->secType;
 	cifs_dbg(FYI, "sess setup type %d\n", type);
-	if (type == Unspecified) {
-		cifs_dbg(VFS, "Unable to select appropriate authentication method!");
-		return -EINVAL;
-	}
-
 	if (type == RawNTLMSSP) {
 		/* if memory allocation is successful, caller of this function
 		 * frees it.
@@ -700,6 +643,8 @@ ssetup_ntlmssp_authenticate:
 	}
 	bcc_ptr = str_area;
 
+	ses->flags &= ~CIFS_SES_LANMAN;
+
 	iov[1].iov_base = NULL;
 	iov[1].iov_len = 0;
 
@@ -723,6 +668,7 @@ ssetup_ntlmssp_authenticate:
 				 ses->server->sec_mode & SECMODE_PW_ENCRYPT ?
 					true : false, lnm_session_key);
 
+		ses->flags |= CIFS_SES_LANMAN;
 		memcpy(bcc_ptr, (char *)lnm_session_key, CIFS_AUTH_RESP_SIZE);
 		bcc_ptr += CIFS_AUTH_RESP_SIZE;
 
@@ -992,7 +938,8 @@ ssetup_ntlmssp_authenticate:
 		}
 		decode_unicode_ssetup(&bcc_ptr, bytes_remaining, ses, nls_cp);
 	} else {
-		decode_ascii_ssetup(&bcc_ptr, bytes_remaining, ses, nls_cp);
+		rc = decode_ascii_ssetup(&bcc_ptr, bytes_remaining,
+					 ses, nls_cp);
 	}
 
 ssetup_exit:

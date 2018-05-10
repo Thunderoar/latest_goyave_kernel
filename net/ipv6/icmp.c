@@ -399,7 +399,7 @@ static void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info)
 	int err = 0;
 
 	if ((u8 *)hdr < skb->head ||
-	    (skb_network_header(skb) + sizeof(*hdr)) > skb_tail_pointer(skb))
+	    (skb->network_header + sizeof(*hdr)) > skb->tail)
 		return;
 
 	/*
@@ -516,7 +516,7 @@ static void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info)
 			      np->tclass, NULL, &fl6, (struct rt6_info *)dst,
 			      MSG_DONTWAIT, np->dontfrag);
 	if (err) {
-		ICMP6_INC_STATS(net, idev, ICMP6_MIB_OUTERRORS);
+		ICMP6_INC_STATS_BH(net, idev, ICMP6_MIB_OUTERRORS);
 		ip6_flush_pending_frames(sk);
 	} else {
 		err = icmpv6_push_pending_frames(sk, &fl6, &tmp_hdr,
@@ -984,7 +984,7 @@ int icmpv6_err_convert(u8 type, u8 code, int *err)
 EXPORT_SYMBOL(icmpv6_err_convert);
 
 #ifdef CONFIG_SYSCTL
-struct ctl_table ipv6_icmp_table_template[] = {
+ctl_table ipv6_icmp_table_template[] = {
 	{
 		.procname	= "ratelimit",
 		.data		= &init_net.ipv6.sysctl.icmpv6_time,

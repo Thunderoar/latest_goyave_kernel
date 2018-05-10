@@ -27,7 +27,7 @@
  * -Disable all IRQs (on CPU side)
  * -Optionally, setup the High priority Interrupts as Level 2 IRQs
  */
-void arc_init_IRQ(void)
+void __cpuinit arc_init_IRQ(void)
 {
 	int level_mask = 0;
 
@@ -35,9 +35,15 @@ void arc_init_IRQ(void)
 	write_aux_reg(AUX_IENABLE, 0);
 
        /* setup any high priority Interrupts (Level2 in ARCompact jargon) */
-	level_mask |= IS_ENABLED(CONFIG_ARC_IRQ3_LV2) << 3;
-	level_mask |= IS_ENABLED(CONFIG_ARC_IRQ5_LV2) << 5;
-	level_mask |= IS_ENABLED(CONFIG_ARC_IRQ6_LV2) << 6;
+#ifdef CONFIG_ARC_IRQ3_LV2
+	level_mask |= (1 << 3);
+#endif
+#ifdef CONFIG_ARC_IRQ5_LV2
+	level_mask |= (1 << 5);
+#endif
+#ifdef CONFIG_ARC_IRQ6_LV2
+	level_mask |= (1 << 6);
+#endif
 
 	if (level_mask) {
 		pr_info("Level-2 interrupts bitset %x\n", level_mask);

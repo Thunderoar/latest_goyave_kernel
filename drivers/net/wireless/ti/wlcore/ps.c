@@ -110,7 +110,7 @@ int wl1271_ps_elp_wakeup(struct wl1271 *wl)
 	DECLARE_COMPLETION_ONSTACK(compl);
 	unsigned long flags;
 	int ret;
-	unsigned long start_time = jiffies;
+	u32 start_time = jiffies;
 	bool pending = false;
 
 	/*

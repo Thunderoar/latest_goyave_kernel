@@ -325,7 +325,8 @@ static int validate_region_size(struct raid_set *rs, unsigned long region_size)
 		 */
 		if (min_region_size > (1 << 13)) {
 			/* If not a power of 2, make it the next power of 2 */
-			region_size = roundup_pow_of_two(min_region_size);
+			if (min_region_size & (min_region_size - 1))
+				region_size = 1 << fls(region_size);
 			DMINFO("Choosing default region size of %lu sectors",
 			       region_size);
 		} else {
@@ -503,7 +504,7 @@ static int parse_raid_params(struct raid_set *rs, char **argv,
 	 * First, parse the in-order required arguments
 	 * "chunk_size" is the only argument of this type.
 	 */
-	if ((kstrtoul(argv[0], 10, &value) < 0)) {
+	if ((strict_strtoul(argv[0], 10, &value) < 0)) {
 		rs->ti->error = "Bad chunk size";
 		return -EINVAL;
 	} else if (rs->raid_type->level == 1) {
@@ -584,7 +585,7 @@ static int parse_raid_params(struct raid_set *rs, char **argv,
 			continue;
 		}
 
-		if (kstrtoul(argv[i], 10, &value) < 0) {
+		if (strict_strtoul(argv[i], 10, &value) < 0) {
 			rs->ti->error = "Bad numerical argument given in raid params";
 			return -EINVAL;
 		}
@@ -784,7 +785,8 @@ struct dm_raid_superblock {
 	__le32 layout;
 	__le32 stripe_sectors;
 
-	/* Remainder of a logical block is zero-filled when writing (see super_sync()). */
+	__u8 pad[452];		/* Round struct to 512 bytes. */
+				/* Always set to 0 when writing. */
 } __packed;
 
 static int read_disk_sb(struct md_rdev *rdev, int size)
@@ -821,7 +823,7 @@ static void super_sync(struct mddev *mddev, struct md_rdev *rdev)
 		    test_bit(Faulty, &(rs->dev[i].rdev.flags)))
 			failed_devices |= (1ULL << i);
 
-	memset(sb + 1, 0, rdev->sb_size - sizeof(*sb));
+	memset(sb, 0, sizeof(*sb));
 
 	sb->magic = cpu_to_le32(DM_RAID_MAGIC);
 	sb->features = cpu_to_le32(0);	/* No features yet */
@@ -856,11 +858,7 @@ static int super_load(struct md_rdev *rdev, struct md_rdev *refdev)
 	uint64_t events_sb, events_refsb;
 
 	rdev->sb_start = 0;
-	rdev->sb_size = bdev_logical_block_size(rdev->meta_bdev);
-	if (rdev->sb_size < sizeof(*sb) || rdev->sb_size > PAGE_SIZE) {
-		DMERR("superblock size of a logical block is no longer valid");
-		return -EINVAL;
-	}
+	rdev->sb_size = sizeof(*sb);
 
 	ret = read_disk_sb(rdev, rdev->sb_size);
 	if (ret)
@@ -1183,7 +1181,7 @@ static int raid_ctr(struct dm_target *ti, unsigned argc, char **argv)
 	argv++;
 
 	/* number of RAID parameters */
-	if (kstrtoul(argv[0], 10, &num_raid_params) < 0) {
+	if (strict_strtoul(argv[0], 10, &num_raid_params) < 0) {
 		ti->error = "Cannot understand number of RAID parameters";
 		return -EINVAL;
 	}
@@ -1196,7 +1194,7 @@ static int raid_ctr(struct dm_target *ti, unsigned argc, char **argv)
 		return -EINVAL;
 	}
 
-	if ((kstrtoul(argv[num_raid_params], 10, &num_raid_devs) < 0) ||
+	if ((strict_strtoul(argv[num_raid_params], 10, &num_raid_devs) < 0) ||
 	    (num_raid_devs >= INT_MAX)) {
 		ti->error = "Cannot understand number of raid devices";
 		return -EINVAL;
@@ -1390,7 +1388,6 @@ static void raid_status(struct dm_target *ti, status_type_t type,
 		 *   performing a "check" of the array.
 		 */
 		DMEMIT(" %llu",
-		       (strcmp(rs->md.last_sync_action, "check")) ? 0 :
 		       (unsigned long long)
 		       atomic64_read(&rs->md.resync_mismatches));
 		break;
@@ -1575,62 +1572,6 @@ static void raid_postsuspend(struct dm_target *ti)
 	mddev_suspend(&rs->md);
 }
 
-static void attempt_restore_of_faulty_devices(struct raid_set *rs)
-{
-	int i;
-	uint64_t failed_devices, cleared_failed_devices = 0;
-	unsigned long flags;
-	struct dm_raid_superblock *sb;
-	struct md_rdev *r;
-
-	for (i = 0; i < rs->md.raid_disks; i++) {
-		r = &rs->dev[i].rdev;
-		if (test_bit(Faulty, &r->flags) && r->sb_page &&
-		    sync_page_io(r, 0, r->sb_size, r->sb_page, READ, 1)) {
-			DMINFO("Faulty %s device #%d has readable super block."
-			       "  Attempting to revive it.",
-			       rs->raid_type->name, i);
-
-			/*
-			 * Faulty bit may be set, but sometimes the array can
-			 * be suspended before the personalities can respond
-			 * by removing the device from the array (i.e. calling
-			 * 'hot_remove_disk').  If they haven't yet removed
-			 * the failed device, its 'raid_disk' number will be
-			 * '>= 0' - meaning we must call this function
-			 * ourselves.
-			 */
-			if ((r->raid_disk >= 0) &&
-			    (r->mddev->pers->hot_remove_disk(r->mddev, r) != 0))
-				/* Failed to revive this device, try next */
-				continue;
-
-			r->raid_disk = i;
-			r->saved_raid_disk = i;
-			flags = r->flags;
-			clear_bit(Faulty, &r->flags);
-			clear_bit(WriteErrorSeen, &r->flags);
-			clear_bit(In_sync, &r->flags);
-			if (r->mddev->pers->hot_add_disk(r->mddev, r)) {
-				r->raid_disk = -1;
-				r->saved_raid_disk = -1;
-				r->flags = flags;
-			} else {
-				r->recovery_offset = 0;
-				cleared_failed_devices |= 1 << i;
-			}
-		}
-	}
-	if (cleared_failed_devices) {
-		rdev_for_each(r, &rs->md) {
-			sb = page_address(r->sb_page);
-			failed_devices = le64_to_cpu(sb->failed_devices);
-			failed_devices &= ~cleared_failed_devices;
-			sb->failed_devices = cpu_to_le64(failed_devices);
-		}
-	}
-}
-
 static void raid_resume(struct dm_target *ti)
 {
 	struct raid_set *rs = ti->private;
@@ -1639,13 +1580,6 @@ static void raid_resume(struct dm_target *ti)
 	if (!rs->bitmap_loaded) {
 		bitmap_load(&rs->md);
 		rs->bitmap_loaded = 1;
-	} else {
-		/*
-		 * A secondary resume while the device is active.
-		 * Take this opportunity to check whether any failed
-		 * devices are reachable again.
-		 */
-		attempt_restore_of_faulty_devices(rs);
 	}
 
 	clear_bit(MD_RECOVERY_FROZEN, &rs->md.recovery);
@@ -1654,7 +1588,7 @@ static void raid_resume(struct dm_target *ti)
 
 static struct target_type raid_target = {
 	.name = "raid",
-	.version = {1, 5, 2},
+	.version = {1, 5, 0},
 	.module = THIS_MODULE,
 	.ctr = raid_ctr,
 	.dtr = raid_dtr,

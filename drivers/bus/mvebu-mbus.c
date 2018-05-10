@@ -49,8 +49,6 @@
  *   configuration (file 'devices').
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -211,25 +209,12 @@ static void mvebu_mbus_disable_window(struct mvebu_mbus_state *mbus,
 }
 
 /* Checks whether the given window number is available */
-
-/* On Armada XP, 375 and 38x the MBus window 13 has the remap
- * capability, like windows 0 to 7. However, the mvebu-mbus driver
- * isn't currently taking into account this special case, which means
- * that when window 13 is actually used, the remap registers are left
- * to 0, making the device using this MBus window unavailable. The
- * quick fix for stable is to not use window 13. A follow up patch
- * will correctly handle this window.
-*/
 static int mvebu_mbus_window_is_free(struct mvebu_mbus_state *mbus,
 				     const int win)
 {
 	void __iomem *addr = mbus->mbuswins_base +
 		mbus->soc->win_cfg_offset(win);
 	u32 ctrl = readl(addr + WIN_CTRL_OFF);
-
-	if (win == 13)
-		return false;
-
 	return !(ctrl & WIN_CTRL_ENABLE);
 }
 
@@ -264,6 +249,12 @@ static int mvebu_mbus_window_conflicts(struct mvebu_mbus_state *mbus,
 		 * proposed physical range
 		 */
 		if ((u64)base < wend && end > wbase)
+			return 0;
+
+		/*
+		 * Check if target/attribute conflicts
+		 */
+		if (target == wtarget && attr == wattr)
 			return 0;
 	}
 
@@ -771,7 +762,7 @@ int mvebu_mbus_add_window_remap_flags(const char *devname, phys_addr_t base,
 			break;
 
 	if (!s->soc->map[i].name) {
-		pr_err("unknown device '%s'\n", devname);
+		pr_err("mvebu-mbus: unknown device '%s'\n", devname);
 		return -ENODEV;
 	}
 
@@ -784,7 +775,7 @@ int mvebu_mbus_add_window_remap_flags(const char *devname, phys_addr_t base,
 		attr |= 0x28;
 
 	if (!mvebu_mbus_window_conflicts(s, base, size, target, attr)) {
-		pr_err("cannot add window '%s', conflicts with another window\n",
+		pr_err("mvebu-mbus: cannot add window '%s', conflicts with another window\n",
 		       devname);
 		return -EINVAL;
 	}
@@ -840,7 +831,7 @@ fs_initcall(mvebu_mbus_debugfs_init);
 int __init mvebu_mbus_init(const char *soc, phys_addr_t mbuswins_phys_base,
 			   size_t mbuswins_size,
 			   phys_addr_t sdramwins_phys_base,
-			   size_t sdramwins_size, int is_coherent)
+			   size_t sdramwins_size)
 {
 	struct mvebu_mbus_state *mbus = &mbus_state;
 	const struct of_device_id *of_id;
@@ -851,7 +842,7 @@ int __init mvebu_mbus_init(const char *soc, phys_addr_t mbuswins_phys_base,
 			break;
 
 	if (!of_id->compatible) {
-		pr_err("could not find a matching SoC family\n");
+		pr_err("mvebu-mbus: could not find a matching SoC family\n");
 		return -ENODEV;
 	}
 
@@ -867,7 +858,8 @@ int __init mvebu_mbus_init(const char *soc, phys_addr_t mbuswins_phys_base,
 		return -ENOMEM;
 	}
 
-	mbus->hw_io_coherency = is_coherent;
+	if (of_find_compatible_node(NULL, NULL, "marvell,coherency-fabric"))
+		mbus->hw_io_coherency = 1;
 
 	for (win = 0; win < mbus->soc->num_wins; win++)
 		mvebu_mbus_disable_window(mbus, win);

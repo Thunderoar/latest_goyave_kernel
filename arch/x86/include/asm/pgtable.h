@@ -415,16 +415,9 @@ static inline int pte_present(pte_t a)
 }
 
 #define pte_accessible pte_accessible
-static inline bool pte_accessible(struct mm_struct *mm, pte_t a)
+static inline int pte_accessible(pte_t a)
 {
-	if (pte_flags(a) & _PAGE_PRESENT)
-		return true;
-
-	if ((pte_flags(a) & (_PAGE_PROTNONE | _PAGE_NUMA)) &&
-			mm_tlb_flush_pending(mm))
-		return true;
-
-	return false;
+	return pte_flags(a) & _PAGE_PRESENT;
 }
 
 static inline int pte_hidden(pte_t pte)
@@ -512,6 +505,9 @@ static inline unsigned long pages_to_mb(unsigned long npg)
 {
 	return npg >> (20 - PAGE_SHIFT);
 }
+
+#define io_remap_pfn_range(vma, vaddr, pfn, size, prot)	\
+	remap_pfn_range(vma, vaddr, pfn, size, prot)
 
 #if PAGETABLE_LEVELS > 2
 static inline int pud_none(pud_t pud)

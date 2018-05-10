@@ -220,7 +220,7 @@ static int exynos5440_dt_node_to_map(struct pinctrl_dev *pctldev,
 		dev_err(dev, "failed to alloc memory for group name\n");
 		goto free_map;
 	}
-	snprintf(gname, strlen(np->name) + 4, "%s%s", np->name, GROUP_SUFFIX);
+	sprintf(gname, "%s%s", np->name, GROUP_SUFFIX);
 
 	/*
 	 * don't have config options? then skip over to creating function
@@ -259,8 +259,7 @@ skip_cfgs:
 			dev_err(dev, "failed to alloc memory for func name\n");
 			goto free_cfg;
 		}
-		snprintf(fname, strlen(np->name) + 4, "%s%s", np->name,
-			 FUNCTION_SUFFIX);
+		sprintf(fname, "%s%s", np->name, FUNCTION_SUFFIX);
 
 		map[*nmaps].data.mux.group = gname;
 		map[*nmaps].data.mux.function = fname;
@@ -714,8 +713,7 @@ static int exynos5440_pinctrl_parse_dt(struct platform_device *pdev,
 			dev_err(dev, "failed to alloc memory for group name\n");
 			return -ENOMEM;
 		}
-		snprintf(gname, strlen(cfg_np->name) + 4, "%s%s", cfg_np->name,
-			 GROUP_SUFFIX);
+		sprintf(gname, "%s%s", cfg_np->name, GROUP_SUFFIX);
 
 		grp->name = gname;
 		grp->pins = pin_list;
@@ -735,8 +733,7 @@ skip_to_pin_function:
 			dev_err(dev, "failed to alloc memory for func name\n");
 			return -ENOMEM;
 		}
-		snprintf(fname, strlen(cfg_np->name) + 4, "%s%s", cfg_np->name,
-			 FUNCTION_SUFFIX);
+		sprintf(fname, "%s%s", cfg_np->name, FUNCTION_SUFFIX);
 
 		func->name = fname;
 		func->groups = devm_kzalloc(dev, sizeof(char *), GFP_KERNEL);
@@ -809,7 +806,7 @@ static int exynos5440_pinctrl_register(struct platform_device *pdev,
 
 	/* for each pin, set the name of the pin */
 	for (pin = 0; pin < ctrldesc->npins; pin++) {
-		snprintf(pin_names, 6, "gpio%02d", pin);
+		sprintf(pin_names, "gpio%02d", pin);
 		pdesc = pindesc + pin;
 		pdesc->name = pin_names;
 		pin_names += PIN_NAME_LENGTH;

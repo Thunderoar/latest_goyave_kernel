@@ -143,8 +143,7 @@ static int ceph_set_page_dirty(struct page *page)
  * dirty page counters appropriately.  Only called if there is private
  * data on the page.
  */
-static void ceph_invalidatepage(struct page *page, unsigned int offset,
-				unsigned int length)
+static void ceph_invalidatepage(struct page *page, unsigned long offset)
 {
 	struct inode *inode;
 	struct ceph_inode_info *ci;
@@ -164,20 +163,20 @@ static void ceph_invalidatepage(struct page *page, unsigned int offset,
 	if (!PageDirty(page))
 		pr_err("%p invalidatepage %p page not dirty\n", inode, page);
 
-	if (offset == 0 && length == PAGE_CACHE_SIZE)
+	if (offset == 0)
 		ClearPageChecked(page);
 
 	ci = ceph_inode(inode);
-	if (offset == 0 && length == PAGE_CACHE_SIZE) {
-		dout("%p invalidatepage %p idx %lu full dirty page\n",
-		     inode, page, page->index);
+	if (offset == 0) {
+		dout("%p invalidatepage %p idx %lu full dirty page %lu\n",
+		     inode, page, page->index, offset);
 		ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
 		ceph_put_snap_context(snapc);
 		page->private = 0;
 		ClearPagePrivate(page);
 	} else {
-		dout("%p invalidatepage %p idx %lu partial dirty page %u(%u)\n",
-		     inode, page, page->index, offset, length);
+		dout("%p invalidatepage %p idx %lu partial dirty page\n",
+		     inode, page, page->index);
 	}
 }
 
@@ -214,13 +213,9 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 	if (err < 0) {
 		SetPageError(page);
 		goto out;
-	} else {
-		if (err < PAGE_CACHE_SIZE) {
+	} else if (err < PAGE_CACHE_SIZE) {
 		/* zero fill remainder of page */
-			zero_user_segment(page, err, PAGE_CACHE_SIZE);
-		} else {
-			flush_dcache_page(page);
-		}
+		zero_user_segment(page, err, PAGE_CACHE_SIZE);
 	}
 	SetPageUptodate(page);
 

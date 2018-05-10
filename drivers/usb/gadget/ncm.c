@@ -24,7 +24,6 @@
 #include <linux/usb/composite.h>
 
 #include "u_ether.h"
-#include "u_ncm.h"
 
 #define DRIVER_DESC		"NCM Gadget"
 
@@ -119,8 +118,6 @@ static u8 hostaddr[ETH_ALEN];
 
 static int __init ncm_do_config(struct usb_configuration *c)
 {
-	int status;
-
 	/* FIXME alloc iConfiguration string, set it in c->strings */
 
 	if (gadget_is_otg(c->cdev->gadget)) {
@@ -144,7 +141,6 @@ static struct usb_configuration ncm_config_driver = {
 static int __init gncm_bind(struct usb_composite_dev *cdev)
 {
 	struct usb_gadget	*gadget = cdev->gadget;
-	struct f_ncm_opts	*ncm_opts;
 	int			status;
 
 	/* set up network link layer */
@@ -173,16 +169,13 @@ static int __init gncm_bind(struct usb_composite_dev *cdev)
 	return 0;
 
 fail:
-	usb_put_function_instance(f_ncm_inst);
+	gether_cleanup(the_dev);
 	return status;
 }
 
 static int __exit gncm_unbind(struct usb_composite_dev *cdev)
 {
-	if (!IS_ERR_OR_NULL(f_ncm))
-		usb_put_function(f_ncm);
-	if (!IS_ERR_OR_NULL(f_ncm_inst))
-		usb_put_function_instance(f_ncm_inst);
+	gether_cleanup(the_dev);
 	return 0;
 }
 

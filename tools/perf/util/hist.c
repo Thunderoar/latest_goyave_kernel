@@ -70,17 +70,9 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 	int symlen;
 	u16 len;
 
-	/*
-	 * +4 accounts for '[x] ' priv level info
-	 * +2 accounts for 0x prefix on raw addresses
-	 * +3 accounts for ' y ' symtab origin info
-	 */
-	if (h->ms.sym) {
-		symlen = h->ms.sym->namelen + 4;
-		if (verbose)
-			symlen += BITS_PER_LONG / 4 + 2 + 3;
-		hists__new_col_len(hists, HISTC_SYMBOL, symlen);
-	} else {
+	if (h->ms.sym)
+		hists__new_col_len(hists, HISTC_SYMBOL, h->ms.sym->namelen + 4);
+	else {
 		symlen = unresolved_col_width + 4 + 2;
 		hists__new_col_len(hists, HISTC_SYMBOL, symlen);
 		hists__set_unres_dso_col_len(hists, HISTC_DSO);
@@ -99,10 +91,12 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 		hists__new_col_len(hists, HISTC_PARENT, h->parent->namelen);
 
 	if (h->branch_info) {
+		/*
+		 * +4 accounts for '[x] ' priv level info
+		 * +2 account of 0x prefix on raw addresses
+		 */
 		if (h->branch_info->from.sym) {
 			symlen = (int)h->branch_info->from.sym->namelen + 4;
-			if (verbose)
-				symlen += BITS_PER_LONG / 4 + 2 + 3;
 			hists__new_col_len(hists, HISTC_SYMBOL_FROM, symlen);
 
 			symlen = dso__name_len(h->branch_info->from.map->dso);
@@ -115,8 +109,6 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 
 		if (h->branch_info->to.sym) {
 			symlen = (int)h->branch_info->to.sym->namelen + 4;
-			if (verbose)
-				symlen += BITS_PER_LONG / 4 + 2 + 3;
 			hists__new_col_len(hists, HISTC_SYMBOL_TO, symlen);
 
 			symlen = dso__name_len(h->branch_info->to.map->dso);
@@ -129,6 +121,10 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 	}
 
 	if (h->mem_info) {
+		/*
+		 * +4 accounts for '[x] ' priv level info
+		 * +2 account of 0x prefix on raw addresses
+		 */
 		if (h->mem_info->daddr.sym) {
 			symlen = (int)h->mem_info->daddr.sym->namelen + 4
 			       + unresolved_col_width + 2;
@@ -240,7 +236,8 @@ static bool hists__decay_entry(struct hists *hists, struct hist_entry *he)
 	return he->stat.period == 0;
 }
 
-void hists__decay_entries(struct hists *hists, bool zap_user, bool zap_kernel)
+static void __hists__decay_entries(struct hists *hists, bool zap_user,
+				   bool zap_kernel, bool threaded)
 {
 	struct rb_node *next = rb_first(&hists->entries);
 	struct hist_entry *n;
@@ -259,13 +256,24 @@ void hists__decay_entries(struct hists *hists, bool zap_user, bool zap_kernel)
 		    !n->used) {
 			rb_erase(&n->rb_node, &hists->entries);
 
-			if (sort__need_collapse)
+			if (sort__need_collapse || threaded)
 				rb_erase(&n->rb_node_in, &hists->entries_collapsed);
 
 			hist_entry__free(n);
 			--hists->nr_entries;
 		}
 	}
+}
+
+void hists__decay_entries(struct hists *hists, bool zap_user, bool zap_kernel)
+{
+	return __hists__decay_entries(hists, zap_user, zap_kernel, false);
+}
+
+void hists__decay_entries_threaded(struct hists *hists,
+				   bool zap_user, bool zap_kernel)
+{
+	return __hists__decay_entries(hists, zap_user, zap_kernel, true);
 }
 
 /*
@@ -284,20 +292,6 @@ static struct hist_entry *hist_entry__new(struct hist_entry *template)
 			he->ms.map->referenced = true;
 
 		if (he->branch_info) {
-			/*
-			 * This branch info is (a part of) allocated from
-			 * machine__resolve_bstack() and will be freed after
-			 * adding new entries.  So we need to save a copy.
-			 */
-			he->branch_info = malloc(sizeof(*he->branch_info));
-			if (he->branch_info == NULL) {
-				free(he);
-				return NULL;
-			}
-
-			memcpy(he->branch_info, template->branch_info,
-			       sizeof(*he->branch_info));
-
 			if (he->branch_info->from.map)
 				he->branch_info->from.map->referenced = true;
 			if (he->branch_info->to.map)
@@ -347,6 +341,8 @@ static struct hist_entry *add_hist_entry(struct hists *hists,
 	struct hist_entry *he;
 	int cmp;
 
+	pthread_mutex_lock(&hists->lock);
+
 	p = &hists->entries_in->rb_node;
 
 	while (*p != NULL) {
@@ -363,12 +359,6 @@ static struct hist_entry *add_hist_entry(struct hists *hists,
 
 		if (!cmp) {
 			he_stat__add_period(&he->stat, period, weight);
-
-			/*
-			 * This mem info was allocated from machine__resolve_mem
-			 * and will not be used anymore.
-			 */
-			free(entry->mem_info);
 
 			/* If the map of an existing hist_entry has
 			 * become out-of-date due to an exec() or
@@ -392,12 +382,14 @@ static struct hist_entry *add_hist_entry(struct hists *hists,
 
 	he = hist_entry__new(entry);
 	if (!he)
-		return NULL;
+		goto out_unlock;
 
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node_in, hists->entries_in);
 out:
 	hist_entry__add_cpumode_period(he, al->cpumode, period);
+out_unlock:
+	pthread_mutex_unlock(&hists->lock);
 	return he;
 }
 
@@ -597,13 +589,13 @@ static void hists__apply_filters(struct hists *hists, struct hist_entry *he)
 	hists__filter_entry_by_symbol(hists, he);
 }
 
-void hists__collapse_resort(struct hists *hists)
+static void __hists__collapse_resort(struct hists *hists, bool threaded)
 {
 	struct rb_root *root;
 	struct rb_node *next;
 	struct hist_entry *n;
 
-	if (!sort__need_collapse)
+	if (!sort__need_collapse && !threaded)
 		return;
 
 	root = hists__get_rotate_entries_in(hists);
@@ -623,6 +615,16 @@ void hists__collapse_resort(struct hists *hists)
 			hists__apply_filters(hists, n);
 		}
 	}
+}
+
+void hists__collapse_resort(struct hists *hists)
+{
+	return __hists__collapse_resort(hists, false);
+}
+
+void hists__collapse_resort_threaded(struct hists *hists)
+{
+	return __hists__collapse_resort(hists, true);
 }
 
 /*
@@ -711,7 +713,7 @@ static void __hists__insert_output_entry(struct rb_root *entries,
 	rb_insert_color(&he->rb_node, entries);
 }
 
-void hists__output_resort(struct hists *hists)
+static void __hists__output_resort(struct hists *hists, bool threaded)
 {
 	struct rb_root *root;
 	struct rb_node *next;
@@ -720,7 +722,7 @@ void hists__output_resort(struct hists *hists)
 
 	min_callchain_hits = hists->stats.total_period * (callchain_param.min_percent / 100);
 
-	if (sort__need_collapse)
+	if (sort__need_collapse || threaded)
 		root = &hists->entries_collapsed;
 	else
 		root = hists->entries_in;
@@ -739,6 +741,16 @@ void hists__output_resort(struct hists *hists)
 		__hists__insert_output_entry(&hists->entries, n, min_callchain_hits);
 		hists__inc_nr_entries(hists, n);
 	}
+}
+
+void hists__output_resort(struct hists *hists)
+{
+	return __hists__output_resort(hists, false);
+}
+
+void hists__output_resort_threaded(struct hists *hists)
+{
+	return __hists__output_resort(hists, true);
 }
 
 static void hists__remove_entry_filter(struct hists *hists, struct hist_entry *h,

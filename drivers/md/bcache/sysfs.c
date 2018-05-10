@@ -9,9 +9,7 @@
 #include "sysfs.h"
 #include "btree.h"
 #include "request.h"
-#include "writeback.h"
 
-#include <linux/blkdev.h>
 #include <linux/sort.h>
 
 static const char * const cache_replacement_policies[] = {
@@ -81,9 +79,6 @@ rw_attribute(writeback_rate_p_term_inverse);
 rw_attribute(writeback_rate_d_smooth);
 read_attribute(writeback_rate_debug);
 
-read_attribute(stripe_size);
-read_attribute(partial_stripes_expensive);
-
 rw_attribute(synchronous);
 rw_attribute(journal_delay_ms);
 rw_attribute(discard);
@@ -132,7 +127,7 @@ SHOW(__bch_cached_dev)
 		char derivative[20];
 		char target[20];
 		bch_hprint(dirty,
-			   bcache_dev_sectors_dirty(&dc->disk) << 9);
+		       atomic_long_read(&dc->disk.sectors_dirty) << 9);
 		bch_hprint(derivative,	dc->writeback_rate_derivative << 9);
 		bch_hprint(target,	dc->writeback_rate_target << 9);
 
@@ -148,10 +143,7 @@ SHOW(__bch_cached_dev)
 	}
 
 	sysfs_hprint(dirty_data,
-		     bcache_dev_sectors_dirty(&dc->disk) << 9);
-
-	sysfs_hprint(stripe_size,	(1 << dc->disk.stripe_size_bits) << 9);
-	var_printf(partial_stripes_expensive,	"%u");
+		     atomic_long_read(&dc->disk.sectors_dirty) << 9);
 
 	var_printf(sequential_merge,	"%i");
 	var_hprint(sequential_cutoff);
@@ -178,7 +170,6 @@ STORE(__cached_dev)
 					     disk.kobj);
 	unsigned v = size;
 	struct cache_set *c;
-	struct kobj_uevent_env *env;
 
 #define d_strtoul(var)		sysfs_strtoul(var, dc->var)
 #define d_strtoi_h(var)		sysfs_hatoi(var, dc->var)
@@ -223,21 +214,19 @@ STORE(__cached_dev)
 	}
 
 	if (attr == &sysfs_label) {
-		/* note: endlines are preserved */
-		memcpy(dc->sb.label, buf, SB_LABEL_SIZE);
+		if (size > SB_LABEL_SIZE)
+			return -EINVAL;
+		memcpy(dc->sb.label, buf, size);
+		if (size < SB_LABEL_SIZE)
+			dc->sb.label[size] = '\0';
+		if (size && dc->sb.label[size - 1] == '\n')
+			dc->sb.label[size - 1] = '\0';
 		bch_write_bdev_super(dc, NULL);
 		if (dc->disk.c) {
 			memcpy(dc->disk.c->uuids[dc->disk.id].label,
 			       buf, SB_LABEL_SIZE);
 			bch_uuid_write(dc->disk.c);
 		}
-		env = kzalloc(sizeof(struct kobj_uevent_env), GFP_KERNEL);
-		add_uevent_var(env, "DRIVER=bcache");
-		add_uevent_var(env, "CACHED_UUID=%pU", dc->sb.uuid),
-		add_uevent_var(env, "CACHED_LABEL=%s", buf);
-		kobject_uevent_env(
-			&disk_to_dev(dc->disk.disk)->kobj, KOBJ_CHANGE, env->envp);
-		kfree(env);
 	}
 
 	if (attr == &sysfs_attach) {
@@ -301,8 +290,6 @@ static struct attribute *bch_cached_dev_files[] = {
 	&sysfs_writeback_rate_d_smooth,
 	&sysfs_writeback_rate_debug,
 	&sysfs_dirty_data,
-	&sysfs_stripe_size,
-	&sysfs_partial_stripes_expensive,
 	&sysfs_sequential_cutoff,
 	&sysfs_sequential_merge,
 	&sysfs_clear_stats,
@@ -684,10 +671,12 @@ SHOW(__bch_cache)
 		int cmp(const void *l, const void *r)
 		{	return *((uint16_t *) r) - *((uint16_t *) l); }
 
+		/* Number of quantiles we compute */
+		const unsigned nq = 31;
+
 		size_t n = ca->sb.nbuckets, i, unused, btree;
 		uint64_t sum = 0;
-		/* Compute 31 quantiles */
-		uint16_t q[31], *p, *cached;
+		uint16_t q[nq], *p, *cached;
 		ssize_t ret;
 
 		cached = p = vmalloc(ca->sb.nbuckets * sizeof(uint16_t));
@@ -720,29 +709,26 @@ SHOW(__bch_cache)
 		if (n)
 			do_div(sum, n);
 
-		for (i = 0; i < ARRAY_SIZE(q); i++)
-			q[i] = INITIAL_PRIO - cached[n * (i + 1) /
-				(ARRAY_SIZE(q) + 1)];
+		for (i = 0; i < nq; i++)
+			q[i] = INITIAL_PRIO - cached[n * (i + 1) / (nq + 1)];
 
 		vfree(p);
 
-		ret = scnprintf(buf, PAGE_SIZE,
-				"Unused:		%zu%%\n"
-				"Metadata:	%zu%%\n"
-				"Average:	%llu\n"
-				"Sectors per Q:	%zu\n"
-				"Quantiles:	[",
-				unused * 100 / (size_t) ca->sb.nbuckets,
-				btree * 100 / (size_t) ca->sb.nbuckets, sum,
-				n * ca->sb.bucket_size / (ARRAY_SIZE(q) + 1));
+		ret = snprintf(buf, PAGE_SIZE,
+			       "Unused:		%zu%%\n"
+			       "Metadata:	%zu%%\n"
+			       "Average:	%llu\n"
+			       "Sectors per Q:	%zu\n"
+			       "Quantiles:	[",
+			       unused * 100 / (size_t) ca->sb.nbuckets,
+			       btree * 100 / (size_t) ca->sb.nbuckets, sum,
+			       n * ca->sb.bucket_size / (nq + 1));
 
-		for (i = 0; i < ARRAY_SIZE(q); i++)
-			ret += scnprintf(buf + ret, PAGE_SIZE - ret,
-					 "%u ", q[i]);
-		ret--;
+		for (i = 0; i < nq && ret < (ssize_t) PAGE_SIZE; i++)
+			ret += snprintf(buf + ret, PAGE_SIZE - ret,
+					i < nq - 1 ? "%u " : "%u]\n", q[i]);
 
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "]\n");
-
+		buf[PAGE_SIZE - 1] = '\0';
 		return ret;
 	}
 

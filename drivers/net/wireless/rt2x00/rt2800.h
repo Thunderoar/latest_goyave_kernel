@@ -100,7 +100,7 @@
 #define CSR_REG_BASE			0x1000
 #define CSR_REG_SIZE			0x0800
 #define EEPROM_BASE			0x0000
-#define EEPROM_SIZE			0x0200
+#define EEPROM_SIZE			0x0110
 #define BBP_BASE			0x0000
 #define BBP_SIZE			0x00ff
 #define RF_BASE				0x0004
@@ -1920,7 +1920,7 @@ struct mac_iveiv_entry {
  * 2 - drop tx power by 12dBm,
  * 3 - increase tx power by 6dBm
  */
-#define BBP1_TX_POWER_CTRL		FIELD8(0x03)
+#define BBP1_TX_POWER_CTRL		FIELD8(0x07)
 #define BBP1_TX_ANTENNA			FIELD8(0x18)
 
 /*
@@ -2625,13 +2625,11 @@ struct mac_iveiv_entry {
 /*
  * DMA descriptor defines.
  */
+#define TXWI_DESC_SIZE			(4 * sizeof(__le32))
+#define RXWI_DESC_SIZE			(4 * sizeof(__le32))
 
-#define TXWI_DESC_SIZE_4WORDS		(4 * sizeof(__le32))
-#define TXWI_DESC_SIZE_5WORDS		(5 * sizeof(__le32))
-
-#define RXWI_DESC_SIZE_4WORDS		(4 * sizeof(__le32))
-#define RXWI_DESC_SIZE_6WORDS		(6 * sizeof(__le32))
-
+#define TXWI_DESC_SIZE_5592		(5 * sizeof(__le32))
+#define RXWI_DESC_SIZE_5592		(6 * sizeof(__le32))
 /*
  * TX WI structure
  */

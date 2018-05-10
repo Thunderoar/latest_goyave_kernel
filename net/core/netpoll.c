@@ -12,7 +12,6 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/moduleparam.h>
-#include <linux/kernel.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/string.h>
@@ -248,7 +247,7 @@ static void netpoll_poll_dev(struct net_device *dev)
 	zap_completion_queue();
 }
 
-void netpoll_rx_disable(struct net_device *dev)
+int netpoll_rx_disable(struct net_device *dev)
 {
 	struct netpoll_info *ni;
 	int idx;
@@ -258,6 +257,7 @@ void netpoll_rx_disable(struct net_device *dev)
 	if (ni)
 		down(&ni->dev_lock);
 	srcu_read_unlock(&netpoll_srcu, idx);
+	return 0;
 }
 EXPORT_SYMBOL(netpoll_rx_disable);
 
@@ -386,14 +386,8 @@ void netpoll_send_skb_on_dev(struct netpoll *np, struct sk_buff *skb,
 					    !vlan_hw_offload_capable(netif_skb_features(skb),
 								     skb->vlan_proto)) {
 						skb = __vlan_put_tag(skb, skb->vlan_proto, vlan_tx_tag_get(skb));
-						if (unlikely(!skb)) {
-							/* This is actually a packet drop, but we
-							 * don't want the code at the end of this
-							 * function to try and re-queue a NULL skb.
-							 */
-							status = NETDEV_TX_OK;
-							goto unlock_txq;
-						}
+						if (unlikely(!skb))
+							break;
 						skb->vlan_tci = 0;
 					}
 
@@ -401,7 +395,6 @@ void netpoll_send_skb_on_dev(struct netpoll *np, struct sk_buff *skb,
 					if (status == NETDEV_TX_OK)
 						txq_trans_update(txq);
 				}
-			unlock_txq:
 				__netif_tx_unlock(txq);
 
 				if (status == NETDEV_TX_OK)
@@ -697,20 +690,25 @@ static void netpoll_neigh_reply(struct sk_buff *skb, struct netpoll_info *npinfo
 			send_skb->dev = skb->dev;
 
 			skb_reset_network_header(send_skb);
-			hdr = (struct ipv6hdr *) skb_put(send_skb, sizeof(struct ipv6hdr));
+			skb_put(send_skb, sizeof(struct ipv6hdr));
+			hdr = ipv6_hdr(send_skb);
+
 			*(__be32*)hdr = htonl(0x60000000);
+
 			hdr->payload_len = htons(size);
 			hdr->nexthdr = IPPROTO_ICMPV6;
 			hdr->hop_limit = 255;
 			hdr->saddr = *saddr;
 			hdr->daddr = *daddr;
 
-			icmp6h = (struct icmp6hdr *) skb_put(send_skb, sizeof(struct icmp6hdr));
+			send_skb->transport_header = send_skb->tail;
+			skb_put(send_skb, size);
+
+			icmp6h = (struct icmp6hdr *)skb_transport_header(skb);
 			icmp6h->icmp6_type = NDISC_NEIGHBOUR_ADVERTISEMENT;
 			icmp6h->icmp6_router = 0;
 			icmp6h->icmp6_solicited = 1;
-
-			target = (struct in6_addr *) skb_put(send_skb, sizeof(struct in6_addr));
+			target = (struct in6_addr *)(skb_transport_header(send_skb) + sizeof(struct icmp6hdr));
 			*target = msg->target;
 			icmp6h->icmp6_cksum = csum_ipv6_magic(saddr, daddr, size,
 							      IPPROTO_ICMPV6,
@@ -740,7 +738,7 @@ static bool pkt_is_ns(struct sk_buff *skb)
 	struct nd_msg *msg;
 	struct ipv6hdr *hdr;
 
-	if (skb->protocol != htons(ETH_P_IPV6))
+	if (skb->protocol != htons(ETH_P_ARP))
 		return false;
 	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr) + sizeof(struct nd_msg)))
 		return false;
@@ -943,7 +941,6 @@ int netpoll_parse_options(struct netpoll *np, char *opt)
 {
 	char *cur=opt, *delim;
 	int ipv6;
-	bool ipversion_set = false;
 
 	if (*cur != '@') {
 		if ((delim = strchr(cur, '@')) == NULL)
@@ -956,7 +953,6 @@ int netpoll_parse_options(struct netpoll *np, char *opt)
 	cur++;
 
 	if (*cur != '/') {
-		ipversion_set = true;
 		if ((delim = strchr(cur, '/')) == NULL)
 			goto parse_failed;
 		*delim = 0;
@@ -999,7 +995,7 @@ int netpoll_parse_options(struct netpoll *np, char *opt)
 	ipv6 = netpoll_parse_ip_addr(cur, &np->remote_ip);
 	if (ipv6 < 0)
 		goto parse_failed;
-	else if (ipversion_set && np->ipv6 != (bool)ipv6)
+	else if (np->ipv6 != (bool)ipv6)
 		goto parse_failed;
 	else
 		np->ipv6 = (bool)ipv6;

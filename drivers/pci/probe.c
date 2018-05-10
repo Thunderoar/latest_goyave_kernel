@@ -170,7 +170,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 {
 	u32 l, sz, mask;
 	u16 orig_cmd;
-	struct pci_bus_region region, inverted_region;
+	struct pci_bus_region region;
 	bool bar_too_big = false, bar_disabled = false;
 
 	mask = type ? PCI_ROM_ADDRESS_MASK : ~0;
@@ -210,17 +210,14 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 		res->flags |= IORESOURCE_SIZEALIGN;
 		if (res->flags & IORESOURCE_IO) {
 			l &= PCI_BASE_ADDRESS_IO_MASK;
-			sz &= PCI_BASE_ADDRESS_IO_MASK;
 			mask = PCI_BASE_ADDRESS_IO_MASK & (u32) IO_SPACE_LIMIT;
 		} else {
 			l &= PCI_BASE_ADDRESS_MEM_MASK;
-			sz &= PCI_BASE_ADDRESS_MEM_MASK;
 			mask = (u32)PCI_BASE_ADDRESS_MEM_MASK;
 		}
 	} else {
 		res->flags |= (l & IORESOURCE_ROM_ENABLE);
 		l &= PCI_ROM_ADDRESS_MASK;
-		sz &= PCI_ROM_ADDRESS_MASK;
 		mask = (u32)PCI_ROM_ADDRESS_MASK;
 	}
 
@@ -253,10 +250,12 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 			pci_write_config_dword(dev, pos + 4, 0);
 			region.start = 0;
 			region.end = sz64;
+			pcibios_bus_to_resource(dev, res, &region);
 			bar_disabled = true;
 		} else {
 			region.start = l64;
 			region.end = l64 + sz64;
+			pcibios_bus_to_resource(dev, res, &region);
 		}
 	} else {
 		sz = pci_size(l, sz, mask);
@@ -266,28 +265,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 
 		region.start = l;
 		region.end = l + sz;
-	}
-
-	pcibios_bus_to_resource(dev, res, &region);
-	pcibios_resource_to_bus(dev, &inverted_region, res);
-
-	/*
-	 * If "A" is a BAR value (a bus address), "bus_to_resource(A)" is
-	 * the corresponding resource address (the physical address used by
-	 * the CPU.  Converting that resource address back to a bus address
-	 * should yield the original BAR value:
-	 *
-	 *     resource_to_bus(bus_to_resource(A)) == A
-	 *
-	 * If it doesn't, CPU accesses to "bus_to_resource(A)" will not
-	 * be claimed by the device.
-	 */
-	if (inverted_region.start != region.start) {
-		dev_info(&dev->dev, "reg 0x%x: initial BAR value %pa invalid; forcing reassignment\n",
-			 pos, &region.start);
-		res->flags |= IORESOURCE_UNSET;
-		res->end -= res->start;
-		res->start = 0;
+		pcibios_bus_to_resource(dev, res, &region);
 	}
 
 	goto out;
@@ -300,9 +278,9 @@ out:
 		pci_write_config_word(dev, PCI_COMMAND, orig_cmd);
 
 	if (bar_too_big)
-		dev_err(&dev->dev, "reg 0x%x: can't handle 64-bit BAR\n", pos);
+		dev_err(&dev->dev, "reg %x: can't handle 64-bit BAR\n", pos);
 	if (res->flags && !bar_disabled)
-		dev_printk(KERN_DEBUG, &dev->dev, "reg 0x%x: %pR\n", pos, res);
+		dev_printk(KERN_DEBUG, &dev->dev, "reg %x: %pR\n", pos, res);
 
 	return (res->flags & IORESOURCE_MEM_64) ? 1 : 0;
 }
@@ -310,9 +288,6 @@ out:
 static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 {
 	unsigned int pos, reg;
-
-	if (dev->non_compliant_bars)
-		return;
 
 	for (pos = 0; pos < howmany; pos++) {
 		struct resource *res = &dev->resource[pos];
@@ -476,34 +451,21 @@ void pci_read_bridge_bases(struct pci_bus *child)
 	}
 }
 
-static struct pci_bus *pci_alloc_bus(void)
+static struct pci_bus * pci_alloc_bus(void)
 {
 	struct pci_bus *b;
 
 	b = kzalloc(sizeof(*b), GFP_KERNEL);
-	if (!b)
-		return NULL;
-
-	INIT_LIST_HEAD(&b->node);
-	INIT_LIST_HEAD(&b->children);
-	INIT_LIST_HEAD(&b->devices);
-	INIT_LIST_HEAD(&b->slots);
-	INIT_LIST_HEAD(&b->resources);
-	b->max_bus_speed = PCI_SPEED_UNKNOWN;
-	b->cur_bus_speed = PCI_SPEED_UNKNOWN;
+	if (b) {
+		INIT_LIST_HEAD(&b->node);
+		INIT_LIST_HEAD(&b->children);
+		INIT_LIST_HEAD(&b->devices);
+		INIT_LIST_HEAD(&b->slots);
+		INIT_LIST_HEAD(&b->resources);
+		b->max_bus_speed = PCI_SPEED_UNKNOWN;
+		b->cur_bus_speed = PCI_SPEED_UNKNOWN;
+	}
 	return b;
-}
-
-static void pci_release_host_bridge_dev(struct device *dev)
-{
-	struct pci_host_bridge *bridge = to_pci_host_bridge(dev);
-
-	if (bridge->release_fn)
-		bridge->release_fn(bridge);
-
-	pci_free_resource_list(&bridge->windows);
-
-	kfree(bridge);
 }
 
 static struct pci_host_bridge *pci_alloc_host_bridge(struct pci_bus *b)
@@ -511,11 +473,11 @@ static struct pci_host_bridge *pci_alloc_host_bridge(struct pci_bus *b)
 	struct pci_host_bridge *bridge;
 
 	bridge = kzalloc(sizeof(*bridge), GFP_KERNEL);
-	if (!bridge)
-		return NULL;
+	if (bridge) {
+		INIT_LIST_HEAD(&bridge->windows);
+		bridge->bus = b;
+	}
 
-	INIT_LIST_HEAD(&bridge->windows);
-	bridge->bus = b;
 	return bridge;
 }
 
@@ -1016,7 +978,6 @@ void set_pcie_hotplug_bridge(struct pci_dev *pdev)
 int pci_setup_device(struct pci_dev *dev)
 {
 	u32 class;
-	u16 cmd;
 	u8 hdr_type;
 	struct pci_slot *slot;
 	int pos = 0;
@@ -1063,16 +1024,6 @@ int pci_setup_device(struct pci_dev *dev)
 	pci_fixup_device(pci_fixup_early, dev);
 	/* device class may be changed after fixup */
 	class = dev->class >> 8;
-
-	if (dev->non_compliant_bars) {
-		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-		if (cmd & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY)) {
-			dev_info(&dev->dev, "device has non-compliant BARs; disabling IO/MEM decoding\n");
-			cmd &= ~PCI_COMMAND_IO;
-			cmd &= ~PCI_COMMAND_MEMORY;
-			pci_write_config_word(dev, PCI_COMMAND, cmd);
-		}
-	}
 
 	switch (dev->hdr_type) {		    /* header type */
 	case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
@@ -1181,7 +1132,6 @@ static void pci_release_dev(struct device *dev)
 	pci_dev = to_pci_dev(dev);
 	pci_release_capabilities(pci_dev);
 	pci_release_of_node(pci_dev);
-	pcibios_release_device(pci_dev);
 	kfree(pci_dev);
 }
 
@@ -1238,7 +1188,19 @@ int pci_cfg_space_size(struct pci_dev *dev)
 	return PCI_CFG_SPACE_SIZE;
 }
 
-struct pci_dev *pci_alloc_dev(struct pci_bus *bus)
+static void pci_release_bus_bridge_dev(struct device *dev)
+{
+	struct pci_host_bridge *bridge = to_pci_host_bridge(dev);
+
+	if (bridge->release_fn)
+		bridge->release_fn(bridge);
+
+	pci_free_resource_list(&bridge->windows);
+
+	kfree(bridge);
+}
+
+struct pci_dev *alloc_pci_dev(void)
 {
 	struct pci_dev *dev;
 
@@ -1248,15 +1210,8 @@ struct pci_dev *pci_alloc_dev(struct pci_bus *bus)
 
 	INIT_LIST_HEAD(&dev->bus_list);
 	dev->dev.type = &pci_dev_type;
-	dev->bus = pci_bus_get(bus);
 
 	return dev;
-}
-EXPORT_SYMBOL(pci_alloc_dev);
-
-struct pci_dev *alloc_pci_dev(void)
-{
-	return pci_alloc_dev(NULL);
 }
 EXPORT_SYMBOL(alloc_pci_dev);
 
@@ -1308,10 +1263,11 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60*1000))
 		return NULL;
 
-	dev = pci_alloc_dev(bus);
+	dev = alloc_pci_dev();
 	if (!dev)
 		return NULL;
 
+	dev->bus = bus;
 	dev->devfn = devfn;
 	dev->vendor = l & 0xffff;
 	dev->device = (l >> 16) & 0xffff;
@@ -1319,7 +1275,6 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	pci_set_of_node(dev);
 
 	if (pci_setup_device(dev)) {
-		pci_bus_put(dev->bus);
 		kfree(dev);
 		return NULL;
 	}
@@ -1745,7 +1700,7 @@ struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
 		goto err_out;
 
 	bridge->dev.parent = parent;
-	bridge->dev.release = pci_release_host_bridge_dev;
+	bridge->dev.release = pci_release_bus_bridge_dev;
 	dev_set_name(&bridge->dev, "pci%04x:%02x", pci_domain_nr(b), bus);
 	error = pcibios_root_bridge_prepare(bridge);
 	if (error) {

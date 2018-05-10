@@ -157,8 +157,7 @@ static void dss_restore_context(void)
 
 int dss_get_ctx_loss_count(void)
 {
-	struct platform_device *core_pdev = dss_get_core_pdev();
-	struct omap_dss_board_info *board_data = core_pdev->dev.platform_data;
+	struct omap_dss_board_info *board_data = dss.pdev->dev.platform_data;
 	int cnt;
 
 	if (!board_data->get_context_loss_count)

@@ -996,11 +996,12 @@ static int solo_g_parm(struct file *file, void *priv,
 		       struct v4l2_streamparm *sp)
 {
 	struct solo_enc_dev *solo_enc = video_drvdata(file);
+	struct solo_dev *solo_dev = solo_enc->solo_dev;
 	struct v4l2_captureparm *cp = &sp->parm.capture;
 
 	cp->capability = V4L2_CAP_TIMEPERFRAME;
 	cp->timeperframe.numerator = solo_enc->interval;
-	cp->timeperframe.denominator = solo_enc->solo_dev->fps;
+	cp->timeperframe.denominator = solo_dev->fps;
 	cp->capturemode = 0;
 	/* XXX: Shouldn't we be able to get/set this from videobuf? */
 	cp->readbuffers = 2;
@@ -1008,29 +1009,36 @@ static int solo_g_parm(struct file *file, void *priv,
 	return 0;
 }
 
-static inline int calc_interval(u8 fps, u32 n, u32 d)
-{
-	if (!n || !d)
-		return 1;
-	if (d == fps)
-		return n;
-	n *= fps;
-	return min(15U, n / d + (n % d >= (fps >> 1)));
-}
-
 static int solo_s_parm(struct file *file, void *priv,
 		       struct v4l2_streamparm *sp)
 {
 	struct solo_enc_dev *solo_enc = video_drvdata(file);
-	struct v4l2_fract *t = &sp->parm.capture.timeperframe;
-	u8 fps = solo_enc->solo_dev->fps;
+	struct solo_dev *solo_dev = solo_enc->solo_dev;
+	struct v4l2_captureparm *cp = &sp->parm.capture;
 
 	if (vb2_is_streaming(&solo_enc->vidq))
 		return -EBUSY;
 
-	solo_enc->interval = calc_interval(fps, t->numerator, t->denominator);
+	if ((cp->timeperframe.numerator == 0) ||
+	    (cp->timeperframe.denominator == 0)) {
+		/* reset framerate */
+		cp->timeperframe.numerator = 1;
+		cp->timeperframe.denominator = solo_dev->fps;
+	}
+
+	if (cp->timeperframe.denominator != solo_dev->fps)
+		cp->timeperframe.denominator = solo_dev->fps;
+
+	if (cp->timeperframe.numerator > 15)
+		cp->timeperframe.numerator = 15;
+
+	solo_enc->interval = cp->timeperframe.numerator;
+
+	cp->capability = V4L2_CAP_TIMEPERFRAME;
+	cp->readbuffers = 2;
+
 	solo_update_mode(solo_enc);
-	return solo_g_parm(file, priv, sp);
+	return 0;
 }
 
 static long solo_enc_default(struct file *file, void *fh,

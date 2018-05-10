@@ -88,12 +88,9 @@ struct datapath {
 /**
  * struct ovs_skb_cb - OVS data in skb CB
  * @flow: The flow associated with this packet.  May be %NULL if no flow.
- * @tun_key: Key for the tunnel that encapsulated this packet. NULL if the
- * packet is not being tunneled.
  */
 struct ovs_skb_cb {
 	struct sw_flow		*flow;
-	struct ovs_key_ipv4_tunnel  *tun_key;
 };
 #define OVS_CB(skb) ((struct ovs_skb_cb *)(skb)->cb)
 
@@ -122,7 +119,6 @@ struct dp_upcall_info {
 struct ovs_net {
 	struct list_head dps;
 	struct work_struct dp_notify_work;
-	struct vport_net vport_net;
 };
 
 extern int ovs_net_id;

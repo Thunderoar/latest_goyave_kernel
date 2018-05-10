@@ -17,6 +17,7 @@
 #include "hdq1w.h"
 
 #include "omap_hwmod_common_data.h"
+#include "dma.h"
 
 /* UART */
 
@@ -88,32 +89,32 @@ struct omap_hwmod_class omap2_venc_hwmod_class = {
 
 /* Common DMA request line data */
 struct omap_hwmod_dma_info omap2_uart1_sdma_reqs[] = {
-	{ .name = "rx", .dma_req = 50, },
-	{ .name = "tx", .dma_req = 49, },
+	{ .name = "rx", .dma_req = OMAP24XX_DMA_UART1_RX, },
+	{ .name = "tx", .dma_req = OMAP24XX_DMA_UART1_TX, },
 	{ .dma_req = -1 }
 };
 
 struct omap_hwmod_dma_info omap2_uart2_sdma_reqs[] = {
-	{ .name = "rx", .dma_req = 52, },
-	{ .name = "tx", .dma_req = 51, },
+	{ .name = "rx", .dma_req = OMAP24XX_DMA_UART2_RX, },
+	{ .name = "tx", .dma_req = OMAP24XX_DMA_UART2_TX, },
 	{ .dma_req = -1 }
 };
 
 struct omap_hwmod_dma_info omap2_uart3_sdma_reqs[] = {
-	{ .name = "rx", .dma_req = 54, },
-	{ .name = "tx", .dma_req = 53, },
+	{ .name = "rx", .dma_req = OMAP24XX_DMA_UART3_RX, },
+	{ .name = "tx", .dma_req = OMAP24XX_DMA_UART3_TX, },
 	{ .dma_req = -1 }
 };
 
 struct omap_hwmod_dma_info omap2_i2c1_sdma_reqs[] = {
-	{ .name = "tx", .dma_req = 27 },
-	{ .name = "rx", .dma_req = 28 },
+	{ .name = "tx", .dma_req = OMAP24XX_DMA_I2C1_TX },
+	{ .name = "rx", .dma_req = OMAP24XX_DMA_I2C1_RX },
 	{ .dma_req = -1 }
 };
 
 struct omap_hwmod_dma_info omap2_i2c2_sdma_reqs[] = {
-	{ .name = "tx", .dma_req = 29 },
-	{ .name = "rx", .dma_req = 30 },
+	{ .name = "tx", .dma_req = OMAP24XX_DMA_I2C2_TX },
+	{ .name = "rx", .dma_req = OMAP24XX_DMA_I2C2_RX },
 	{ .dma_req = -1 }
 };
 

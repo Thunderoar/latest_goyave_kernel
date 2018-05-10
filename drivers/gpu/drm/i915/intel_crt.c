@@ -84,28 +84,6 @@ static bool intel_crt_get_hw_state(struct intel_encoder *encoder,
 	return true;
 }
 
-static void intel_crt_get_config(struct intel_encoder *encoder,
-				 struct intel_crtc_config *pipe_config)
-{
-	struct drm_i915_private *dev_priv = encoder->base.dev->dev_private;
-	struct intel_crt *crt = intel_encoder_to_crt(encoder);
-	u32 tmp, flags = 0;
-
-	tmp = I915_READ(crt->adpa_reg);
-
-	if (tmp & ADPA_HSYNC_ACTIVE_HIGH)
-		flags |= DRM_MODE_FLAG_PHSYNC;
-	else
-		flags |= DRM_MODE_FLAG_NHSYNC;
-
-	if (tmp & ADPA_VSYNC_ACTIVE_HIGH)
-		flags |= DRM_MODE_FLAG_PVSYNC;
-	else
-		flags |= DRM_MODE_FLAG_NVSYNC;
-
-	pipe_config->adjusted_mode.flags |= flags;
-}
-
 /* Note: The caller is required to filter out dpms modes not supported by the
  * platform. */
 static void intel_crt_set_dpms(struct intel_encoder *encoder, int mode)
@@ -149,7 +127,7 @@ static void intel_enable_crt(struct intel_encoder *encoder)
 	intel_crt_set_dpms(encoder, crt->connector->base.dpms);
 }
 
-/* Special dpms function to support cloning between dvo/sdvo/crt. */
+
 static void intel_crt_dpms(struct drm_connector *connector, int mode)
 {
 	struct drm_device *dev = connector->dev;
@@ -180,8 +158,6 @@ static void intel_crt_dpms(struct drm_connector *connector, int mode)
 	else
 		encoder->connectors_active = true;
 
-	/* We call connector dpms manually below in case pipe dpms doesn't
-	 * change due to cloning. */
 	if (mode < old_dpms) {
 		/* From off to on, enable the pipe first. */
 		intel_crtc_update_dpms(crtc);
@@ -230,10 +206,6 @@ static bool intel_crt_compute_config(struct intel_encoder *encoder,
 
 	if (HAS_PCH_SPLIT(dev))
 		pipe_config->has_pch_encoder = true;
-
-	/* LPT FDI RX only supports 8bpc. */
-	if (HAS_PCH_LPT(dev))
-		pipe_config->pipe_bpp = 24;
 
 	return true;
 }
@@ -456,11 +428,10 @@ static bool intel_crt_detect_ddc(struct drm_connector *connector)
 	struct drm_i915_private *dev_priv = crt->base.base.dev->dev_private;
 	struct edid *edid;
 	struct i2c_adapter *i2c;
-	bool ret = false;
 
 	BUG_ON(crt->base.type != INTEL_OUTPUT_ANALOG);
 
-	i2c = intel_gmbus_get_adapter(dev_priv, dev_priv->vbt.crt_ddc_pin);
+	i2c = intel_gmbus_get_adapter(dev_priv, dev_priv->crt_ddc_pin);
 	edid = intel_crt_get_edid(connector, i2c);
 
 	if (edid) {
@@ -473,17 +444,17 @@ static bool intel_crt_detect_ddc(struct drm_connector *connector)
 		 */
 		if (!is_digital) {
 			DRM_DEBUG_KMS("CRT detected via DDC:0x50 [EDID]\n");
-			ret = true;
-		} else {
-			DRM_DEBUG_KMS("CRT not detected via DDC:0x50 [EDID reports a digital panel]\n");
+			return true;
 		}
+
+		DRM_DEBUG_KMS("CRT not detected via DDC:0x50 [EDID reports a digital panel]\n");
 	} else {
 		DRM_DEBUG_KMS("CRT not detected via DDC:0x50 [no valid EDID found]\n");
 	}
 
 	kfree(edid);
 
-	return ret;
+	return false;
 }
 
 static enum drm_connector_status
@@ -666,7 +637,7 @@ static int intel_crt_get_modes(struct drm_connector *connector)
 	int ret;
 	struct i2c_adapter *i2c;
 
-	i2c = intel_gmbus_get_adapter(dev_priv, dev_priv->vbt.crt_ddc_pin);
+	i2c = intel_gmbus_get_adapter(dev_priv, dev_priv->crt_ddc_pin);
 	ret = intel_crt_ddc_get_modes(connector, i2c);
 	if (ret || !IS_G4X(dev))
 		return ret;
@@ -731,7 +702,7 @@ static const struct drm_encoder_funcs intel_crt_enc_funcs = {
 	.destroy = intel_encoder_destroy,
 };
 
-static int intel_no_crt_dmi_callback(const struct dmi_system_id *id)
+static int __init intel_no_crt_dmi_callback(const struct dmi_system_id *id)
 {
 	DRM_INFO("Skipping CRT initialization for %s\n", id->ident);
 	return 1;
@@ -744,14 +715,6 @@ static const struct dmi_system_id intel_no_crt[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "ACER"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "ZGB"),
-		},
-	},
-	{
-		.callback = intel_no_crt_dmi_callback,
-		.ident = "DELL XPS 8700",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "XPS 8700"),
 		},
 	},
 	{ }
@@ -811,7 +774,6 @@ void intel_crt_init(struct drm_device *dev)
 	crt->base.compute_config = intel_crt_compute_config;
 	crt->base.disable = intel_disable_crt;
 	crt->base.enable = intel_enable_crt;
-	crt->base.get_config = intel_crt_get_config;
 	if (I915_HAS_HOTPLUG(dev))
 		crt->base.hpd_pin = HPD_CRT;
 	if (HAS_DDI(dev))

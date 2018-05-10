@@ -43,6 +43,12 @@
 
 #include <asm/sigframe.h>
 
+#ifdef CONFIG_X86_32
+# define FIX_EFLAGS	(__FIX_EFLAGS | X86_EFLAGS_RF)
+#else
+# define FIX_EFLAGS	__FIX_EFLAGS
+#endif
+
 #define COPY(x)			do {			\
 	get_user_ex(regs->x, &sc->x);			\
 } while (0)
@@ -662,30 +668,25 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	if (!failed) {
 		/*
 		 * Clear the direction flag as per the ABI for function entry.
-		 *
-		 * Clear RF when entering the signal handler, because
-		 * it might disable possible debug exception from the
-		 * signal handler.
-		 *
+		 */
+		regs->flags &= ~X86_EFLAGS_DF;
+		/*
 		 * Clear TF when entering the signal handler, but
 		 * notify any tracer that was single-stepping it.
 		 * The tracer may want to single-step inside the
 		 * handler too.
 		 */
-		regs->flags &= ~(X86_EFLAGS_DF|X86_EFLAGS_RF|X86_EFLAGS_TF);
+		regs->flags &= ~X86_EFLAGS_TF;
 	}
 	signal_setup_done(failed, ksig, test_thread_flag(TIF_SINGLESTEP));
 }
 
-static inline unsigned long get_nr_restart_syscall(const struct pt_regs *regs)
-{
-#if defined(CONFIG_X86_32) || !defined(CONFIG_X86_64)
-	return __NR_restart_syscall;
-#else /* !CONFIG_X86_32 && CONFIG_X86_64 */
-	return test_thread_flag(TIF_IA32) ? __NR_ia32_restart_syscall :
-		__NR_restart_syscall | (regs->orig_ax & __X32_SYSCALL_BIT);
-#endif /* CONFIG_X86_32 || !CONFIG_X86_64 */
-}
+#ifdef CONFIG_X86_32
+#define NR_restart_syscall	__NR_restart_syscall
+#else /* !CONFIG_X86_32 */
+#define NR_restart_syscall	\
+	test_thread_flag(TIF_IA32) ? __NR_ia32_restart_syscall : __NR_restart_syscall
+#endif /* CONFIG_X86_32 */
 
 /*
  * Note that 'init' is a special process: it doesn't get signals it doesn't
@@ -714,7 +715,7 @@ static void do_signal(struct pt_regs *regs)
 			break;
 
 		case -ERESTART_RESTARTBLOCK:
-			regs->ax = get_nr_restart_syscall(regs);
+			regs->ax = NR_restart_syscall;
 			regs->ip -= 2;
 			break;
 		}

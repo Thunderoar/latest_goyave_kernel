@@ -828,9 +828,7 @@ ctnetlink_parse_tuple_ip(struct nlattr *attr, struct nf_conntrack_tuple *tuple)
 	struct nf_conntrack_l3proto *l3proto;
 	int ret = 0;
 
-	ret = nla_parse_nested(tb, CTA_IP_MAX, attr, NULL);
-	if (ret < 0)
-		return ret;
+	nla_parse_nested(tb, CTA_IP_MAX, attr, NULL);
 
 	rcu_read_lock();
 	l3proto = __nf_ct_l3proto_find(tuple->src.l3num);
@@ -897,9 +895,7 @@ ctnetlink_parse_tuple(const struct nlattr * const cda[],
 
 	memset(tuple, 0, sizeof(*tuple));
 
-	err = nla_parse_nested(tb, CTA_TUPLE_MAX, cda[type], tuple_nla_policy);
-	if (err < 0)
-		return err;
+	nla_parse_nested(tb, CTA_TUPLE_MAX, cda[type], tuple_nla_policy);
 
 	if (!tb[CTA_TUPLE_IP])
 		return -EINVAL;
@@ -950,12 +946,9 @@ static inline int
 ctnetlink_parse_help(const struct nlattr *attr, char **helper_name,
 		     struct nlattr **helpinfo)
 {
-	int err;
 	struct nlattr *tb[CTA_HELP_MAX+1];
 
-	err = nla_parse_nested(tb, CTA_HELP_MAX, attr, help_nla_policy);
-	if (err < 0)
-		return err;
+	nla_parse_nested(tb, CTA_HELP_MAX, attr, help_nla_policy);
 
 	if (!tb[CTA_HELP_NAME])
 		return -EINVAL;
@@ -1438,9 +1431,7 @@ ctnetlink_change_protoinfo(struct nf_conn *ct, const struct nlattr * const cda[]
 	struct nf_conntrack_l4proto *l4proto;
 	int err = 0;
 
-	err = nla_parse_nested(tb, CTA_PROTOINFO_MAX, attr, protoinfo_policy);
-	if (err < 0)
-		return err;
+	nla_parse_nested(tb, CTA_PROTOINFO_MAX, attr, protoinfo_policy);
 
 	rcu_read_lock();
 	l4proto = __nf_ct_l4proto_find(nf_ct_l3num(ct), nf_ct_protonum(ct));
@@ -1461,12 +1452,9 @@ static const struct nla_policy nat_seq_policy[CTA_NAT_SEQ_MAX+1] = {
 static inline int
 change_nat_seq_adj(struct nf_nat_seq *natseq, const struct nlattr * const attr)
 {
-	int err;
 	struct nlattr *cda[CTA_NAT_SEQ_MAX+1];
 
-	err = nla_parse_nested(cda, CTA_NAT_SEQ_MAX, attr, nat_seq_policy);
-	if (err < 0)
-		return err;
+	nla_parse_nested(cda, CTA_NAT_SEQ_MAX, attr, nat_seq_policy);
 
 	if (!cda[CTA_NAT_SEQ_CORRECTION_POS])
 		return -EINVAL;
@@ -2128,9 +2116,7 @@ ctnetlink_nfqueue_parse(const struct nlattr *attr, struct nf_conn *ct)
 	struct nlattr *cda[CTA_MAX+1];
 	int ret;
 
-	ret = nla_parse_nested(cda, CTA_MAX, attr, ct_nla_policy);
-	if (ret < 0)
-		return ret;
+	nla_parse_nested(cda, CTA_MAX, attr, ct_nla_policy);
 
 	spin_lock_bh(&nf_conntrack_lock);
 	ret = ctnetlink_nfqueue_parse_ct((const struct nlattr **)cda, ct);
@@ -2725,9 +2711,7 @@ ctnetlink_parse_expect_nat(const struct nlattr *attr,
 	struct nf_conntrack_tuple nat_tuple = {};
 	int err;
 
-	err = nla_parse_nested(tb, CTA_EXPECT_NAT_MAX, attr, exp_nat_nla_policy);
-	if (err < 0)
-		return err;
+	nla_parse_nested(tb, CTA_EXPECT_NAT_MAX, attr, exp_nat_nla_policy);
 
 	if (!tb[CTA_EXPECT_NAT_DIR] || !tb[CTA_EXPECT_NAT_TUPLE])
 		return -EINVAL;
@@ -3148,7 +3132,6 @@ static void __exit ctnetlink_exit(void)
 #ifdef CONFIG_NETFILTER_NETLINK_QUEUE_CT
 	RCU_INIT_POINTER(nfq_ct_hook, NULL);
 #endif
-	synchronize_rcu();
 }
 
 module_init(ctnetlink_init);

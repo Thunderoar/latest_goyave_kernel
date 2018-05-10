@@ -62,11 +62,12 @@ extern long sysctl_sctp_mem[3];
 extern int sysctl_sctp_rmem[3];
 extern int sysctl_sctp_wmem[3];
 
-static int proc_sctp_do_hmac_alg(struct ctl_table *ctl,
+static int proc_sctp_do_hmac_alg(ctl_table *ctl,
 				int write,
 				void __user *buffer, size_t *lenp,
+
 				loff_t *ppos);
-static struct ctl_table sctp_table[] = {
+static ctl_table sctp_table[] = {
 	{
 		.procname	= "sctp_mem",
 		.data		= &sysctl_sctp_mem,
@@ -92,7 +93,7 @@ static struct ctl_table sctp_table[] = {
 	{ /* sentinel */ }
 };
 
-static struct ctl_table sctp_net_table[] = {
+static ctl_table sctp_net_table[] = {
 	{
 		.procname	= "rto_initial",
 		.data		= &init_net.sctp.rto_initial,
@@ -266,7 +267,7 @@ static struct ctl_table sctp_net_table[] = {
 		.data		= &init_net.sctp.auth_enable,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_sctp_do_auth,
+		.proc_handler	= proc_dointvec,
 	},
 	{
 		.procname	= "addr_scope_policy",
@@ -299,14 +300,14 @@ static struct ctl_table sctp_net_table[] = {
 	{ /* sentinel */ }
 };
 
-static int proc_sctp_do_hmac_alg(struct ctl_table *ctl,
+static int proc_sctp_do_hmac_alg(ctl_table *ctl,
 				int write,
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
 	struct net *net = current->nsproxy->net_ns;
 	char tmp[8];
-	struct ctl_table tbl;
+	ctl_table tbl;
 	int ret;
 	int changed = 0;
 	char *none = "none";
@@ -342,36 +343,6 @@ static int proc_sctp_do_hmac_alg(struct ctl_table *ctl,
 
 		if (!changed)
 			ret = -EINVAL;
-	}
-
-	return ret;
-}
-
-static int proc_sctp_do_auth(struct ctl_table *ctl, int write,
-			     void __user *buffer, size_t *lenp,
-			     loff_t *ppos)
-{
-	struct net *net = current->nsproxy->net_ns;
-	struct ctl_table tbl;
-	int new_value, ret;
-
-	memset(&tbl, 0, sizeof(struct ctl_table));
-	tbl.maxlen = sizeof(unsigned int);
-
-	if (write)
-		tbl.data = &new_value;
-	else
-		tbl.data = &net->sctp.auth_enable;
-
-	ret = proc_dointvec(&tbl, write, buffer, lenp, ppos);
-	if (write && ret == 0) {
-		struct sock *sk = net->sctp.ctl_sock;
-
-		net->sctp.auth_enable = new_value;
-		/* Update the value in the control socket */
-		lock_sock(sk);
-		sctp_sk(sk)->ep->auth_enable = new_value;
-		release_sock(sk);
 	}
 
 	return ret;

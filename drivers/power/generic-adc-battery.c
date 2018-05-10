@@ -299,10 +299,8 @@ static int gab_probe(struct platform_device *pdev)
 	}
 
 	/* none of the channels are supported so let's bail out */
-	if (index == 0) {
-		ret = -ENODEV;
+	if (index == ARRAY_SIZE(gab_chan_name))
 		goto second_mem_fail;
-	}
 
 	/*
 	 * Total number of properties is equal to static properties

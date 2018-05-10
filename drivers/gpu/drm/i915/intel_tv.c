@@ -856,10 +856,6 @@ intel_enable_tv(struct intel_encoder *encoder)
 	struct drm_device *dev = encoder->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	/* Prevents vblank waits from timing out in intel_tv_detect_type() */
-	intel_wait_for_vblank(encoder->base.dev,
-			      to_intel_crtc(encoder->base.crtc)->pipe);
-
 	I915_WRITE(TV_CTL, I915_READ(TV_CTL) | TV_ENC_ENABLE);
 }
 
@@ -916,6 +912,9 @@ intel_tv_compute_config(struct intel_encoder *encoder,
 	const struct tv_mode *tv_mode = intel_tv_mode_find(intel_tv);
 
 	if (!tv_mode)
+		return false;
+
+	if (intel_encoder_check_is_cloned(&intel_tv->base))
 		return false;
 
 	pipe_config->adjusted_mode.clock = tv_mode->clock;
@@ -1530,12 +1529,12 @@ static int tv_is_present_in_vbt(struct drm_device *dev)
 	struct child_device_config *p_child;
 	int i, ret;
 
-	if (!dev_priv->vbt.child_dev_num)
+	if (!dev_priv->child_dev_num)
 		return 1;
 
 	ret = 0;
-	for (i = 0; i < dev_priv->vbt.child_dev_num; i++) {
-		p_child = dev_priv->vbt.child_dev + i;
+	for (i = 0; i < dev_priv->child_dev_num; i++) {
+		p_child = dev_priv->child_dev + i;
 		/*
 		 * If the device type is not TV, continue.
 		 */
@@ -1573,7 +1572,7 @@ intel_tv_init(struct drm_device *dev)
 		return;
 	}
 	/* Even if we have an encoder we may not have a connector */
-	if (!dev_priv->vbt.int_tv_support)
+	if (!dev_priv->int_tv_support)
 		return;
 
 	/*

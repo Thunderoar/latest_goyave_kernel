@@ -37,6 +37,7 @@ struct perf_session {
 	int			fd;
 	bool			fd_pipe;
 	bool			repipe;
+	int			cwdlen;
 	char			*cwd;
 	struct ordered_samples	ordered_samples;
 	char			filename[1];

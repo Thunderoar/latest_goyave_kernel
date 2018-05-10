@@ -719,7 +719,7 @@ static void rspi_release_dma(struct rspi_data *rspi)
 
 static int rspi_remove(struct platform_device *pdev)
 {
-	struct rspi_data *rspi = platform_get_drvdata(pdev);
+	struct rspi_data *rspi = dev_get_drvdata(&pdev->dev);
 
 	spi_unregister_master(rspi->master);
 	rspi_release_dma(rspi);
@@ -759,7 +759,7 @@ static int rspi_probe(struct platform_device *pdev)
 	}
 
 	rspi = spi_master_get_devdata(master);
-	platform_set_drvdata(pdev, rspi);
+	dev_set_drvdata(&pdev->dev, rspi);
 
 	rspi->master = master;
 	rspi->addr = ioremap(res->start, resource_size(res));

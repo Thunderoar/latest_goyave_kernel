@@ -90,7 +90,7 @@ static int shmob_drm_setup_clocks(struct shmob_drm_device *sdev,
 		return -EINVAL;
 	}
 
-	clk = devm_clk_get(sdev->dev, clkname);
+	clk = clk_get(sdev->dev, clkname);
 	if (IS_ERR(clk)) {
 		dev_err(sdev->dev, "cannot get dot clock %s\n", clkname);
 		return PTR_ERR(clk);
@@ -106,12 +106,21 @@ static int shmob_drm_setup_clocks(struct shmob_drm_device *sdev,
 
 static int shmob_drm_unload(struct drm_device *dev)
 {
+	struct shmob_drm_device *sdev = dev->dev_private;
+
 	drm_kms_helper_poll_fini(dev);
 	drm_mode_config_cleanup(dev);
 	drm_vblank_cleanup(dev);
 	drm_irq_uninstall(dev);
 
+	if (sdev->clock)
+		clk_put(sdev->clock);
+
+	if (sdev->mmio)
+		iounmap(sdev->mmio);
+
 	dev->dev_private = NULL;
+	kfree(sdev);
 
 	return 0;
 }
@@ -130,7 +139,7 @@ static int shmob_drm_load(struct drm_device *dev, unsigned long flags)
 		return -EINVAL;
 	}
 
-	sdev = devm_kzalloc(&pdev->dev, sizeof(*sdev), GFP_KERNEL);
+	sdev = kzalloc(sizeof(*sdev), GFP_KERNEL);
 	if (sdev == NULL) {
 		dev_err(dev->dev, "failed to allocate private data\n");
 		return -ENOMEM;
@@ -147,28 +156,29 @@ static int shmob_drm_load(struct drm_device *dev, unsigned long flags)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res == NULL) {
 		dev_err(&pdev->dev, "failed to get memory resource\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto done;
 	}
 
-	sdev->mmio = devm_ioremap_nocache(&pdev->dev, res->start,
-					  resource_size(res));
+	sdev->mmio = ioremap_nocache(res->start, resource_size(res));
 	if (sdev->mmio == NULL) {
 		dev_err(&pdev->dev, "failed to remap memory resource\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto done;
 	}
 
 	ret = shmob_drm_setup_clocks(sdev, pdata->clk_source);
 	if (ret < 0)
-		return ret;
+		goto done;
 
 	ret = shmob_drm_init_interface(sdev);
 	if (ret < 0)
-		return ret;
+		goto done;
 
 	ret = shmob_drm_modeset_init(sdev);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to initialize mode setting\n");
-		return ret;
+		goto done;
 	}
 
 	for (i = 0; i < 4; ++i) {
@@ -263,8 +273,7 @@ static const struct file_operations shmob_drm_fops = {
 };
 
 static struct drm_driver shmob_drm_driver = {
-	.driver_features	= DRIVER_HAVE_IRQ | DRIVER_GEM | DRIVER_MODESET
-				| DRIVER_PRIME,
+	.driver_features	= DRIVER_HAVE_IRQ | DRIVER_GEM | DRIVER_MODESET,
 	.load			= shmob_drm_load,
 	.unload			= shmob_drm_unload,
 	.preclose		= shmob_drm_preclose,
@@ -274,10 +283,6 @@ static struct drm_driver shmob_drm_driver = {
 	.disable_vblank		= shmob_drm_disable_vblank,
 	.gem_free_object	= drm_gem_cma_free_object,
 	.gem_vm_ops		= &drm_gem_cma_vm_ops,
-	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
-	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
-	.gem_prime_import	= drm_gem_cma_dmabuf_import,
-	.gem_prime_export	= drm_gem_cma_dmabuf_export,
 	.dumb_create		= drm_gem_cma_dumb_create,
 	.dumb_map_offset	= drm_gem_cma_dumb_map_offset,
 	.dumb_destroy		= drm_gem_cma_dumb_destroy,

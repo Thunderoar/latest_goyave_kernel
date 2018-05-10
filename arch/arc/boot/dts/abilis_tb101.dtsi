@@ -21,6 +21,10 @@
 
 /include/ "abilis_tb10x.dtsi"
 
+/* interrupt specifiers
+ * --------------------
+ * 0: rising, 1: low, 2: high, 3: falling,
+ */
 
 / {
 	clock-frequency		= <500000000>;	/* 500 MHZ */
@@ -178,7 +182,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF140000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -190,7 +194,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF141000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -202,7 +206,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF142000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -214,7 +218,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF143000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -226,7 +230,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF144000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -238,7 +242,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF145000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -250,7 +254,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF146000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -262,7 +266,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF147000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -274,7 +278,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF148000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -286,7 +290,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF149000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -298,7 +302,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF14A000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -310,7 +314,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF14B000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -322,7 +326,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF14C000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;
@@ -334,7 +338,7 @@
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&tb10x_ictl>;
-			interrupts = <27 2>;
+			interrupts = <27 1>;
 			reg = <0xFF14D000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <1>;

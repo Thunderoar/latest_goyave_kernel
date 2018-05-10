@@ -139,59 +139,8 @@
 #include <net/tcp.h>
 #endif
 
-#include <net/ll_poll.h>
-
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
-
-/**
- * sk_ns_capable - General socket capability test
- * @sk: Socket to use a capability on or through
- * @user_ns: The user namespace of the capability to use
- * @cap: The capability to use
- *
- * Test to see if the opener of the socket had when the socket was
- * created and the current process has the capability @cap in the user
- * namespace @user_ns.
- */
-bool sk_ns_capable(const struct sock *sk,
-		   struct user_namespace *user_ns, int cap)
-{
-	return file_ns_capable(sk->sk_socket->file, user_ns, cap) &&
-		ns_capable(user_ns, cap);
-}
-EXPORT_SYMBOL(sk_ns_capable);
-
-/**
- * sk_capable - Socket global capability test
- * @sk: Socket to use a capability on or through
- * @cap: The global capbility to use
- *
- * Test to see if the opener of the socket had when the socket was
- * created and the current process has the capability @cap in all user
- * namespaces.
- */
-bool sk_capable(const struct sock *sk, int cap)
-{
-	return sk_ns_capable(sk, &init_user_ns, cap);
-}
-EXPORT_SYMBOL(sk_capable);
-
-/**
- * sk_net_capable - Network namespace socket capability test
- * @sk: Socket to use a capability on or through
- * @cap: The capability to use
- *
- * Test to see if the opener of the socket had when the socke was created
- * and the current process has the capability @cap over the network namespace
- * the socket is a member of.
- */
-bool sk_net_capable(const struct sock *sk, int cap)
-{
-	return sk_ns_capable(sk, sock_net(sk)->user_ns, cap);
-}
-EXPORT_SYMBOL(sk_net_capable);
-
 
 #ifdef CONFIG_MEMCG_KMEM
 int mem_cgroup_sockets_init(struct mem_cgroup *memcg, struct cgroup_subsys *ss)
@@ -420,6 +369,8 @@ static void sock_warn_obsolete_bsdism(const char *name)
 		warned++;
 	}
 }
+
+#define SK_FLAGS_TIMESTAMP ((1UL << SOCK_TIMESTAMP) | (1UL << SOCK_TIMESTAMPING_RX_SOFTWARE))
 
 static void sock_disable_timestamp(struct sock *sk, unsigned long flags)
 {
@@ -934,7 +885,7 @@ set_rcvbuf:
 
 	case SO_PEEK_OFF:
 		if (sock->ops->set_peek_off)
-			ret = sock->ops->set_peek_off(sk, val);
+			sock->ops->set_peek_off(sk, val);
 		else
 			ret = -EOPNOTSUPP;
 		break;
@@ -947,19 +898,6 @@ set_rcvbuf:
 		sock_valbool_flag(sk, SOCK_SELECT_ERR_QUEUE, valbool);
 		break;
 
-#ifdef CONFIG_NET_LL_RX_POLL
-	case SO_LL:
-		/* allow unprivileged users to decrease the value */
-		if ((val > sk->sk_ll_usec) && !capable(CAP_NET_ADMIN))
-			ret = -EPERM;
-		else {
-			if (val < 0)
-				ret = -EINVAL;
-			else
-				sk->sk_ll_usec = val;
-		}
-		break;
-#endif
 	default:
 		ret = -ENOPROTOOPT;
 		break;
@@ -1217,12 +1155,6 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		v.val = sock_flag(sk, SOCK_SELECT_ERR_QUEUE);
 		break;
 
-#ifdef CONFIG_NET_LL_RX_POLL
-	case SO_LL:
-		v.val = sk->sk_ll_usec;
-		break;
-#endif
-
 	default:
 		return -ENOPROTOOPT;
 	}
@@ -1424,11 +1356,6 @@ static void __sk_free(struct sock *sk)
 		pr_debug("%s: optmem leakage (%d bytes) detected\n",
 			 __func__, atomic_read(&sk->sk_omem_alloc));
 
-	if (sk->sk_frag.page) {
-		put_page(sk->sk_frag.page);
-		sk->sk_frag.page = NULL;
-	}
-
 	if (sk->sk_peer_cred)
 		put_cred(sk->sk_peer_cred);
 	put_pid(sk->sk_peer_pid);
@@ -1491,8 +1418,6 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 
 		sock_copy(newsk, sk);
 
-		newsk->sk_prot_creator = sk->sk_prot;
-
 		/* SANITY */
 		get_net(sock_net(newsk));
 		sk_node_init(&newsk->sk_node);
@@ -1543,7 +1468,6 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 		}
 
 		newsk->sk_err	   = 0;
-		newsk->sk_err_soft = 0;
 		newsk->sk_priority = 0;
 		/*
 		 * Before updating sk_refcnt, we must commit prior changes to memory
@@ -1890,7 +1814,7 @@ bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
 		gfp_t gfp = sk->sk_allocation;
 
 		if (order)
-			gfp |= __GFP_COMP | __GFP_NOWARN | __GFP_NORETRY;
+			gfp |= __GFP_COMP | __GFP_NOWARN;
 		pfrag->page = alloc_pages(gfp, order);
 		if (likely(pfrag->page)) {
 			pfrag->offset = 0;
@@ -2077,13 +2001,12 @@ EXPORT_SYMBOL(__sk_mem_schedule);
 /**
  *	__sk_reclaim - reclaim memory_allocated
  *	@sk: socket
- *	@amount: number of bytes (rounded down to a SK_MEM_QUANTUM multiple)
  */
-void __sk_mem_reclaim(struct sock *sk, int amount)
+void __sk_mem_reclaim(struct sock *sk)
 {
-	amount >>= SK_MEM_QUANTUM_SHIFT;
-	sk_memory_allocated_sub(sk, amount);
-	sk->sk_forward_alloc -= amount << SK_MEM_QUANTUM_SHIFT;
+	sk_memory_allocated_sub(sk,
+				sk->sk_forward_alloc >> SK_MEM_QUANTUM_SHIFT);
+	sk->sk_forward_alloc &= SK_MEM_QUANTUM - 1;
 
 	if (sk_under_memory_pressure(sk) &&
 	    (sk_memory_allocated(sk) < sk_prot_mem_limits(sk, 0)))
@@ -2348,11 +2271,6 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 
 	sk->sk_stamp = ktime_set(-1L, 0);
 
-#ifdef CONFIG_NET_LL_RX_POLL
-	sk->sk_napi_id		=	0;
-	sk->sk_ll_usec		=	sysctl_net_ll_read;
-#endif
-
 	/*
 	 * Before updating sk_refcnt, we must commit prior changes to memory
 	 * (Documentation/RCU/rculist_nulls.txt for details)
@@ -2390,13 +2308,10 @@ void release_sock(struct sock *sk)
 	if (sk->sk_backlog.tail)
 		__release_sock(sk);
 
-	/* Warning : release_cb() might need to release sk ownership,
-	 * ie call sock_release_ownership(sk) before us.
-	 */
 	if (sk->sk_prot->release_cb)
 		sk->sk_prot->release_cb(sk);
 
-	sock_release_ownership(sk);
+	sk->sk_lock.owned = 0;
 	if (waitqueue_active(&sk->sk_lock.wq))
 		wake_up(&sk->sk_lock.wq);
 	spin_unlock_bh(&sk->sk_lock.slock);
@@ -2587,6 +2502,11 @@ void sk_common_release(struct sock *sk)
 	xfrm_sk_free_policy(sk);
 
 	sk_refcnt_debug_release(sk);
+
+	if (sk->sk_frag.page) {
+		put_page(sk->sk_frag.page);
+		sk->sk_frag.page = NULL;
+	}
 
 	sock_put(sk);
 }

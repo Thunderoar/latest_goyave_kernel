@@ -22,8 +22,6 @@
 struct bcma_bus;
 
 /* main.c */
-bool bcma_wait_value(struct bcma_device *core, u16 reg, u32 mask, u32 value,
-		     int timeout);
 int bcma_bus_register(struct bcma_bus *bus);
 void bcma_bus_unregister(struct bcma_bus *bus);
 int __init bcma_bus_early_register(struct bcma_bus *bus,

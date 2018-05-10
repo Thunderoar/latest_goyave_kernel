@@ -44,7 +44,6 @@ enum filter_op_ids
 	OP_LE,
 	OP_GT,
 	OP_GE,
-	OP_BAND,
 	OP_NONE,
 	OP_OPEN_PAREN,
 };
@@ -55,7 +54,6 @@ struct filter_op {
 	int precedence;
 };
 
-/* Order must be the same as enum filter_op_ids above */
 static struct filter_op filter_ops[] = {
 	{ OP_OR,	"||",		1 },
 	{ OP_AND,	"&&",		2 },
@@ -66,7 +64,6 @@ static struct filter_op filter_ops[] = {
 	{ OP_LE,	"<=",		5 },
 	{ OP_GT,	">",		5 },
 	{ OP_GE,	">=",		5 },
-	{ OP_BAND,	"&",		6 },
 	{ OP_NONE,	"OP_NONE",	0 },
 	{ OP_OPEN_PAREN, "(",		0 },
 };
@@ -158,9 +155,6 @@ static int filter_pred_##type(struct filter_pred *pred, void *event)	\
 		break;							\
 	case OP_GE:							\
 		match = (*addr >= val);					\
-		break;							\
-	case OP_BAND:							\
-		match = (*addr & val);					\
 		break;							\
 	default:							\
 		break;							\
@@ -1021,9 +1015,6 @@ static void parse_init(struct filter_parse_state *ps,
 
 static char infix_next(struct filter_parse_state *ps)
 {
-	if (!ps->infix.cnt)
-		return 0;
-
 	ps->infix.cnt--;
 
 	return ps->infix.string[ps->infix.tail++];
@@ -1039,9 +1030,6 @@ static char infix_peek(struct filter_parse_state *ps)
 
 static void infix_advance(struct filter_parse_state *ps)
 {
-	if (!ps->infix.cnt)
-		return;
-
 	ps->infix.cnt--;
 	ps->infix.tail++;
 }
@@ -1340,26 +1328,19 @@ static int check_preds(struct filter_parse_state *ps)
 {
 	int n_normal_preds = 0, n_logical_preds = 0;
 	struct postfix_elt *elt;
-	int cnt = 0;
 
 	list_for_each_entry(elt, &ps->postfix, list) {
-		if (elt->op == OP_NONE) {
-			cnt++;
+		if (elt->op == OP_NONE)
 			continue;
-		}
 
-		cnt--;
 		if (elt->op == OP_AND || elt->op == OP_OR) {
 			n_logical_preds++;
 			continue;
 		}
 		n_normal_preds++;
-		/* all ops should have operands */
-		if (cnt < 0)
-			break;
 	}
 
-	if (cnt != 1 || !n_normal_preds || n_logical_preds >= n_normal_preds) {
+	if (!n_normal_preds || n_logical_preds >= n_normal_preds) {
 		parse_error(ps, FILT_ERR_INVALID_FILTER, 0);
 		return -EINVAL;
 	}

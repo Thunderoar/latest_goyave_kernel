@@ -68,9 +68,7 @@ static int check_extent_cache(struct inode *inode, pgoff_t pgofs,
 					struct buffer_head *bh_result)
 {
 	struct f2fs_inode_info *fi = F2FS_I(inode);
-#ifdef CONFIG_F2FS_STAT_FS
 	struct f2fs_sb_info *sbi = F2FS_SB(inode->i_sb);
-#endif
 	pgoff_t start_fofs, end_fofs;
 	block_t start_blkaddr;
 
@@ -80,9 +78,7 @@ static int check_extent_cache(struct inode *inode, pgoff_t pgofs,
 		return 0;
 	}
 
-#ifdef CONFIG_F2FS_STAT_FS
 	sbi->total_hit_ext++;
-#endif
 	start_fofs = fi->ext.fofs;
 	end_fofs = fi->ext.fofs + fi->ext.len - 1;
 	start_blkaddr = fi->ext.blk_addr;
@@ -100,9 +96,7 @@ static int check_extent_cache(struct inode *inode, pgoff_t pgofs,
 		else
 			bh_result->b_size = UINT_MAX;
 
-#ifdef CONFIG_F2FS_STAT_FS
 		sbi->read_hit_ext++;
-#endif
 		read_unlock(&fi->ext.ext_lock);
 		return 1;
 	}
@@ -205,7 +199,7 @@ struct page *find_data_page(struct inode *inode, pgoff_t index, bool sync)
 	if (dn.data_blkaddr == NEW_ADDR)
 		return ERR_PTR(-EINVAL);
 
-	page = grab_cache_page_write_begin(mapping, index, AOP_FLAG_NOFS);
+	page = grab_cache_page(mapping, index);
 	if (!page)
 		return ERR_PTR(-ENOMEM);
 
@@ -239,23 +233,18 @@ struct page *get_lock_data_page(struct inode *inode, pgoff_t index)
 	struct page *page;
 	int err;
 
-repeat:
-	page = grab_cache_page_write_begin(mapping, index, AOP_FLAG_NOFS);
-	if (!page)
-		return ERR_PTR(-ENOMEM);
-
 	set_new_dnode(&dn, inode, NULL, NULL, 0);
 	err = get_dnode_of_data(&dn, index, LOOKUP_NODE);
-	if (err) {
-		f2fs_put_page(page, 1);
+	if (err)
 		return ERR_PTR(err);
-	}
 	f2fs_put_dnode(&dn);
 
-	if (dn.data_blkaddr == NULL_ADDR) {
-		f2fs_put_page(page, 1);
+	if (dn.data_blkaddr == NULL_ADDR)
 		return ERR_PTR(-ENOENT);
-	}
+repeat:
+	page = grab_cache_page(mapping, index);
+	if (!page)
+		return ERR_PTR(-ENOMEM);
 
 	if (PageUptodate(page))
 		return page;
@@ -285,10 +274,9 @@ repeat:
  *
  * Also, caller should grab and release a mutex by calling mutex_lock_op() and
  * mutex_unlock_op().
- * Note that, npage is set only by make_empty_dir.
  */
-struct page *get_new_data_page(struct inode *inode,
-		struct page *npage, pgoff_t index, bool new_i_size)
+struct page *get_new_data_page(struct inode *inode, pgoff_t index,
+						bool new_i_size)
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(inode->i_sb);
 	struct address_space *mapping = inode->i_mapping;
@@ -296,20 +284,18 @@ struct page *get_new_data_page(struct inode *inode,
 	struct dnode_of_data dn;
 	int err;
 
-	set_new_dnode(&dn, inode, npage, npage, 0);
+	set_new_dnode(&dn, inode, NULL, NULL, 0);
 	err = get_dnode_of_data(&dn, index, ALLOC_NODE);
 	if (err)
 		return ERR_PTR(err);
 
 	if (dn.data_blkaddr == NULL_ADDR) {
 		if (reserve_new_block(&dn)) {
-			if (!npage)
-				f2fs_put_dnode(&dn);
+			f2fs_put_dnode(&dn);
 			return ERR_PTR(-ENOSPC);
 		}
 	}
-	if (!npage)
-		f2fs_put_dnode(&dn);
+	f2fs_put_dnode(&dn);
 repeat:
 	page = grab_cache_page(mapping, index);
 	if (!page)
@@ -339,8 +325,6 @@ repeat:
 	if (new_i_size &&
 		i_size_read(inode) < ((index + 1) << PAGE_CACHE_SHIFT)) {
 		i_size_write(inode, ((index + 1) << PAGE_CACHE_SHIFT));
-		/* Only the directory inode sets new_i_size */
-		set_inode_flag(F2FS_I(inode), FI_UPDATE_DIR);
 		mark_inode_dirty_sync(inode);
 	}
 	return page;
@@ -497,9 +481,8 @@ int do_write_data_page(struct page *page)
 	 * If current allocation needs SSR,
 	 * it had better in-place writes for updated data.
 	 */
-	if (unlikely(old_blk_addr != NEW_ADDR &&
-			!is_cold_data(page) &&
-			need_inplace_update(inode))) {
+	if (old_blk_addr != NEW_ADDR && !is_cold_data(page) &&
+				need_inplace_update(inode)) {
 		rewrite_data_page(F2FS_SB(inode->i_sb), page,
 						old_blk_addr);
 	} else {
@@ -715,8 +698,7 @@ static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
 						  get_data_block_ro);
 }
 
-static void f2fs_invalidate_data_page(struct page *page, unsigned int offset,
-				      unsigned int length)
+static void f2fs_invalidate_data_page(struct page *page, unsigned long offset)
 {
 	struct inode *inode = page->mapping->host;
 	struct f2fs_sb_info *sbi = F2FS_SB(inode->i_sb);

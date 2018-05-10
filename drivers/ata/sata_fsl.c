@@ -1501,7 +1501,7 @@ static int sata_fsl_probe(struct platform_device *ofdev)
 	host_priv->csr_base = csr_base;
 
 	irq = irq_of_parse_and_map(ofdev->dev.of_node, 0);
-	if (!irq) {
+	if (irq < 0) {
 		dev_err(&ofdev->dev, "invalid irq from platform\n");
 		goto error_exit_with_cleanup;
 	}
@@ -1533,7 +1533,7 @@ static int sata_fsl_probe(struct platform_device *ofdev)
 	ata_host_activate(host, irq, sata_fsl_interrupt, SATA_FSL_IRQ_FLAG,
 			  &sata_fsl_sht);
 
-	platform_set_drvdata(ofdev, host);
+	dev_set_drvdata(&ofdev->dev, host);
 
 	host_priv->intr_coalescing.show = fsl_sata_intr_coalescing_show;
 	host_priv->intr_coalescing.store = fsl_sata_intr_coalescing_store;
@@ -1559,8 +1559,10 @@ static int sata_fsl_probe(struct platform_device *ofdev)
 
 error_exit_with_cleanup:
 
-	if (host)
+	if (host) {
+		dev_set_drvdata(&ofdev->dev, NULL);
 		ata_host_detach(host);
+	}
 
 	if (hcr_base)
 		iounmap(hcr_base);
@@ -1571,13 +1573,15 @@ error_exit_with_cleanup:
 
 static int sata_fsl_remove(struct platform_device *ofdev)
 {
-	struct ata_host *host = platform_get_drvdata(ofdev);
+	struct ata_host *host = dev_get_drvdata(&ofdev->dev);
 	struct sata_fsl_host_priv *host_priv = host->private_data;
 
 	device_remove_file(&ofdev->dev, &host_priv->intr_coalescing);
 	device_remove_file(&ofdev->dev, &host_priv->rx_watermark);
 
 	ata_host_detach(host);
+
+	dev_set_drvdata(&ofdev->dev, NULL);
 
 	irq_dispose_mapping(host_priv->irq);
 	iounmap(host_priv->hcr_base);
@@ -1589,13 +1593,13 @@ static int sata_fsl_remove(struct platform_device *ofdev)
 #ifdef CONFIG_PM
 static int sata_fsl_suspend(struct platform_device *op, pm_message_t state)
 {
-	struct ata_host *host = platform_get_drvdata(op);
+	struct ata_host *host = dev_get_drvdata(&op->dev);
 	return ata_host_suspend(host, state);
 }
 
 static int sata_fsl_resume(struct platform_device *op)
 {
-	struct ata_host *host = platform_get_drvdata(op);
+	struct ata_host *host = dev_get_drvdata(&op->dev);
 	struct sata_fsl_host_priv *host_priv = host->private_data;
 	int ret;
 	void __iomem *hcr_base = host_priv->hcr_base;

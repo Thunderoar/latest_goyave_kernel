@@ -17,8 +17,6 @@
 #ifndef _UAPI_TEGRA_DRM_H_
 #define _UAPI_TEGRA_DRM_H_
 
-#include <drm/drm.h>
-
 struct drm_tegra_gem_create {
 	__u64 size;
 	__u32 flags;
@@ -105,6 +103,7 @@ struct drm_tegra_submit {
 	__u32 num_waitchks;
 	__u32 waitchk_mask;
 	__u32 timeout;
+	__u32 pad;
 	__u64 syncpts;
 	__u64 cmdbufs;
 	__u64 relocs;

@@ -574,11 +574,9 @@ il4965_translate_rx_status(struct il_priv *il, u32 decrypt_in)
 	return decrypt_out;
 }
 
-#define SMALL_PACKET_SIZE 256
-
 static void
 il4965_pass_packet_to_mac80211(struct il_priv *il, struct ieee80211_hdr *hdr,
-			       u32 len, u32 ampdu_status, struct il_rx_buf *rxb,
+			       u16 len, u32 ampdu_status, struct il_rx_buf *rxb,
 			       struct ieee80211_rx_status *stats)
 {
 	struct sk_buff *skb;
@@ -590,35 +588,26 @@ il4965_pass_packet_to_mac80211(struct il_priv *il, struct ieee80211_hdr *hdr,
 		return;
 	}
 
-	if (unlikely(test_bit(IL_STOP_REASON_PASSIVE, &il->stop_reason))) {
-		il_wake_queues_by_reason(il, IL_STOP_REASON_PASSIVE);
-		D_INFO("Woke queues - frame received on passive channel\n");
-	}
-
 	/* In case of HW accelerated crypto and bad decryption, drop */
 	if (!il->cfg->mod_params->sw_crypto &&
 	    il_set_decrypted_flag(il, hdr, ampdu_status, stats))
 		return;
 
-	skb = dev_alloc_skb(SMALL_PACKET_SIZE);
+	skb = dev_alloc_skb(128);
 	if (!skb) {
 		IL_ERR("dev_alloc_skb failed\n");
 		return;
 	}
 
-	if (len <= SMALL_PACKET_SIZE) {
-		memcpy(skb_put(skb, len), hdr, len);
-	} else {
-		skb_add_rx_frag(skb, 0, rxb->page, (void *)hdr - rxb_addr(rxb),
-				len, PAGE_SIZE << il->hw_params.rx_page_order);
-		il->alloc_rxb_page--;
-		rxb->page = NULL;
-	}
+	skb_add_rx_frag(skb, 0, rxb->page, (void *)hdr - rxb_addr(rxb), len,
+			len);
 
 	il_update_stats(il, false, fc, len);
 	memcpy(IEEE80211_SKB_RXCB(skb), stats, sizeof(*stats));
 
 	ieee80211_rx(il->hw, skb);
+	il->alloc_rxb_page--;
+	rxb->page = NULL;
 }
 
 /* Called for N_RX (legacy ABG frames), or
@@ -2817,19 +2806,6 @@ il4965_hdl_tx(struct il_priv *il, struct il_rx_buf *rxb)
 		return;
 	}
 
-	/*
-	 * Firmware will not transmit frame on passive channel, if it not yet
-	 * received some valid frame on that channel. When this error happen
-	 * we have to wait until firmware will unblock itself i.e. when we
-	 * note received beacon or other frame. We unblock queues in
-	 * il4965_pass_packet_to_mac80211 or in il_mac_bss_info_changed.
-	 */
-	if (unlikely((status & TX_STATUS_MSK) == TX_STATUS_FAIL_PASSIVE_NO_RX) &&
-	    il->iw_mode == NL80211_IFTYPE_STATION) {
-		il_stop_queues_by_reason(il, IL_STOP_REASON_PASSIVE);
-		D_INFO("Stopped queues - RX waiting on passive channel\n");
-	}
-
 	spin_lock_irqsave(&il->sta_lock, flags);
 	if (txq->sched_retry) {
 		const u32 scd_ssn = il4965_get_scd_ssn(tx_resp);
@@ -4591,7 +4567,7 @@ il4965_store_debug_level(struct device *d, struct device_attribute *attr,
 	unsigned long val;
 	int ret;
 
-	ret = kstrtoul(buf, 0, &val);
+	ret = strict_strtoul(buf, 0, &val);
 	if (ret)
 		IL_ERR("%s is not in hex or decimal form.\n", buf);
 	else
@@ -4638,7 +4614,7 @@ il4965_store_tx_power(struct device *d, struct device_attribute *attr,
 	unsigned long val;
 	int ret;
 
-	ret = kstrtoul(buf, 10, &val);
+	ret = strict_strtoul(buf, 10, &val);
 	if (ret)
 		IL_INFO("%s is not in decimal form.\n", buf);
 	else {
@@ -5765,8 +5741,7 @@ il4965_mac_setup_register(struct il_priv *il, u32 max_probe_length)
 	hw->flags =
 	    IEEE80211_HW_SIGNAL_DBM | IEEE80211_HW_AMPDU_AGGREGATION |
 	    IEEE80211_HW_NEED_DTIM_BEFORE_ASSOC | IEEE80211_HW_SPECTRUM_MGMT |
-	    IEEE80211_HW_REPORTS_TX_ACK_STATUS | IEEE80211_HW_SUPPORTS_PS |
-	    IEEE80211_HW_SUPPORTS_DYNAMIC_PS;
+	    IEEE80211_HW_SUPPORTS_PS | IEEE80211_HW_SUPPORTS_DYNAMIC_PS;
 	if (il->cfg->sku & IL_SKU_N)
 		hw->flags |=
 		    IEEE80211_HW_SUPPORTS_DYNAMIC_SMPS |

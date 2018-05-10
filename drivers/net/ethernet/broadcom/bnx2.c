@@ -2869,7 +2869,7 @@ bnx2_tx_int(struct bnx2 *bp, struct bnx2_napi *bnapi, int budget)
 		sw_cons = BNX2_NEXT_TX_BD(sw_cons);
 
 		tx_bytes += skb->len;
-		dev_kfree_skb_any(skb);
+		dev_kfree_skb(skb);
 		tx_pkt++;
 		if (tx_pkt == budget)
 			break;
@@ -6610,7 +6610,7 @@ bnx2_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	mapping = dma_map_single(&bp->pdev->dev, skb->data, len, PCI_DMA_TODEVICE);
 	if (dma_mapping_error(&bp->pdev->dev, mapping)) {
-		dev_kfree_skb_any(skb);
+		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
 
@@ -6703,7 +6703,7 @@ dma_error:
 			       PCI_DMA_TODEVICE);
 	}
 
-	dev_kfree_skb_any(skb);
+	dev_kfree_skb(skb);
 	return NETDEV_TX_OK;
 }
 
@@ -8104,7 +8104,7 @@ bnx2_init_board(struct pci_dev *pdev, struct net_device *dev)
 
 	pci_set_master(pdev);
 
-	bp->pm_cap = pdev->pm_cap;
+	bp->pm_cap = pci_find_capability(pdev, PCI_CAP_ID_PM);
 	if (bp->pm_cap == 0) {
 		dev_err(&pdev->dev,
 			"Cannot find power management capability, aborting\n");
@@ -8764,4 +8764,18 @@ static struct pci_driver bnx2_pci_driver = {
 	.err_handler	= &bnx2_err_handler,
 };
 
-module_pci_driver(bnx2_pci_driver);
+static int __init bnx2_init(void)
+{
+	return pci_register_driver(&bnx2_pci_driver);
+}
+
+static void __exit bnx2_cleanup(void)
+{
+	pci_unregister_driver(&bnx2_pci_driver);
+}
+
+module_init(bnx2_init);
+module_exit(bnx2_cleanup);
+
+
+

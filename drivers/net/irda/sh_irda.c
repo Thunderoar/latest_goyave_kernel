@@ -838,6 +838,7 @@ static int sh_irda_remove(struct platform_device *pdev)
 	sh_irda_remove_iobuf(self);
 	iounmap(self->membase);
 	free_netdev(ndev);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

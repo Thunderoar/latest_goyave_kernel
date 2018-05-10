@@ -257,7 +257,7 @@
 		battery,chg_polarity_full_check = <1>;
 
 		battery,full_condition_type = <13>;
-		battery,full_condition_soc = <100>;
+		battery,full_condition_soc = <95>;
 		battery,full_condition_vcell = <4250>;
 
 		battery,recharge_check_count = <1>;
@@ -272,7 +272,7 @@
 		/* Charger */
 		charger,vbus_ctrl_gpio = <&d_gpio_gpio 64 0x00>;
 		battery,input_current_limit = <1000 550 550 1000 550 1000 1000 550 550 1000 650 1000 1000 550 1000 300 1000 1000 300 1000 1000 550 550>;
-		battery,fast_charging_current = <1550 500 500 1550 500 1550 1550 500 0 1550 1550 1550 1550 (-1) 1550 300 1550 1550 300 1550 1550 0 0>;
+		battery,fast_charging_current = <1550 0 500 1550 500 1550 1550 500 0 1550 1550 1550 1550 (-1) 1550 300 1550 1550 300 1550 1550 0 0>;
 		battery,full_check_current_1st = <200 0 200 200 200 200 200 200 0 200 200 200 200 0 200 200 200 200 200 200 200 0 0>;
 		battery,full_check_current_2nd = <2400 0 2400 2400 2400 2400 2400 2400 0 2400 2400 2400 2400 0 2400 2400 2400 2400 2400 2400 2400 0 0>;
 	};
@@ -391,14 +391,11 @@
 	};
 };
 
-/* CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW */
 &i2c1 { /* TSP */
 	mms_ts@48 {
 		compatible = "melfas,mms_ts";
 		reg = <0x48>;
 		gpios = <&d_gpio_gpio 82 0>;
-		tsp_vendor_1 = <&d_gpio_gpio 81 0>;
-		tsp_vendor_2 = <&d_gpio_gpio 83 0>;
 		mms_ts,max_x = /bits/ 16 <1024>;
 		mms_ts,max_y = /bits/ 16 <600>;
 	};

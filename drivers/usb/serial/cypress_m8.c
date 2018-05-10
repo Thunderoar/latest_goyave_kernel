@@ -435,7 +435,7 @@ static void cypress_set_dead(struct usb_serial_port *port)
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	dev_err(&port->dev, "cypress_m8 suspending failing port %d - "
-		"interval might be too short\n", port->port_number);
+		"interval might be too short\n", port->number);
 }
 
 
@@ -448,11 +448,6 @@ static int cypress_generic_port_probe(struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
 	struct cypress_private *priv;
-
-	if (!port->interrupt_out_urb || !port->interrupt_in_urb) {
-		dev_err(&port->dev, "required endpoint is missing\n");
-		return -ENODEV;
-	}
 
 	priv = kzalloc(sizeof(struct cypress_private), GFP_KERNEL);
 	if (!priv)
@@ -611,6 +606,12 @@ static int cypress_open(struct tty_struct *tty, struct usb_serial_port *port)
 		cypress_set_termios(tty, port, &priv->tmp_termios);
 
 	/* setup the port and start reading from the device */
+	if (!port->interrupt_in_urb) {
+		dev_err(&port->dev, "%s - interrupt_in_urb is empty!\n",
+			__func__);
+		return -1;
+	}
+
 	usb_fill_int_urb(port->interrupt_in_urb, serial->dev,
 		usb_rcvintpipe(serial->dev, port->interrupt_in_endpointAddress),
 		port->interrupt_in_urb->transfer_buffer,
@@ -666,7 +667,7 @@ static int cypress_write(struct tty_struct *tty, struct usb_serial_port *port,
 {
 	struct cypress_private *priv = usb_get_serial_port_data(port);
 
-	dev_dbg(&port->dev, "%s - %d bytes\n", __func__, count);
+	dev_dbg(&port->dev, "%s - port %d, %d bytes\n", __func__, port->number, count);
 
 	/* line control commands, which need to be executed immediately,
 	   are not put into the buffer for obvious reasons.

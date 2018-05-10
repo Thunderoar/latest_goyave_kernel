@@ -49,9 +49,7 @@ static void netdev_port_receive(struct vport *vport, struct sk_buff *skb)
 		return;
 
 	skb_push(skb, ETH_HLEN);
-	ovs_skb_postpush_rcsum(skb, skb->data, ETH_HLEN);
-
-	ovs_vport_receive(vport, skb, NULL);
+	ovs_vport_receive(vport, skb);
 	return;
 
 error:
@@ -172,7 +170,7 @@ static int netdev_send(struct vport *vport, struct sk_buff *skb)
 		net_warn_ratelimited("%s: dropped over-mtu packet: %d > %d\n",
 				     netdev_vport->dev->name,
 				     packet_length(skb), mtu);
-		goto drop;
+		goto error;
 	}
 
 	skb->dev = netdev_vport->dev;
@@ -181,8 +179,9 @@ static int netdev_send(struct vport *vport, struct sk_buff *skb)
 
 	return len;
 
-drop:
+error:
 	kfree_skb(skb);
+	ovs_vport_record_error(vport, VPORT_E_TX_DROPPED);
 	return 0;
 }
 

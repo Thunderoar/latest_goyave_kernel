@@ -102,9 +102,12 @@ config CAN_JANZ_ICAN3
 	  This driver can also be built as a module. If so, the module will be
 	  called janz-ican3.ko.
 
+config HAVE_CAN_FLEXCAN
+	bool
+
 config CAN_FLEXCAN
 	tristate "Support for Freescale FLEXCAN based chips"
-	depends on ARM || PPC
+	depends on HAVE_CAN_FLEXCAN
 	---help---
 	  Say Y here if you want to support for Freescale FlexCAN.
 

@@ -134,14 +134,12 @@ static inline int INET_ECN_set_ce(struct sk_buff *skb)
 {
 	switch (skb->protocol) {
 	case cpu_to_be16(ETH_P_IP):
-		if (skb_network_header(skb) + sizeof(struct iphdr) <=
-		    skb_tail_pointer(skb))
+		if (skb->network_header + sizeof(struct iphdr) <= skb->tail)
 			return IP_ECN_set_ce(ip_hdr(skb));
 		break;
 
 	case cpu_to_be16(ETH_P_IPV6):
-		if (skb_network_header(skb) + sizeof(struct ipv6hdr) <=
-		    skb_tail_pointer(skb))
+		if (skb->network_header + sizeof(struct ipv6hdr) <= skb->tail)
 			return IP6_ECN_set_ce(ipv6_hdr(skb));
 		break;
 	}

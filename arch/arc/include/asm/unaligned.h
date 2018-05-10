@@ -16,11 +16,11 @@
 
 #ifdef CONFIG_ARC_MISALIGN_ACCESS
 int misaligned_fixup(unsigned long address, struct pt_regs *regs,
-		     struct callee_regs *cregs);
+		     unsigned long cause, struct callee_regs *cregs);
 #else
 static inline int
 misaligned_fixup(unsigned long address, struct pt_regs *regs,
-		 struct callee_regs *cregs)
+		 unsigned long cause, struct callee_regs *cregs)
 {
 	return 0;
 }

@@ -119,6 +119,7 @@ acpi_ex_do_match(u32 match_op,
 		break;
 
 	case MATCH_MEQ:
+
 		/*
 		 * True if equal: (P[i] == M)
 		 * Change to:     (M == P[i])
@@ -132,6 +133,7 @@ acpi_ex_do_match(u32 match_op,
 		break;
 
 	case MATCH_MLE:
+
 		/*
 		 * True if less than or equal: (P[i] <= M) (P[i] not_greater than M)
 		 * Change to:                  (M >= P[i]) (M not_less than P[i])
@@ -146,6 +148,7 @@ acpi_ex_do_match(u32 match_op,
 		break;
 
 	case MATCH_MLT:
+
 		/*
 		 * True if less than: (P[i] < M)
 		 * Change to:         (M > P[i])
@@ -159,6 +162,7 @@ acpi_ex_do_match(u32 match_op,
 		break;
 
 	case MATCH_MGE:
+
 		/*
 		 * True if greater than or equal: (P[i] >= M) (P[i] not_less than M)
 		 * Change to:                     (M <= P[i]) (M not_greater than P[i])
@@ -173,6 +177,7 @@ acpi_ex_do_match(u32 match_op,
 		break;
 
 	case MATCH_MGT:
+
 		/*
 		 * True if greater than: (P[i] > M)
 		 * Change to:            (M < P[i])

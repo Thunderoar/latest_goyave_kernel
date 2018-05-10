@@ -320,7 +320,7 @@ static int bnx2x_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 
 	speed = ethtool_cmd_speed(cmd);
 
-	/* If received a request for an unknown duplex, assume full*/
+	/* If recieved a request for an unknown duplex, assume full*/
 	if (cmd->duplex == DUPLEX_UNKNOWN)
 		cmd->duplex = DUPLEX_FULL;
 
@@ -733,6 +733,7 @@ static bool bnx2x_is_reg_in_chip(struct bnx2x *bp,
 		return false;
 }
 
+
 static bool bnx2x_is_wreg_in_chip(struct bnx2x *bp,
 	const struct wreg_addr *wreg_info)
 {
@@ -849,7 +850,7 @@ static int __bnx2x_get_preset_regs(struct bnx2x *bp, u32 *p, u32 preset)
 
 	/* Paged registers are supported in E2 & E3 only */
 	if (CHIP_IS_E2(bp) || CHIP_IS_E3(bp)) {
-		/* Read "paged" registers */
+		/* Read "paged" registes */
 		bnx2x_read_pages_regs(bp, p, preset);
 	}
 
@@ -1154,8 +1155,8 @@ static int bnx2x_get_eeprom_len(struct net_device *dev)
 	return bp->common.flash_size;
 }
 
-/* Per pf misc lock must be acquired before the per port mcp lock. Otherwise,
- * had we done things the other way around, if two pfs from the same port would
+/* Per pf misc lock must be aquired before the per port mcp lock. Otherwise, had
+ * we done things the other way around, if two pfs from the same port would
  * attempt to access nvram at the same time, we could run into a scenario such
  * as:
  * pf A takes the port lock.
@@ -1380,29 +1381,12 @@ static int bnx2x_nvram_read32(struct bnx2x *bp, u32 offset, u32 *buf,
 	return rc;
 }
 
-static bool bnx2x_is_nvm_accessible(struct bnx2x *bp)
-{
-	int rc = 1;
-	u16 pm = 0;
-	struct net_device *dev = pci_get_drvdata(bp->pdev);
-
-	if (bp->pm_cap)
-		rc = pci_read_config_word(bp->pdev,
-					  bp->pm_cap + PCI_PM_CTRL, &pm);
-
-	if ((rc && !netif_running(dev)) ||
-	    (!rc && ((pm & PCI_PM_CTRL_STATE_MASK) != (__force u16)PCI_D0)))
-		return false;
-
-	return true;
-}
-
 static int bnx2x_get_eeprom(struct net_device *dev,
 			    struct ethtool_eeprom *eeprom, u8 *eebuf)
 {
 	struct bnx2x *bp = netdev_priv(dev);
 
-	if (!bnx2x_is_nvm_accessible(bp)) {
+	if (!netif_running(dev)) {
 		DP(BNX2X_MSG_ETHTOOL  | BNX2X_MSG_NVM,
 		   "cannot access eeprom when the interface is down\n");
 		return -EAGAIN;
@@ -1427,7 +1411,7 @@ static int bnx2x_get_module_eeprom(struct net_device *dev,
 	u8 *user_data = data;
 	unsigned int start_addr = ee->offset, xfer_size = 0;
 
-	if (!bnx2x_is_nvm_accessible(bp)) {
+	if (!netif_running(dev)) {
 		DP(BNX2X_MSG_ETHTOOL | BNX2X_MSG_NVM,
 		   "cannot access eeprom when the interface is down\n");
 		return -EAGAIN;
@@ -1490,7 +1474,7 @@ static int bnx2x_get_module_info(struct net_device *dev,
 	int phy_idx, rc;
 	u8 sff8472_comp, diag_type;
 
-	if (!bnx2x_is_nvm_accessible(bp)) {
+	if (!netif_running(dev)) {
 		DP(BNX2X_MSG_ETHTOOL | BNX2X_MSG_NVM,
 		   "cannot access eeprom when the interface is down\n");
 		return -EAGAIN;
@@ -1610,10 +1594,8 @@ static int bnx2x_nvram_write1(struct bnx2x *bp, u32 offset, u8 *data_buf,
 		 */
 		val = be32_to_cpu(val_be);
 
-		val &= ~le32_to_cpu((__force __le32)
-				    (0xff << BYTE_OFFSET(offset)));
-		val |= le32_to_cpu((__force __le32)
-				   (*data_buf << BYTE_OFFSET(offset)));
+		val &= ~le32_to_cpu(0xff << BYTE_OFFSET(offset));
+		val |= le32_to_cpu(*data_buf << BYTE_OFFSET(offset));
 
 		rc = bnx2x_nvram_write_dword(bp, align_offset, val,
 					     cmd_flags);
@@ -1694,8 +1676,7 @@ static int bnx2x_set_eeprom(struct net_device *dev,
 	int port = BP_PORT(bp);
 	int rc = 0;
 	u32 ext_phy_config;
-
-	if (!bnx2x_is_nvm_accessible(bp)) {
+	if (!netif_running(dev)) {
 		DP(BNX2X_MSG_ETHTOOL | BNX2X_MSG_NVM,
 		   "cannot access eeprom when the interface is down\n");
 		return -EAGAIN;
@@ -1811,16 +1792,8 @@ static void bnx2x_get_ringparam(struct net_device *dev,
 
 	ering->rx_max_pending = MAX_RX_AVAIL;
 
-	/* If size isn't already set, we give an estimation of the number
-	 * of buffers we'll have. We're neglecting some possible conditions
-	 * [we couldn't know for certain at this point if number of queues
-	 * might shrink] but the number would be correct for the likely
-	 * scenario.
-	 */
 	if (bp->rx_ring_size)
 		ering->rx_pending = bp->rx_ring_size;
-	else if (BNX2X_NUM_RX_QUEUES(bp))
-		ering->rx_pending = MAX_RX_AVAIL / BNX2X_NUM_RX_QUEUES(bp);
 	else
 		ering->rx_pending = MAX_RX_AVAIL;
 
@@ -1948,19 +1921,6 @@ static const char bnx2x_tests_str_arr[BNX2X_NUM_TESTS_SF][ETH_GSTRING_LEN] = {
 	"link_test (online)         "
 };
 
-enum {
-	BNX2X_PRI_FLAG_ISCSI,
-	BNX2X_PRI_FLAG_FCOE,
-	BNX2X_PRI_FLAG_STORAGE,
-	BNX2X_PRI_FLAG_LEN,
-};
-
-static const char bnx2x_private_arr[BNX2X_PRI_FLAG_LEN][ETH_GSTRING_LEN] = {
-	"iSCSI offload support",
-	"FCoE offload support",
-	"Storage only interface"
-};
-
 static u32 bnx2x_eee_to_adv(u32 eee_adv)
 {
 	u32 modes = 0;
@@ -2081,7 +2041,7 @@ static int bnx2x_set_eee(struct net_device *dev, struct ethtool_eee *edata)
 				    EEE_MODE_OVERRIDE_NVRAM |
 				    EEE_MODE_OUTPUT_TIME;
 
-	/* Restart link to propagate changes */
+	/* Restart link to propogate changes */
 	if (netif_running(dev)) {
 		bnx2x_stats_handle(bp, STATS_EVENT_STOP);
 		bnx2x_force_link_reset(bp);
@@ -2200,7 +2160,7 @@ static int bnx2x_test_registers(struct bnx2x *bp)
 		{ BNX2X_CHIP_MASK_ALL, 0xffffffff, 0, 0x00000000 }
 	};
 
-	if (!bnx2x_is_nvm_accessible(bp)) {
+	if (!netif_running(bp->dev)) {
 		DP(BNX2X_MSG_ETHTOOL | BNX2X_MSG_NVM,
 		   "cannot access eeprom when the interface is down\n");
 		return rc;
@@ -2304,7 +2264,7 @@ static int bnx2x_test_memory(struct bnx2x *bp)
 		{ NULL, 0xffffffff, {0, 0, 0, 0} }
 	};
 
-	if (!bnx2x_is_nvm_accessible(bp)) {
+	if (!netif_running(bp->dev)) {
 		DP(BNX2X_MSG_ETHTOOL | BNX2X_MSG_NVM,
 		   "cannot access eeprom when the interface is down\n");
 		return rc;
@@ -3018,45 +2978,30 @@ static int bnx2x_num_stat_queues(struct bnx2x *bp)
 static int bnx2x_get_sset_count(struct net_device *dev, int stringset)
 {
 	struct bnx2x *bp = netdev_priv(dev);
-	int i, num_strings = 0;
+	int i, num_stats;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		if (is_multi(bp)) {
-			num_strings = bnx2x_num_stat_queues(bp) *
-				      BNX2X_NUM_Q_STATS;
+			num_stats = bnx2x_num_stat_queues(bp) *
+						BNX2X_NUM_Q_STATS;
 		} else
-			num_strings = 0;
+			num_stats = 0;
 		if (IS_MF_MODE_STAT(bp)) {
 			for (i = 0; i < BNX2X_NUM_STATS; i++)
 				if (IS_FUNC_STAT(i))
-					num_strings++;
+					num_stats++;
 		} else
-			num_strings += BNX2X_NUM_STATS;
+			num_stats += BNX2X_NUM_STATS;
 
-		return num_strings;
+		return num_stats;
 
 	case ETH_SS_TEST:
 		return BNX2X_NUM_TESTS(bp);
 
-	case ETH_SS_PRIV_FLAGS:
-		return BNX2X_PRI_FLAG_LEN;
-
 	default:
 		return -EINVAL;
 	}
-}
-
-static u32 bnx2x_get_private_flags(struct net_device *dev)
-{
-	struct bnx2x *bp = netdev_priv(dev);
-	u32 flags = 0;
-
-	flags |= (!(bp->flags & NO_ISCSI_FLAG) ? 1 : 0) << BNX2X_PRI_FLAG_ISCSI;
-	flags |= (!(bp->flags & NO_FCOE_FLAG)  ? 1 : 0) << BNX2X_PRI_FLAG_FCOE;
-	flags |= (!!IS_MF_STORAGE_ONLY(bp)) << BNX2X_PRI_FLAG_STORAGE;
-
-	return flags;
 }
 
 static void bnx2x_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
@@ -3081,6 +3026,7 @@ static void bnx2x_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 			}
 		}
 
+
 		for (i = 0, j = 0; i < BNX2X_NUM_STATS; i++) {
 			if (IS_MF_MODE_STAT(bp) && IS_PORT_STAT(i))
 				continue;
@@ -3099,12 +3045,6 @@ static void bnx2x_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 			start = 4;
 		memcpy(buf, bnx2x_tests_str_arr + start,
 		       ETH_GSTRING_LEN * BNX2X_NUM_TESTS(bp));
-		break;
-
-	case ETH_SS_PRIV_FLAGS:
-		memcpy(buf, bnx2x_private_arr,
-		       ETH_GSTRING_LEN * BNX2X_PRI_FLAG_LEN);
-		break;
 	}
 }
 
@@ -3166,10 +3106,15 @@ static int bnx2x_set_phys_id(struct net_device *dev,
 {
 	struct bnx2x *bp = netdev_priv(dev);
 
-	if (!bnx2x_is_nvm_accessible(bp)) {
+	if (!netif_running(dev)) {
 		DP(BNX2X_MSG_ETHTOOL | BNX2X_MSG_NVM,
 		   "cannot access eeprom when the interface is down\n");
 		return -EAGAIN;
+	}
+
+	if (!bp->port.pmf) {
+		DP(BNX2X_MSG_ETHTOOL, "Interface is not pmf\n");
+		return -EOPNOTSUPP;
 	}
 
 	switch (state) {
@@ -3203,6 +3148,7 @@ static int bnx2x_set_phys_id(struct net_device *dev,
 
 static int bnx2x_get_rss_flags(struct bnx2x *bp, struct ethtool_rxnfc *info)
 {
+
 	switch (info->flow_type) {
 	case TCP_V4_FLOW:
 	case TCP_V6_FLOW:
@@ -3438,6 +3384,7 @@ static int bnx2x_set_channels(struct net_device *dev,
 {
 	struct bnx2x *bp = netdev_priv(dev);
 
+
 	DP(BNX2X_MSG_ETHTOOL,
 	   "set-channels command parameters: rx = %d, tx = %d, other = %d, combined = %d\n",
 	   channels->rx_count, channels->tx_count, channels->other_count,
@@ -3498,7 +3445,6 @@ static const struct ethtool_ops bnx2x_ethtool_ops = {
 	.set_pauseparam		= bnx2x_set_pauseparam,
 	.self_test		= bnx2x_self_test,
 	.get_sset_count		= bnx2x_get_sset_count,
-	.get_priv_flags		= bnx2x_get_private_flags,
 	.get_strings		= bnx2x_get_strings,
 	.set_phys_id		= bnx2x_set_phys_id,
 	.get_ethtool_stats	= bnx2x_get_ethtool_stats,

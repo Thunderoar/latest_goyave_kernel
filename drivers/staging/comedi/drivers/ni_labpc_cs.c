@@ -18,6 +18,12 @@
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+************************************************************************
 */
 /*
 Driver: ni_labpc_cs
@@ -70,9 +76,12 @@ NI manuals:
 static const struct labpc_boardinfo labpc_cs_boards[] = {
 	{
 		.name			= "daqcard-1200",
+		.device_id		= 0x103,
 		.ai_speed		= 10000,
+		.register_layout	= labpc_1200_layout,
 		.has_ao			= 1,
-		.is_labpc1200		= 1,
+		.ai_range_table		= &range_labpc_1200_ai,
+		.ai_range_code		= labpc_1200_ai_gain_bits,
 	},
 };
 
@@ -104,11 +113,17 @@ static int labpc_auto_attach(struct comedi_device *dev,
 	return labpc_common_attach(dev, link->irq, IRQF_SHARED);
 }
 
+static void labpc_detach(struct comedi_device *dev)
+{
+	labpc_common_detach(dev);
+	comedi_pcmcia_disable(dev);
+}
+
 static struct comedi_driver driver_labpc_cs = {
 	.driver_name	= "ni_labpc_cs",
 	.module		= THIS_MODULE,
 	.auto_attach	= labpc_auto_attach,
-	.detach		= comedi_pcmcia_disable,
+	.detach		= labpc_detach,
 };
 
 static int labpc_cs_attach(struct pcmcia_device *link)

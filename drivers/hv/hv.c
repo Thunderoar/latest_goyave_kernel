@@ -154,7 +154,7 @@ int hv_init(void)
 	/* See if the hypercall page is already set */
 	rdmsrl(HV_X64_MSR_HYPERCALL, hypercall_msr.as_uint64);
 
-	virtaddr = __vmalloc(PAGE_SIZE, GFP_KERNEL, PAGE_KERNEL_RX);
+	virtaddr = __vmalloc(PAGE_SIZE, GFP_KERNEL, PAGE_KERNEL_EXEC);
 
 	if (!virtaddr)
 		goto cleanup;
@@ -193,7 +193,7 @@ cleanup:
  *
  * This routine is called normally during driver unloading or exiting.
  */
-void hv_cleanup(bool crash)
+void hv_cleanup(void)
 {
 	union hv_x64_msr_hypercall_contents hypercall_msr;
 
@@ -203,8 +203,7 @@ void hv_cleanup(bool crash)
 	if (hv_context.hypercall_page) {
 		hypercall_msr.as_uint64 = 0;
 		wrmsrl(HV_X64_MSR_HYPERCALL, hypercall_msr.as_uint64);
-		if (!crash)
-			vfree(hv_context.hypercall_page);
+		vfree(hv_context.hypercall_page);
 		hv_context.hypercall_page = NULL;
 	}
 }
@@ -266,59 +265,6 @@ u16 hv_signal_event(void *con_id)
 	return status;
 }
 
-
-int hv_synic_alloc(void)
-{
-	size_t size = sizeof(struct tasklet_struct);
-	int cpu;
-
-	for_each_online_cpu(cpu) {
-		hv_context.event_dpc[cpu] = kmalloc(size, GFP_ATOMIC);
-		if (hv_context.event_dpc[cpu] == NULL) {
-			pr_err("Unable to allocate event dpc\n");
-			goto err;
-		}
-		tasklet_init(hv_context.event_dpc[cpu], vmbus_on_event, cpu);
-
-		hv_context.synic_message_page[cpu] =
-			(void *)get_zeroed_page(GFP_ATOMIC);
-
-		if (hv_context.synic_message_page[cpu] == NULL) {
-			pr_err("Unable to allocate SYNIC message page\n");
-			goto err;
-		}
-
-		hv_context.synic_event_page[cpu] =
-			(void *)get_zeroed_page(GFP_ATOMIC);
-
-		if (hv_context.synic_event_page[cpu] == NULL) {
-			pr_err("Unable to allocate SYNIC event page\n");
-			goto err;
-		}
-	}
-
-	return 0;
-err:
-	return -ENOMEM;
-}
-
-void hv_synic_free_cpu(int cpu)
-{
-	kfree(hv_context.event_dpc[cpu]);
-	if (hv_context.synic_message_page[cpu])
-		free_page((unsigned long)hv_context.synic_event_page[cpu]);
-	if (hv_context.synic_message_page[cpu])
-		free_page((unsigned long)hv_context.synic_message_page[cpu]);
-}
-
-void hv_synic_free(void)
-{
-	int cpu;
-
-	for_each_online_cpu(cpu)
-		hv_synic_free_cpu(cpu);
-}
-
 /*
  * hv_synic_init - Initialize the Synthethic Interrupt Controller.
  *
@@ -342,6 +288,30 @@ void hv_synic_init(void *arg)
 
 	/* Check the version */
 	rdmsrl(HV_X64_MSR_SVERSION, version);
+
+	hv_context.event_dpc[cpu] = kmalloc(sizeof(struct tasklet_struct),
+					    GFP_ATOMIC);
+	if (hv_context.event_dpc[cpu] == NULL) {
+		pr_err("Unable to allocate event dpc\n");
+		goto cleanup;
+	}
+	tasklet_init(hv_context.event_dpc[cpu], vmbus_on_event, cpu);
+
+	hv_context.synic_message_page[cpu] =
+		(void *)get_zeroed_page(GFP_ATOMIC);
+
+	if (hv_context.synic_message_page[cpu] == NULL) {
+		pr_err("Unable to allocate SYNIC message page\n");
+		goto cleanup;
+	}
+
+	hv_context.synic_event_page[cpu] =
+		(void *)get_zeroed_page(GFP_ATOMIC);
+
+	if (hv_context.synic_event_page[cpu] == NULL) {
+		pr_err("Unable to allocate SYNIC event page\n");
+		goto cleanup;
+	}
 
 	/* Setup the Synic's message page */
 	rdmsrl(HV_X64_MSR_SIMP, simp.as_uint64);
@@ -384,6 +354,14 @@ void hv_synic_init(void *arg)
 	 */
 	rdmsrl(HV_X64_MSR_VP_INDEX, vp_index);
 	hv_context.vp_index[cpu] = (u32)vp_index;
+	return;
+
+cleanup:
+	if (hv_context.synic_event_page[cpu])
+		free_page((unsigned long)hv_context.synic_event_page[cpu]);
+
+	if (hv_context.synic_message_page[cpu])
+		free_page((unsigned long)hv_context.synic_message_page[cpu]);
 	return;
 }
 

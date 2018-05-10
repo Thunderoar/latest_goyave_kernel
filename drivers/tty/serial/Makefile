@@ -90,4 +90,3 @@ obj-$(CONFIG_SERIAL_SPRD_UART) += serial_sprd_dt.o
 else
 obj-$(CONFIG_SERIAL_SPRD_UART) += serial_sprd.o
 endif
-obj-$(CONFIG_SERIAL_FSL_LPUART)	+= fsl_lpuart.o

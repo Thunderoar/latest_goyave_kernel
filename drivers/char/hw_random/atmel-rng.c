@@ -108,6 +108,8 @@ static int atmel_trng_remove(struct platform_device *pdev)
 	clk_disable(trng->clk);
 	clk_put(trng->clk);
 
+	platform_set_drvdata(pdev, NULL);
+
 	return 0;
 }
 

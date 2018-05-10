@@ -3563,22 +3563,16 @@ static void ar9003_hw_ant_ctrl_apply(struct ath_hw *ah, bool is2ghz)
 {
 	struct ath9k_hw_capabilities *pCap = &ah->caps;
 	int chain;
-	u32 regval, value, gpio;
+	u32 regval, value;
 	static const u32 switch_chain_reg[AR9300_MAX_CHAINS] = {
 			AR_PHY_SWITCH_CHAIN_0,
 			AR_PHY_SWITCH_CHAIN_1,
 			AR_PHY_SWITCH_CHAIN_2,
 	};
 
-	if (AR_SREV_9485(ah) && (ar9003_hw_get_rx_gain_idx(ah) == 0)) {
-		if (ah->config.xlna_gpio)
-			gpio = ah->config.xlna_gpio;
-		else
-			gpio = AR9300_EXT_LNA_CTL_GPIO_AR9485;
-
-		ath9k_hw_cfg_output(ah, gpio,
+	if (AR_SREV_9485(ah) && (ar9003_hw_get_rx_gain_idx(ah) == 0))
+		ath9k_hw_cfg_output(ah, AR9300_EXT_LNA_CTL_GPIO_AR9485,
 				    AR_GPIO_OUTPUT_MUX_AS_PCIE_ATTENTION_LED);
-	}
 
 	value = ar9003_hw_ant_ctrl_common_get(ah, is2ghz);
 
@@ -3606,7 +3600,7 @@ static void ar9003_hw_ant_ctrl_apply(struct ath_hw *ah, bool is2ghz)
 	 *   7:4 R/W  SWITCH_TABLE_COM_SPDT_WLAN_IDLE
 	 * SWITCH_TABLE_COM_SPDT_WLAN_IDLE
 	 */
-	if (AR_SREV_9462_20_OR_LATER(ah) || AR_SREV_9565(ah)) {
+	if (AR_SREV_9462_20(ah) || AR_SREV_9565(ah)) {
 		value = ar9003_switch_com_spdt_get(ah, is2ghz);
 		REG_RMW_FIELD(ah, AR_PHY_GLB_CONTROL,
 				AR_SWITCH_TABLE_COM_SPDT_ALL, value);
@@ -3806,13 +3800,7 @@ static void ar9003_hw_atten_apply(struct ath_hw *ah, struct ath9k_channel *chan)
 			REG_RMW_FIELD(ah, ext_atten_reg[i],
 				      AR_PHY_EXT_ATTEN_CTL_XATTEN1_DB, value);
 
-			if (AR_SREV_9485(ah) &&
-			    (ar9003_hw_get_rx_gain_idx(ah) == 0) &&
-			    ah->config.xatten_margin_cfg)
-				value = 5;
-			else
-				value = ar9003_hw_atten_chain_get_margin(ah, i, chan);
-
+			value = ar9003_hw_atten_chain_get_margin(ah, i, chan);
 			REG_RMW_FIELD(ah, ext_atten_reg[i],
 				      AR_PHY_EXT_ATTEN_CTL_XATTEN1_MARGIN,
 				      value);
@@ -3949,20 +3937,18 @@ static void ar9003_hw_quick_drop_apply(struct ath_hw *ah, u16 freq)
 	int quick_drop;
 	s32 t[3], f[3] = {5180, 5500, 5785};
 
-	if (!(pBase->miscConfiguration & BIT(4)))
+	if (!(pBase->miscConfiguration & BIT(1)))
 		return;
 
-	if (AR_SREV_9300(ah) || AR_SREV_9580(ah) || AR_SREV_9340(ah)) {
-		if (freq < 4000) {
-			quick_drop = eep->modalHeader2G.quick_drop;
-		} else {
-			t[0] = eep->base_ext1.quick_drop_low;
-			t[1] = eep->modalHeader5G.quick_drop;
-			t[2] = eep->base_ext1.quick_drop_high;
-			quick_drop = ar9003_hw_power_interpolate(freq, f, t, 3);
-		}
-		REG_RMW_FIELD(ah, AR_PHY_AGC, AR_PHY_AGC_QUICK_DROP, quick_drop);
+	if (freq < 4000)
+		quick_drop = eep->modalHeader2G.quick_drop;
+	else {
+		t[0] = eep->base_ext1.quick_drop_low;
+		t[1] = eep->modalHeader5G.quick_drop;
+		t[2] = eep->base_ext1.quick_drop_high;
+		quick_drop = ar9003_hw_power_interpolate(freq, f, t, 3);
 	}
+	REG_RMW_FIELD(ah, AR_PHY_AGC, AR_PHY_AGC_QUICK_DROP, quick_drop);
 }
 
 static void ar9003_hw_txend_to_xpa_off_apply(struct ath_hw *ah, bool is2ghz)
@@ -4002,7 +3988,7 @@ static void ar9003_hw_xlna_bias_strength_apply(struct ath_hw *ah, bool is2ghz)
 	struct ar9300_eeprom *eep = &ah->eeprom.ar9300_eep;
 	u8 bias;
 
-	if (!(eep->baseEepHeader.miscConfiguration & 0x40))
+	if (!(eep->baseEepHeader.featureEnable & 0x40))
 		return;
 
 	if (!AR_SREV_9300(ah))
@@ -4061,9 +4047,8 @@ static void ar9003_hw_thermo_cal_apply(struct ath_hw *ah)
 {
 	u32 data, ko, kg;
 
-	if (!AR_SREV_9462_20_OR_LATER(ah))
+	if (!AR_SREV_9462_20(ah))
 		return;
-
 	ar9300_otp_read_word(ah, 1, &data);
 	ko = data & 0xff;
 	kg = (data >> 8) & 0xff;
@@ -4565,7 +4550,7 @@ static void ar9003_hw_get_target_power_eeprom(struct ath_hw *ah,
 						 is2GHz);
 
 	for (i = 0; i < ar9300RateSize; i++) {
-		ath_dbg(common, REGULATORY, "TPC[%02d] 0x%08x\n",
+		ath_dbg(common, EEPROM, "TPC[%02d] 0x%08x\n",
 			i, targetPowerValT2[i]);
 	}
 }
@@ -4755,7 +4740,7 @@ tempslope:
 			      AR_PHY_TPC_19_ALPHA_THERM, temp_slope);
 	}
 
-	if (AR_SREV_9462_20_OR_LATER(ah))
+	if (AR_SREV_9462_20(ah))
 		REG_RMW_FIELD(ah, AR_PHY_TPC_19_B1,
 			      AR_PHY_TPC_19_B1_ALPHA_THERM, temp_slope);
 
@@ -5291,7 +5276,7 @@ static void ath9k_hw_ar9300_set_txpower(struct ath_hw *ah,
 		return;
 
 	for (i = 0; i < ar9300RateSize; i++) {
-		ath_dbg(common, REGULATORY, "TPC[%02d] 0x%08x\n",
+		ath_dbg(common, EEPROM, "TPC[%02d] 0x%08x\n",
 			i, targetPowerValT2[i]);
 	}
 

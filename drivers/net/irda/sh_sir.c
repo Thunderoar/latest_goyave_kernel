@@ -796,6 +796,7 @@ static int sh_sir_remove(struct platform_device *pdev)
 	sh_sir_remove_iobuf(self);
 	iounmap(self->membase);
 	free_netdev(ndev);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

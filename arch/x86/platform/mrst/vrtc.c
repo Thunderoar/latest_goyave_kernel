@@ -56,7 +56,7 @@ void vrtc_cmos_write(unsigned char val, unsigned char reg)
 }
 EXPORT_SYMBOL_GPL(vrtc_cmos_write);
 
-void vrtc_get_time(struct timespec *now)
+unsigned long vrtc_get_time(void)
 {
 	u8 sec, min, hour, mday, mon;
 	unsigned long flags;
@@ -82,18 +82,17 @@ void vrtc_get_time(struct timespec *now)
 	printk(KERN_INFO "vRTC: sec: %d min: %d hour: %d day: %d "
 		"mon: %d year: %d\n", sec, min, hour, mday, mon, year);
 
-	now->tv_sec = mktime(year, mon, mday, hour, min, sec);
-	now->tv_nsec = 0;
+	return mktime(year, mon, mday, hour, min, sec);
 }
 
-int vrtc_set_mmss(const struct timespec *now)
+int vrtc_set_mmss(unsigned long nowtime)
 {
 	unsigned long flags;
 	struct rtc_time tm;
 	int year;
 	int retval = 0;
 
-	rtc_time_to_tm(now->tv_sec, &tm);
+	rtc_time_to_tm(nowtime, &tm);
 	if (!rtc_valid_tm(&tm) && tm.tm_year >= 72) {
 		/*
 		 * tm.year is the number of years since 1900, and the
@@ -111,7 +110,7 @@ int vrtc_set_mmss(const struct timespec *now)
 	} else {
 		printk(KERN_ERR
 		       "%s: Invalid vRTC value: write of %lx to vRTC failed\n",
-			__FUNCTION__, now->tv_sec);
+			__FUNCTION__, nowtime);
 		retval = -EINVAL;
 	}
 	return retval;

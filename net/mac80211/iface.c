@@ -159,8 +159,7 @@ static int ieee80211_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-static int ieee80211_verify_mac(struct ieee80211_local *local, u8 *addr,
-				bool check_dup)
+static int ieee80211_verify_mac(struct ieee80211_sub_if_data *sdata, u8 *addr)
 {
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_sub_if_data *iter;
@@ -181,13 +180,10 @@ static int ieee80211_verify_mac(struct ieee80211_local *local, u8 *addr,
 		((u64)m[2] << 3*8) | ((u64)m[3] << 2*8) |
 		((u64)m[4] << 1*8) | ((u64)m[5] << 0*8);
 
-	if (!check_dup)
-		return ret;
 
 	mutex_lock(&local->iflist_mtx);
-	list_for_each_entry(sdata, &local->interfaces, list) {
-		if (sdata->vif.type == NL80211_IFTYPE_MONITOR &&
-		    !(sdata->u.mntr_flags & MONITOR_FLAG_ACTIVE))
+	list_for_each_entry(iter, &local->interfaces, list) {
+		if (iter == sdata)
 			continue;
 
 		if (iter->vif.type == NL80211_IFTYPE_MONITOR)
@@ -212,17 +208,12 @@ static int ieee80211_change_mac(struct net_device *dev, void *addr)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct sockaddr *sa = addr;
-	bool check_dup = true;
 	int ret;
 
 	if (ieee80211_sdata_running(sdata))
 		return -EBUSY;
 
-	if (sdata->vif.type == NL80211_IFTYPE_MONITOR &&
-	    !(sdata->u.mntr_flags & MONITOR_FLAG_ACTIVE))
-		check_dup = false;
-
-	ret = ieee80211_verify_mac(sdata->local, sa->sa_data, check_dup);s
+	ret = ieee80211_verify_mac(sdata, sa->sa_data);
 	if (ret)
 		return ret;
 
@@ -554,11 +545,7 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 			break;
 		}
 
-		if (sdata->u.mntr_flags & MONITOR_FLAG_ACTIVE) {
-			res = drv_add_interface(local, sdata);
-			if (res)
-				goto err_stop;
-		} else if (local->monitors == 0 && local->open_count == 0) {
+		if (local->monitors == 0 && local->open_count == 0) {
 			res = ieee80211_add_virtual_monitor(local);
 			if (res)
 				goto err_stop;
@@ -936,11 +923,7 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata,
 		mutex_lock(&local->mtx);
 		ieee80211_recalc_idle(local);
 		mutex_unlock(&local->mtx);
-
-		if (!(sdata->u.mntr_flags & MONITOR_FLAG_ACTIVE))
-			break;
-
-		/* fall through */
+		break;
 	default:
 		if (going_down)
 			drv_remove_interface(local, sdata);
@@ -1089,7 +1072,7 @@ static const struct net_device_ops ieee80211_monitorif_ops = {
 	.ndo_start_xmit		= ieee80211_monitor_start_xmit,
 	.ndo_set_rx_mode	= ieee80211_set_multicast_list,
 	.ndo_change_mtu 	= ieee80211_change_mtu,
-	.ndo_set_mac_address 	= ieee80211_change_mac,
+	.ndo_set_mac_address 	= eth_mac_addr,
 	.ndo_select_queue	= ieee80211_monitor_select_queue,
 };
 
@@ -1743,6 +1726,15 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 		if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
 			dev_close(sdata->dev);
 
+	/*
+	 * Close all AP_VLAN interfaces first, as otherwise they
+	 * might be closed while the AP interface they belong to
+	 * is closed, causing unregister_netdevice_many() to crash.
+	 */
+	list_for_each_entry(sdata, &local->interfaces, list)
+		if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
+			dev_close(sdata->dev);
+
 	mutex_lock(&local->iflist_mtx);
 	list_for_each_entry_safe(sdata, tmp, &local->interfaces, list) {
 		list_del(&sdata->list);
@@ -1754,6 +1746,7 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 	}
 	mutex_unlock(&local->iflist_mtx);
 	unregister_netdevice_many(&unreg_list);
+	list_del(&unreg_list);
 
 	list_for_each_entry_safe(sdata, tmp, &wdev_list, list) {
 		list_del(&sdata->list);

@@ -193,7 +193,6 @@ bnad_txcmpl_process(struct bnad *bnad, struct bna_tcb *tcb)
 		return 0;
 
 	hw_cons = *(tcb->hw_consumer_index);
-	rmb();
 	cons = tcb->consumer_index;
 	q_depth = tcb->q_depth;
 
@@ -2625,9 +2624,6 @@ bnad_stop(struct net_device *netdev)
 	bnad_destroy_tx(bnad, 0);
 	bnad_destroy_rx(bnad, 0);
 
-	/* These config flags are cleared in the hardware */
-	bnad->cfg_flags &= ~(BNAD_CF_ALLMULTI | BNAD_CF_PROMISC);
-
 	/* Synchronize mailbox IRQ */
 	bnad_mbox_irq_sync(bnad);
 
@@ -2907,12 +2903,13 @@ bnad_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	BNA_QE_INDX_INC(prod, q_depth);
 	tcb->producer_index = prod;
 
-	wmb();
+	smp_mb();
 
 	if (unlikely(!test_bit(BNAD_TXQ_TX_STARTED, &tcb->flags)))
 		return NETDEV_TX_OK;
 
 	bna_txq_prod_indx_doorbell(tcb);
+	smp_mb();
 
 	return NETDEV_TX_OK;
 }

@@ -139,11 +139,6 @@ static int rd_build_device_space(struct rd_dev *rd_dev)
 			rd_dev->rd_page_count);
 		return -EINVAL;
 	}
-
-	/* Don't need backing pages for NULLIO */
-	if (rd_dev->rd_flags & RDF_NULLIO)
-		return 0;
-
 	total_sg_needed = rd_dev->rd_page_count;
 
 	sg_tables = (total_sg_needed / max_sg_per_table) + 1;
@@ -179,7 +174,7 @@ static int rd_build_device_space(struct rd_dev *rd_dev)
 						- 1;
 
 		for (j = 0; j < sg_per_table; j++) {
-			pg = alloc_pages(GFP_KERNEL | __GFP_ZERO, 0);
+			pg = alloc_pages(GFP_KERNEL, 0);
 			if (!pg) {
 				pr_err("Unable to allocate scatterlist"
 					" pages for struct rd_dev_sg_table\n");

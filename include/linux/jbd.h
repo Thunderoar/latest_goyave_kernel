@@ -27,6 +27,7 @@
 #include <linux/buffer_head.h>
 #include <linux/journal-head.h>
 #include <linux/stddef.h>
+#include <linux/bit_spinlock.h>
 #include <linux/mutex.h>
 #include <linux/timer.h>
 #include <linux/lockdep.h>
@@ -246,7 +247,7 @@ typedef struct journal_superblock_s
 
 enum jbd_state_bits {
 	BH_JBD			/* Has an attached ext3 journal_head */
-	  = BH_PrivateStart,
+		= BH_PrivateStart,
 	BH_JWrite,		/* Being written to log (@@@ DEBUGGING) */
 	BH_Freed,		/* Has been freed (truncated) */
 	BH_Revoked,		/* Has been revoked from the log */
@@ -864,7 +865,7 @@ extern void	 journal_release_buffer (handle_t *, struct buffer_head *);
 extern int	 journal_forget (handle_t *, struct buffer_head *);
 extern void	 journal_sync_buffer (struct buffer_head *);
 extern void	 journal_invalidatepage(journal_t *,
-				struct page *, unsigned int, unsigned int);
+				struct page *, unsigned long);
 extern int	 journal_try_to_free_buffers(journal_t *, struct page *, gfp_t);
 extern int	 journal_stop(handle_t *);
 extern int	 journal_flush (journal_t *);

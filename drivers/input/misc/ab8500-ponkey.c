@@ -127,6 +127,8 @@ static int ab8500_ponkey_remove(struct platform_device *pdev)
 	input_unregister_device(ponkey->idev);
 	kfree(ponkey);
 
+	platform_set_drvdata(pdev, NULL);
+
 	return 0;
 }
 

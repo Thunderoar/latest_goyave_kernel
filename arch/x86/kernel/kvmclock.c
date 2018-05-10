@@ -48,9 +48,10 @@ static struct pvclock_wall_clock wall_clock;
  * have elapsed since the hypervisor wrote the data. So we try to account for
  * that with system time
  */
-static void kvm_get_wallclock(struct timespec *now)
+static unsigned long kvm_get_wallclock(void)
 {
 	struct pvclock_vcpu_time_info *vcpu_time;
+	struct timespec ts;
 	int low, high;
 	int cpu;
 
@@ -63,12 +64,14 @@ static void kvm_get_wallclock(struct timespec *now)
 	cpu = smp_processor_id();
 
 	vcpu_time = &hv_clock[cpu].pvti;
-	pvclock_read_wallclock(&wall_clock, vcpu_time, now);
+	pvclock_read_wallclock(&wall_clock, vcpu_time, &ts);
 
 	preempt_enable();
+
+	return ts.tv_sec;
 }
 
-static int kvm_set_wallclock(const struct timespec *now)
+static int kvm_set_wallclock(unsigned long now)
 {
 	return -1;
 }
@@ -262,6 +265,7 @@ void __init kvmclock_init(void)
 #endif
 	kvm_get_preset_lpj();
 	clocksource_register_hz(&kvm_clock, NSEC_PER_SEC);
+	pv_info.paravirt_enabled = 1;
 	pv_info.name = "KVM";
 
 	if (kvm_para_has_feature(KVM_FEATURE_CLOCKSOURCE_STABLE_BIT))

@@ -392,6 +392,7 @@ static int snd_aw2_probe(struct pci_dev *pci,
 static void snd_aw2_remove(struct pci_dev *pci)
 {
 	snd_card_free(pci_get_drvdata(pci));
+	pci_set_drvdata(pci, NULL);
 }
 
 /* open callback */

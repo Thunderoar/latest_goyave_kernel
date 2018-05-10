@@ -44,7 +44,6 @@
 #include <linux/uaccess.h>
 #include <linux/moduleparam.h>
 #include <linux/jiffies.h>
-#include <linux/syscalls.h>
 
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
@@ -590,7 +589,6 @@ struct sysrq_state {
 
 	/* reset sequence handling */
 	bool reset_canceled;
-	bool reset_requested;
 	unsigned long reset_keybit[BITS_TO_LONGS(KEY_CNT)];
 	int reset_seq_len;
 	int reset_seq_cnt;
@@ -629,26 +627,18 @@ static void sysrq_parse_reset_sequence(struct sysrq_state *state)
 	state->reset_seq_version = sysrq_reset_seq_version;
 }
 
-static void sysrq_do_reset(unsigned long _state)
+static void sysrq_do_reset(unsigned long dummy)
 {
-	struct sysrq_state *state = (struct sysrq_state *) _state;
-
-	state->reset_requested = true;
-
-	sys_sync();
-	kernel_restart(NULL);
+	__handle_sysrq(sysrq_xlate[KEY_B], false);
 }
 
 static void sysrq_handle_reset_request(struct sysrq_state *state)
 {
-	if (state->reset_requested)
-		__handle_sysrq(sysrq_xlate[KEY_B], false);
-
 	if (sysrq_reset_downtime_ms)
 		mod_timer(&state->keyreset_timer,
 			jiffies + msecs_to_jiffies(sysrq_reset_downtime_ms));
 	else
-		sysrq_do_reset((unsigned long)state);
+		sysrq_do_reset(0);
 }
 
 static void sysrq_detect_reset_sequence(struct sysrq_state *state,
@@ -850,8 +840,7 @@ static int sysrq_connect(struct input_handler *handler,
 	sysrq->handle.handler = handler;
 	sysrq->handle.name = "sysrq";
 	sysrq->handle.private = sysrq;
-	setup_timer(&sysrq->keyreset_timer,
-		    sysrq_do_reset, (unsigned long)sysrq);
+	setup_timer(&sysrq->keyreset_timer, sysrq_do_reset, 0);
 
 	error = input_register_handle(&sysrq->handle);
 	if (error) {
@@ -895,8 +884,8 @@ static const struct input_device_id sysrq_ids[] = {
 	{
 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
 				INPUT_DEVICE_ID_MATCH_KEYBIT,
-		.evbit = { [BIT_WORD(EV_KEY)] = BIT_MASK(EV_KEY) },
-		.keybit = { [BIT_WORD(KEY_LEFTALT)] = BIT_MASK(KEY_LEFTALT) },
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { BIT_MASK(KEY_LEFTALT) },
 	},
 	{ },
 };
@@ -946,7 +935,7 @@ static int sysrq_reset_seq_param_set(const char *buffer,
 	unsigned long val;
 	int error;
 
-	error = kstrtoul(buffer, 0, &val);
+	error = strict_strtoul(buffer, 0, &val);
 	if (error < 0)
 		return error;
 

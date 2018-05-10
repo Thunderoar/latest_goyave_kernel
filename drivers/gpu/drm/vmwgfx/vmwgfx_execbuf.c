@@ -834,35 +834,13 @@ static int vmw_cmd_dma(struct vmw_private *dev_priv,
 		SVGA3dCmdSurfaceDMA dma;
 	} *cmd;
 	int ret;
-	SVGA3dCmdSurfaceDMASuffix *suffix;
-	uint32_t bo_size;
 
 	cmd = container_of(header, struct vmw_dma_cmd, header);
-	suffix = (SVGA3dCmdSurfaceDMASuffix *)((unsigned long) &cmd->dma +
-					       header->size - sizeof(*suffix));
-
-	/* Make sure device and verifier stays in sync. */
-	if (unlikely(suffix->suffixSize != sizeof(*suffix))) {
-		DRM_ERROR("Invalid DMA suffix size.\n");
-		return -EINVAL;
-	}
-
 	ret = vmw_translate_guest_ptr(dev_priv, sw_context,
 				      &cmd->dma.guest.ptr,
 				      &vmw_bo);
 	if (unlikely(ret != 0))
 		return ret;
-
-	/* Make sure DMA doesn't cross BO boundaries. */
-	bo_size = vmw_bo->base.num_pages * PAGE_SIZE;
-	if (unlikely(cmd->dma.guest.ptr.offset > bo_size)) {
-		DRM_ERROR("Invalid DMA offset.\n");
-		return -EINVAL;
-	}
-
-	bo_size -= cmd->dma.guest.ptr.offset;
-	if (unlikely(suffix->maximumOffset > bo_size))
-		suffix->maximumOffset = bo_size;
 
 	ret = vmw_cmd_res_check(dev_priv, sw_context, vmw_res_surface,
 				user_surface_converter, &cmd->dma.host.sid,
@@ -1454,7 +1432,6 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	struct vmw_fence_obj *fence = NULL;
 	struct vmw_resource *error_resource;
 	struct list_head resource_list;
-	struct ww_acquire_ctx ticket;
 	uint32_t handle;
 	void *cmd;
 	int ret;
@@ -1511,7 +1488,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	if (unlikely(ret != 0))
 		goto out_err;
 
-	ret = ttm_eu_reserve_buffers(&ticket, &sw_context->validate_nodes);
+	ret = ttm_eu_reserve_buffers(&sw_context->validate_nodes);
 	if (unlikely(ret != 0))
 		goto out_err;
 
@@ -1560,7 +1537,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 		DRM_ERROR("Fence submission error. Syncing.\n");
 
 	vmw_resource_list_unreserve(&sw_context->resource_list, false);
-	ttm_eu_fence_buffer_objects(&ticket, &sw_context->validate_nodes,
+	ttm_eu_fence_buffer_objects(&sw_context->validate_nodes,
 				    (void *) fence);
 
 	if (unlikely(dev_priv->pinned_bo != NULL &&
@@ -1593,7 +1570,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 out_err:
 	vmw_resource_relocations_free(&sw_context->res_relocations);
 	vmw_free_relocations(sw_context);
-	ttm_eu_backoff_reservation(&ticket, &sw_context->validate_nodes);
+	ttm_eu_backoff_reservation(&sw_context->validate_nodes);
 	vmw_resource_list_unreserve(&sw_context->resource_list, true);
 	vmw_clear_validations(sw_context);
 	if (unlikely(dev_priv->pinned_bo != NULL &&
@@ -1667,7 +1644,6 @@ void __vmw_execbuf_release_pinned_bo(struct vmw_private *dev_priv,
 	struct list_head validate_list;
 	struct ttm_validate_buffer pinned_val, query_val;
 	struct vmw_fence_obj *lfence = NULL;
-	struct ww_acquire_ctx ticket;
 
 	if (dev_priv->pinned_bo == NULL)
 		goto out_unlock;
@@ -1681,7 +1657,7 @@ void __vmw_execbuf_release_pinned_bo(struct vmw_private *dev_priv,
 	list_add_tail(&query_val.head, &validate_list);
 
 	do {
-		ret = ttm_eu_reserve_buffers(&ticket, &validate_list);
+		ret = ttm_eu_reserve_buffers(&validate_list);
 	} while (ret == -ERESTARTSYS);
 
 	if (unlikely(ret != 0)) {
@@ -1708,7 +1684,7 @@ void __vmw_execbuf_release_pinned_bo(struct vmw_private *dev_priv,
 						  NULL);
 		fence = lfence;
 	}
-	ttm_eu_fence_buffer_objects(&ticket, &validate_list, (void *) fence);
+	ttm_eu_fence_buffer_objects(&validate_list, (void *) fence);
 	if (lfence != NULL)
 		vmw_fence_obj_unreference(&lfence);
 
@@ -1720,7 +1696,7 @@ out_unlock:
 	return;
 
 out_no_emit:
-	ttm_eu_backoff_reservation(&ticket, &validate_list);
+	ttm_eu_backoff_reservation(&validate_list);
 out_no_reserve:
 	ttm_bo_unref(&query_val.bo);
 	ttm_bo_unref(&pinned_val.bo);

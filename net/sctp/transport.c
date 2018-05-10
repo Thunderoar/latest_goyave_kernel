@@ -116,7 +116,7 @@ struct sctp_transport *sctp_transport_new(struct net *net,
 {
 	struct sctp_transport *transport;
 
-	transport = kzalloc(sizeof(*transport), gfp);
+	transport = t_new(struct sctp_transport, gfp);
 	if (!transport)
 		goto fail;
 

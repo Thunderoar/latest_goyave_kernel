@@ -43,8 +43,8 @@ MODULE_LICENSE("GPL");
  */
 #include "f_mass_storage.c"
 
-#define USBF_ECM_INCLUDED
 #include "f_ecm.c"
+#include "f_subset.c"
 #ifdef USB_ETH_RNDIS
 #  include "f_rndis.c"
 #  include "rndis.c"

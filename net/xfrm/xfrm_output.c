@@ -89,7 +89,7 @@ static int xfrm_output_one(struct sk_buff *skb, int err)
 
 		err = x->type->output(x, skb);
 		if (err == -EINPROGRESS)
-			goto out;
+			goto out_exit;
 
 resume:
 		if (err) {
@@ -107,14 +107,15 @@ resume:
 		x = dst->xfrm;
 	} while (x && !(x->outer_mode->flags & XFRM_MODE_FLAG_TUNNEL));
 
-	return 0;
+	err = 0;
 
+out_exit:
+	return err;
 error:
 	spin_unlock_bh(&x->lock);
 error_nolock:
 	kfree_skb(skb);
-out:
-	return err;
+	goto out_exit;
 }
 
 int xfrm_output_resume(struct sk_buff *skb, int err)

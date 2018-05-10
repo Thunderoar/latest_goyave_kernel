@@ -140,15 +140,6 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 			bss->valid_data |= IEEE80211_BSS_VALID_WMM;
 	}
 
-	if (beacon) {
-		struct ieee80211_supported_band *sband =
-			local->hw.wiphy->bands[rx_status->band];
-		if (!(rx_status->flag & RX_FLAG_HT) &&
-		    !(rx_status->flag & RX_FLAG_VHT))
-			bss->beacon_rate =
-				&sband->bitrates[rx_status->rate_idx];
-	}
-
 	return bss;
 }
 
@@ -210,9 +201,6 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_local *local)
 	struct cfg80211_scan_request *req = local->scan_req;
 	enum ieee80211_band band;
 	int i, ielen, n_chans;
-
-	if (test_bit(SCAN_HW_CANCELLED, &local->scanning))
-		return false;
 
 	do {
 		if (local->hw_scan_band == IEEE80211_NUM_BANDS)
@@ -890,23 +878,7 @@ void ieee80211_scan_cancel(struct ieee80211_local *local)
 	if (!local->scan_req)
 		goto out;
 
-	/*
-	 * We have a scan running and the driver already reported completion,
-	 * but the worker hasn't run yet or is stuck on the mutex - mark it as
-	 * cancelled.
-	 */
-	if (test_bit(SCAN_HW_SCANNING, &local->scanning) &&
-	    test_bit(SCAN_COMPLETED, &local->scanning)) {
-		set_bit(SCAN_HW_CANCELLED, &local->scanning);
-		goto out;
-	}
-
 	if (test_bit(SCAN_HW_SCANNING, &local->scanning)) {
-		/*
-		 * Make sure that __ieee80211_scan_completed doesn't trigger a
-		 * scan on another band.
-		 */
-		set_bit(SCAN_HW_CANCELLED, &local->scanning);
 		if (local->ops->cancel_hw_scan)
 			drv_cancel_hw_scan(local,
 				rcu_dereference_protected(local->scan_sdata,

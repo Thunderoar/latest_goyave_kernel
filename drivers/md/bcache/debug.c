@@ -47,10 +47,11 @@ const char *bch_ptr_status(struct cache_set *c, const struct bkey *k)
 	return "";
 }
 
-int bch_bkey_to_text(char *buf, size_t size, const struct bkey *k)
+struct keyprint_hack bch_pkey(const struct bkey *k)
 {
 	unsigned i = 0;
-	char *out = buf, *end = buf + size;
+	struct keyprint_hack r;
+	char *out = r.s, *end = r.s + KEYHACK_SIZE;
 
 #define p(...)	(out += scnprintf(out, end - out, __VA_ARGS__))
 
@@ -74,14 +75,16 @@ int bch_bkey_to_text(char *buf, size_t size, const struct bkey *k)
 	if (KEY_CSUM(k))
 		p(" cs%llu %llx", KEY_CSUM(k), k->ptr[1]);
 #undef p
-	return out - buf;
+	return r;
 }
 
-int bch_btree_to_text(char *buf, size_t size, const struct btree *b)
+struct keyprint_hack bch_pbtree(const struct btree *b)
 {
-	return scnprintf(buf, size, "%zu level %i/%i",
-			 PTR_BUCKET_NR(b->c, &b->key, 0),
-			 b->level, b->c->root ? b->c->root->level : -1);
+	struct keyprint_hack r;
+
+	snprintf(r.s, 40, "%zu level %i/%i", PTR_BUCKET_NR(b->c, &b->key, 0),
+		 b->level, b->c->root ? b->c->root->level : -1);
+	return r;
 }
 
 #if defined(CONFIG_BCACHE_DEBUG) || defined(CONFIG_BCACHE_EDEBUG)
@@ -97,12 +100,10 @@ static void dump_bset(struct btree *b, struct bset *i)
 {
 	struct bkey *k;
 	unsigned j;
-	char buf[80];
 
 	for (k = i->start; k < end(i); k = bkey_next(k)) {
-		bch_bkey_to_text(buf, sizeof(buf), k);
 		printk(KERN_ERR "block %zu key %zi/%u: %s", index(i, b),
-		       (uint64_t *) k - i->d, i->keys, buf);
+		       (uint64_t *) k - i->d, i->keys, pkey(k));
 
 		for (j = 0; j < KEY_PTRS(k); j++) {
 			size_t n = PTR_BUCKET_NR(b->c, k, j);
@@ -143,7 +144,7 @@ void bch_btree_verify(struct btree *b, struct bset *new)
 	v->written = 0;
 	v->level = b->level;
 
-	bch_btree_node_read(v);
+	bch_btree_read(v);
 	closure_wait_event(&v->io.wait, &cl,
 			   atomic_read(&b->io.cl.remaining) == -1);
 
@@ -251,7 +252,6 @@ static void vdump_bucket_and_panic(struct btree *b, const char *fmt,
 				   va_list args)
 {
 	unsigned i;
-	char buf[80];
 
 	console_lock();
 
@@ -262,8 +262,7 @@ static void vdump_bucket_and_panic(struct btree *b, const char *fmt,
 
 	console_unlock();
 
-	bch_btree_to_text(buf, sizeof(buf), b);
-	panic("at %s\n", buf);
+	panic("at %s\n", pbtree(b));
 }
 
 void bch_check_key_order_msg(struct btree *b, struct bset *i,
@@ -338,7 +337,6 @@ static ssize_t bch_dump_read(struct file *file, char __user *buf,
 {
 	struct dump_iterator *i = file->private_data;
 	ssize_t ret = 0;
-	char kbuf[80];
 
 	while (size) {
 		struct keybuf_key *w;
@@ -357,12 +355,11 @@ static ssize_t bch_dump_read(struct file *file, char __user *buf,
 		if (i->bytes)
 			break;
 
-		w = bch_keybuf_next_rescan(i->c, &i->keys, &MAX_KEY, dump_pred);
+		w = bch_keybuf_next_rescan(i->c, &i->keys, &MAX_KEY);
 		if (!w)
 			break;
 
-		bch_bkey_to_text(kbuf, sizeof(kbuf), &w->key);
-		i->bytes = snprintf(i->buf, PAGE_SIZE, "%s\n", kbuf);
+		i->bytes = snprintf(i->buf, PAGE_SIZE, "%s\n", pkey(&w->key));
 		bch_keybuf_del(&i->keys, w);
 	}
 
@@ -380,7 +377,7 @@ static int bch_dump_open(struct inode *inode, struct file *file)
 
 	file->private_data = i;
 	i->c = c;
-	bch_keybuf_init(&i->keys);
+	bch_keybuf_init(&i->keys, dump_pred);
 	i->keys.last_scanned = KEY(0, 0, 0);
 
 	return 0;
@@ -515,7 +512,7 @@ static ssize_t btree_fuzz(struct kobject *k, struct kobj_attribute *a,
 
 		bch_btree_sort(b);
 		fill->written = 0;
-		bch_btree_node_read_done(fill);
+		bch_btree_read_done(&fill->io.cl);
 
 		if (b->sets[0].data->keys != fill->sets[0].data->keys ||
 		    memcmp(b->sets[0].data->start,
@@ -529,17 +526,10 @@ static ssize_t btree_fuzz(struct kobject *k, struct kobj_attribute *a,
 			     k < end(i);
 			     k = bkey_next(k), l = bkey_next(l))
 				if (bkey_cmp(k, l) ||
-				    KEY_SIZE(k) != KEY_SIZE(l)) {
-					char buf1[80];
-					char buf2[80];
-
-					bch_bkey_to_text(buf1, sizeof(buf1), k);
-					bch_bkey_to_text(buf2, sizeof(buf2), l);
-
+				    KEY_SIZE(k) != KEY_SIZE(l))
 					pr_err("key %zi differs: %s != %s",
 					       (uint64_t *) k - i->d,
-					       buf1, buf2);
-				}
+					       pkey(k), pkey(l));
 
 			for (j = 0; j < 3; j++) {
 				pr_err("**** Set %i ****", j);

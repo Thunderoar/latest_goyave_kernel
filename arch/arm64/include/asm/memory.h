@@ -51,8 +51,6 @@
 #define TASK_SIZE_32		UL(0x100000000)
 #define TASK_SIZE		(test_thread_flag(TIF_32BIT) ? \
 				TASK_SIZE_32 : TASK_SIZE_64)
-#define TASK_SIZE_OF(tsk)	(test_tsk_thread_flag(tsk, TIF_32BIT) ? \
-				TASK_SIZE_32 : TASK_SIZE_64)
 #else
 #define TASK_SIZE		TASK_SIZE_64
 #endif /* CONFIG_COMPAT */
@@ -91,12 +89,6 @@
 #define MT_DEVICE_GRE		2
 #define MT_NORMAL_NC		3
 #define MT_NORMAL		4
-
-/*
- * Memory types for Stage-2 translation
- */
-#define MT_S2_NORMAL		0xf
-#define MT_S2_DEVICE_nGnRE	0x1
 
 #ifndef __ASSEMBLY__
 

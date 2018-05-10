@@ -140,7 +140,6 @@ static void smsdvb_stats_not_ready(struct dvb_frontend *fe)
 	case DEVICE_MODE_ISDBT:
 	case DEVICE_MODE_ISDBT_BDA:
 		n_layers = 4;
-		break;
 	default:
 		n_layers = 1;
 	}

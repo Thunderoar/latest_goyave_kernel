@@ -36,11 +36,7 @@ static inline unsigned int sk_filter_len(const struct sk_filter *fp)
 	return fp->len * sizeof(struct sock_filter) + sizeof(*fp);
 }
 
-int sk_filter_trim_cap(struct sock *sk, struct sk_buff *skb, unsigned int cap);
-static inline int sk_filter(struct sock *sk, struct sk_buff *skb)
-{
-	return sk_filter_trim_cap(sk, skb, 1);
-}
+extern int sk_filter(struct sock *sk, struct sk_buff *skb);
 extern unsigned int sk_run_filter(const struct sk_buff *skb,
 				  const struct sock_filter *filter);
 extern int sk_unattached_filter_create(struct sk_filter **pfp,
@@ -63,10 +59,10 @@ extern void bpf_jit_free(struct sk_filter *fp);
 static inline void bpf_jit_dump(unsigned int flen, unsigned int proglen,
 				u32 pass, void *image)
 {
-	pr_err("flen=%u proglen=%u pass=%u image=%pK\n",
+	pr_err("flen=%u proglen=%u pass=%u image=%p\n",
 	       flen, proglen, pass, image);
 	if (image)
-		print_hex_dump(KERN_ERR, "JIT code: ", DUMP_PREFIX_OFFSET,
+		print_hex_dump(KERN_ERR, "JIT code: ", DUMP_PREFIX_ADDRESS,
 			       16, 1, image, proglen, false);
 }
 #define SK_RUN_FILTER(FILTER, SKB) (*FILTER->bpf_func)(SKB, FILTER->insns)

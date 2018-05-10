@@ -42,8 +42,7 @@ static int __init ux500_l2x0_init(void)
 	if (cpu_is_u8500_family() || cpu_is_ux540_family())
 		l2x0_base = __io_address(U8500_L2CC_BASE);
 	else
-		/* Non-Ux500 platform */
-		return -ENODEV;
+		ux500_unknown_soc();
 
 	/* Unlock before init */
 	ux500_l2x0_unlock();

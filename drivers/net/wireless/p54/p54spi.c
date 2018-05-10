@@ -42,7 +42,8 @@
 
 MODULE_FIRMWARE("3826.arm");
 
-/* gpios should be handled in board files and provided via platform data,
+/*
+ * gpios should be handled in board files and provided via platform data,
  * but because it's currently impossible for p54spi to have a header file
  * in include/linux, let's use module paramaters for now
  */
@@ -190,7 +191,8 @@ static int p54spi_request_eeprom(struct ieee80211_hw *dev)
 	const struct firmware *eeprom;
 	int ret;
 
-	/* allow users to customize their eeprom.
+	/*
+	 * allow users to customize their eeprom.
 	 */
 
 	ret = request_firmware(&eeprom, "3826.eeprom", &priv->spi->dev);
@@ -283,7 +285,8 @@ static void p54spi_power_on(struct p54s_priv *priv)
 	gpio_set_value(p54spi_gpio_power, 1);
 	enable_irq(gpio_to_irq(p54spi_gpio_irq));
 
-	/* need to wait a while before device can be accessed, the length
+	/*
+	 * need to wait a while before device can be accessed, the length
 	 * is just a guess
 	 */
 	msleep(10);
@@ -362,8 +365,7 @@ static int p54spi_rx(struct p54s_priv *priv)
 	/* Firmware may insert up to 4 padding bytes after the lmac header,
 	 * but it does not amend the size of SPI data transfer.
 	 * Such packets has correct data size in header, thus referencing
-	 * past the end of allocated skb. Reserve extra 4 bytes for this case
-	 */
+	 * past the end of allocated skb. Reserve extra 4 bytes for this case */
 	skb = dev_alloc_skb(len + 4);
 	if (!skb) {
 		p54spi_sleep(priv);
@@ -381,8 +383,7 @@ static int p54spi_rx(struct p54s_priv *priv)
 	}
 	p54spi_sleep(priv);
 	/* Put additional bytes to compensate for the possible
-	 * alignment-caused truncation
-	 */
+	 * alignment-caused truncation */
 	skb_put(skb, 4);
 
 	if (p54_rx(priv->hw, skb) == 0)
@@ -712,7 +713,27 @@ static struct spi_driver p54spi_driver = {
 	.remove		= p54spi_remove,
 };
 
-module_spi_driver(p54spi_driver);
+static int __init p54spi_init(void)
+{
+	int ret;
+
+	ret = spi_register_driver(&p54spi_driver);
+	if (ret < 0) {
+		printk(KERN_ERR "failed to register SPI driver: %d", ret);
+		goto out;
+	}
+
+out:
+	return ret;
+}
+
+static void __exit p54spi_exit(void)
+{
+	spi_unregister_driver(&p54spi_driver);
+}
+
+module_init(p54spi_init);
+module_exit(p54spi_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Christian Lamparter <chunkeey@web.de>");

@@ -39,7 +39,6 @@
 #include <linux/errno.h>
 
 #include <linux/mlx4/cmd.h>
-#include <linux/mlx4/device.h>
 #include <linux/semaphore.h>
 #include <rdma/ib_smi.h>
 
@@ -257,8 +256,6 @@ static int mlx4_comm_cmd_wait(struct mlx4_dev *dev, u8 op,
 
 	if (!wait_for_completion_timeout(&context->done,
 					 msecs_to_jiffies(timeout))) {
-		mlx4_warn(dev, "communication channel command 0x%x timed out\n",
-			  op);
 		err = -EBUSY;
 		goto out;
 	}
@@ -488,8 +485,6 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	}
 
 	if (cmd_pending(dev)) {
-		mlx4_warn(dev, "command 0x%x timed out (go bit not cleared)\n",
-			  op);
 		err = -ETIMEDOUT;
 		goto out;
 	}
@@ -553,8 +548,6 @@ static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 
 	if (!wait_for_completion_timeout(&context->done,
 					 msecs_to_jiffies(timeout))) {
-		mlx4_warn(dev, "command 0x%x timed out (go bit not cleared)\n",
-			  op);
 		err = -EBUSY;
 		goto out;
 	}
@@ -1551,7 +1544,7 @@ static void mlx4_master_deactivate_admin_state(struct mlx4_priv *priv, int slave
 			vp_oper->vlan_idx = NO_INDX;
 		}
 		if (NO_INDX != vp_oper->mac_idx) {
-			__mlx4_unregister_mac(&priv->dev, port, vp_oper->state.mac);
+			__mlx4_unregister_mac(&priv->dev, port, vp_oper->mac_idx);
 			vp_oper->mac_idx = NO_INDX;
 		}
 	}
@@ -1843,7 +1836,7 @@ int mlx4_multi_func_init(struct mlx4_dev *dev)
 			spin_lock_init(&s_state->lock);
 		}
 
-		memset(&priv->mfunc.master.cmd_eqe, 0, sizeof(struct mlx4_eqe));
+		memset(&priv->mfunc.master.cmd_eqe, 0, dev->caps.eqe_size);
 		priv->mfunc.master.cmd_eqe.type = MLX4_EVENT_TYPE_CMD;
 		INIT_WORK(&priv->mfunc.master.comm_work,
 			  mlx4_master_comm_channel);
@@ -2185,54 +2178,7 @@ int mlx4_get_vf_config(struct mlx4_dev *dev, int port, int vf, struct ifla_vf_in
 	ivf->qos	= s_info->default_qos;
 	ivf->tx_rate	= s_info->tx_rate;
 	ivf->spoofchk	= s_info->spoofchk;
-	ivf->linkstate	= s_info->link_state;
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mlx4_get_vf_config);
-
-int mlx4_set_vf_link_state(struct mlx4_dev *dev, int port, int vf, int link_state)
-{
-	struct mlx4_priv *priv = mlx4_priv(dev);
-	struct mlx4_vport_state *s_info;
-	struct mlx4_vport_oper_state *vp_oper;
-	int slave;
-	u8 link_stat_event;
-
-	slave = mlx4_get_slave_indx(dev, vf);
-	if (slave < 0)
-		return -EINVAL;
-
-	switch (link_state) {
-	case IFLA_VF_LINK_STATE_AUTO:
-		/* get current link state */
-		if (!priv->sense.do_sense_port[port])
-			link_stat_event = MLX4_PORT_CHANGE_SUBTYPE_ACTIVE;
-		else
-			link_stat_event = MLX4_PORT_CHANGE_SUBTYPE_DOWN;
-	    break;
-
-	case IFLA_VF_LINK_STATE_ENABLE:
-		link_stat_event = MLX4_PORT_CHANGE_SUBTYPE_ACTIVE;
-	    break;
-
-	case IFLA_VF_LINK_STATE_DISABLE:
-		link_stat_event = MLX4_PORT_CHANGE_SUBTYPE_DOWN;
-	    break;
-
-	default:
-		mlx4_warn(dev, "unknown value for link_state %02x on slave %d port %d\n",
-			  link_state, slave, port);
-		return -EINVAL;
-	};
-	/* update the admin & oper state on the link state */
-	s_info = &priv->mfunc.master.vf_admin[slave].vport[port];
-	vp_oper = &priv->mfunc.master.vf_oper[slave].vport[port];
-	s_info->link_state = link_state;
-	vp_oper->state.link_state = link_state;
-
-	/* send event */
-	mlx4_gen_port_state_change_eqe(dev, slave, port, link_stat_event);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(mlx4_set_vf_link_state);

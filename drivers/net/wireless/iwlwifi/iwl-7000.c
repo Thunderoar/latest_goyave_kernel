@@ -96,9 +96,13 @@ static const struct iwl_base_params iwl7000_base_params = {
 	.pll_cfg_val = 0,
 	.shadow_ram_support = true,
 	.led_compensation = 57,
+	.adv_thermal_throttle = true,
+	.support_ct_kill_exit = true,
+	.plcp_delta_threshold = IWL_MAX_PLCP_ERR_THRESHOLD_DEF,
+	.chain_noise_scale = 1000,
 	.wd_timeout = IWL_LONG_WD_TIMEOUT,
 	.max_event_log_size = 512,
-	.shadow_reg_enable = true,
+	.shadow_reg_enable = false, /* TODO: fix bugs using this feature */
 };
 
 static const struct iwl_ht_params iwl7000_ht_params = {
@@ -114,21 +118,14 @@ static const struct iwl_ht_params iwl7000_ht_params = {
 	.max_inst_size = IWL60_RTC_INST_SIZE,			\
 	.max_data_size = IWL60_RTC_DATA_SIZE,			\
 	.base_params = &iwl7000_base_params,			\
-	.led_mode = IWL_LED_RF_STATE
+	/* TODO: .bt_params? */					\
+	.need_temp_offset_calib = true,				\
+	.led_mode = IWL_LED_RF_STATE,				\
+	.adv_pm = true						\
 
 
 const struct iwl_cfg iwl7260_2ac_cfg = {
-	.name = "Intel(R) Dual Band Wireless AC 7260",
-	.fw_name_pre = IWL7260_FW_PRE,
-	IWL_DEVICE_7000,
-	.ht_params = &iwl7000_ht_params,
-	.nvm_ver = IWL7260_NVM_VERSION,
-	.nvm_calib_ver = IWL7260_TX_POWER_VERSION,
-	.host_interrupt_operation_mode = true,
-};
-
-const struct iwl_cfg iwl7260_2n_cfg = {
-	.name = "Intel(R) Dual Band Wireless N 7260",
+	.name = "Intel(R) Dual Band Wireless AC7260",
 	.fw_name_pre = IWL7260_FW_PRE,
 	IWL_DEVICE_7000,
 	.ht_params = &iwl7000_ht_params,
@@ -136,41 +133,13 @@ const struct iwl_cfg iwl7260_2n_cfg = {
 	.nvm_calib_ver = IWL7260_TX_POWER_VERSION,
 };
 
-const struct iwl_cfg iwl7260_n_cfg = {
-	.name = "Intel(R) Wireless N 7260",
-	.fw_name_pre = IWL7260_FW_PRE,
-	IWL_DEVICE_7000,
-	.ht_params = &iwl7000_ht_params,
-	.nvm_ver = IWL7260_NVM_VERSION,
-	.nvm_calib_ver = IWL7260_TX_POWER_VERSION,
-};
-
-const struct iwl_cfg iwl3160_2ac_cfg = {
-	.name = "Intel(R) Dual Band Wireless AC 3160",
+const struct iwl_cfg iwl3160_ac_cfg = {
+	.name = "Intel(R) Dual Band Wireless AC3160",
 	.fw_name_pre = IWL3160_FW_PRE,
 	IWL_DEVICE_7000,
 	.ht_params = &iwl7000_ht_params,
 	.nvm_ver = IWL3160_NVM_VERSION,
 	.nvm_calib_ver = IWL3160_TX_POWER_VERSION,
-};
-
-const struct iwl_cfg iwl3160_2n_cfg = {
-	.name = "Intel(R) Dual Band Wireless N 3160",
-	.fw_name_pre = IWL3160_FW_PRE,
-	IWL_DEVICE_7000,
-	.ht_params = &iwl7000_ht_params,
-	.nvm_ver = IWL3160_NVM_VERSION,
-	.nvm_calib_ver = IWL3160_TX_POWER_VERSION,
-};
-
-const struct iwl_cfg iwl3160_n_cfg = {
-	.name = "Intel(R) Wireless N 3160",
-	.fw_name_pre = IWL3160_FW_PRE,
-	IWL_DEVICE_7000,
-	.ht_params = &iwl7000_ht_params,
-	.nvm_ver = IWL3160_NVM_VERSION,
-	.nvm_calib_ver = IWL3160_TX_POWER_VERSION,
-	.host_interrupt_operation_mode = true,
 };
 
 MODULE_FIRMWARE(IWL7260_MODULE_FIRMWARE(IWL7260_UCODE_API_OK));

@@ -560,9 +560,6 @@ void ieee80211_iterate_active_interfaces(
 	list_for_each_entry(sdata, &local->interfaces, list) {
 		switch (sdata->vif.type) {
 		case NL80211_IFTYPE_MONITOR:
-			if (!(sdata->u.mntr_flags & MONITOR_FLAG_ACTIVE))
-				continue;
-			break;
 		case NL80211_IFTYPE_AP_VLAN:
 			continue;
 		default:
@@ -601,9 +598,6 @@ void ieee80211_iterate_active_interfaces_atomic(
 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
 		switch (sdata->vif.type) {
 		case NL80211_IFTYPE_MONITOR:
-			if (!(sdata->u.mntr_flags & MONITOR_FLAG_ACTIVE))
-				continue;
-			break;
 		case NL80211_IFTYPE_AP_VLAN:
 			continue;
 		default:
@@ -1610,9 +1604,8 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 				   BSS_CHANGED_ARP_FILTER |
 				   BSS_CHANGED_PS;
 
-			/* Re-send beacon info report to the driver */
-			if (sdata->u.mgd.have_beacon)
-				changed |= BSS_CHANGED_BEACON_INFO;
+			if (sdata->u.mgd.dtim_period)
+				changed |= BSS_CHANGED_DTIM_PERIOD;
 
 			mutex_lock(&sdata->u.mgd.mtx);
 			ieee80211_bss_info_change_notify(sdata, changed);
@@ -2181,10 +2174,6 @@ u64 ieee80211_calculate_rx_timestamp(struct ieee80211_local *local,
 	}
 
 	rate = cfg80211_calculate_bitrate(&ri);
-	if (WARN_ONCE(!rate,
-		      "Invalid bitrate: flags=0x%x, idx=%d, vht_nss=%d\n",
-		      status->flag, status->rate_idx, status->vht_nss))
-		return 0;
 
 	/* rewind from end of MPDU */
 	if (status->flag & RX_FLAG_MACTIME_END)

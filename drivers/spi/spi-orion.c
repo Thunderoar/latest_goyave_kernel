@@ -403,6 +403,8 @@ static int orion_spi_probe(struct platform_device *pdev)
 	struct resource *r;
 	unsigned long tclk_hz;
 	int status = 0;
+	const u32 *iprop;
+	int size;
 
 	master = spi_alloc_master(&pdev->dev, sizeof *spi);
 	if (master == NULL) {
@@ -413,10 +415,10 @@ static int orion_spi_probe(struct platform_device *pdev)
 	if (pdev->id != -1)
 		master->bus_num = pdev->id;
 	if (pdev->dev.of_node) {
-		u32 cell_index;
-		if (!of_property_read_u32(pdev->dev.of_node, "cell-index",
-					  &cell_index))
-			master->bus_num = cell_index;
+		iprop = of_get_property(pdev->dev.of_node, "cell-index",
+					&size);
+		if (iprop && size == sizeof(*iprop))
+			master->bus_num = *iprop;
 	}
 
 	/* we support only mode 0, and no options */
@@ -426,7 +428,7 @@ static int orion_spi_probe(struct platform_device *pdev)
 	master->transfer_one_message = orion_spi_transfer_one_message;
 	master->num_chipselect = ORION_NUM_CHIPSELECTS;
 
-	platform_set_drvdata(pdev, master);
+	dev_set_drvdata(&pdev->dev, master);
 
 	spi = spi_master_get_devdata(master);
 	spi->master = master;
@@ -483,7 +485,7 @@ static int orion_spi_remove(struct platform_device *pdev)
 	struct resource *r;
 	struct orion_spi *spi;
 
-	master = platform_get_drvdata(pdev);
+	master = dev_get_drvdata(&pdev->dev);
 	spi = spi_master_get_devdata(master);
 
 	clk_disable_unprepare(spi->clk);

@@ -2975,19 +2975,16 @@ static int invalidatepage_can_drop(struct inode *inode, struct buffer_head *bh)
 }
 
 /* clm -- taken from fs/buffer.c:block_invalidate_page */
-static void reiserfs_invalidatepage(struct page *page, unsigned int offset,
-				    unsigned int length)
+static void reiserfs_invalidatepage(struct page *page, unsigned long offset)
 {
 	struct buffer_head *head, *bh, *next;
 	struct inode *inode = page->mapping->host;
 	unsigned int curr_off = 0;
-	unsigned int stop = offset + length;
-	int partial_page = (offset || length < PAGE_CACHE_SIZE);
 	int ret = 1;
 
 	BUG_ON(!PageLocked(page));
 
-	if (!partial_page)
+	if (offset == 0)
 		ClearPageChecked(page);
 
 	if (!page_has_buffers(page))
@@ -2998,9 +2995,6 @@ static void reiserfs_invalidatepage(struct page *page, unsigned int offset,
 	do {
 		unsigned int next_off = curr_off + bh->b_size;
 		next = bh->b_this_page;
-
-		if (next_off > stop)
-			goto out;
 
 		/*
 		 * is this block fully invalidated?
@@ -3020,7 +3014,7 @@ static void reiserfs_invalidatepage(struct page *page, unsigned int offset,
 	 * The get_block cached value has been unconditionally invalidated,
 	 * so real IO is not possible anymore.
 	 */
-	if (!partial_page && ret) {
+	if (!offset && ret) {
 		ret = try_to_release_page(page, 0);
 		/* maybe should BUG_ON(!ret); - neilb */
 	}
@@ -3217,14 +3211,8 @@ int reiserfs_setattr(struct dentry *dentry, struct iattr *attr)
 	    attr->ia_size != i_size_read(inode)) {
 		error = inode_newsize_ok(inode, attr->ia_size);
 		if (!error) {
-			/*
-			 * Could race against reiserfs_file_release
-			 * if called from NFS, so take tailpack mutex.
-			 */
-			mutex_lock(&REISERFS_I(inode)->tailpack);
 			truncate_setsize(inode, attr->ia_size);
-			reiserfs_truncate_file(inode, 1);
-			mutex_unlock(&REISERFS_I(inode)->tailpack);
+			reiserfs_vfs_truncate_file(inode);
 		}
 	}
 

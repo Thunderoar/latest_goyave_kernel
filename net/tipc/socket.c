@@ -2,7 +2,7 @@
  * net/tipc/socket.c: TIPC socket API
  *
  * Copyright (c) 2001-2007, 2012 Ericsson AB
- * Copyright (c) 2004-2008, 2010-2013, Wind River Systems
+ * Copyright (c) 2004-2008, 2010-2012, Wind River Systems
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,8 @@
 #define SS_LISTENING	-1	/* socket is listening */
 #define SS_READY	-2	/* socket is connectionless */
 
+#define CONN_OVERLOAD_LIMIT	((TIPC_FLOW_CONTROL_WIN * 2 + 1) * \
+				SKB_TRUESIZE(TIPC_MAX_USER_MSG_SIZE))
 #define CONN_TIMEOUT_DEFAULT	8000	/* default connect timeout = 8s */
 
 struct tipc_sock {
@@ -63,15 +65,12 @@ static u32 dispatch(struct tipc_port *tport, struct sk_buff *buf);
 static void wakeupdispatch(struct tipc_port *tport);
 static void tipc_data_ready(struct sock *sk, int len);
 static void tipc_write_space(struct sock *sk);
-static int release(struct socket *sock);
-static int accept(struct socket *sock, struct socket *new_sock, int flags);
 
 static const struct proto_ops packet_ops;
 static const struct proto_ops stream_ops;
 static const struct proto_ops msg_ops;
 
 static struct proto tipc_proto;
-static struct proto tipc_proto_kern;
 
 static int sockets_enabled;
 
@@ -144,7 +143,7 @@ static void reject_rx_queue(struct sock *sk)
 }
 
 /**
- * tipc_sk_create - create a TIPC socket
+ * tipc_create - create a TIPC socket
  * @net: network namespace (must be default network)
  * @sock: pre-allocated socket structure
  * @protocol: protocol indicator (must be 0)
@@ -155,8 +154,8 @@ static void reject_rx_queue(struct sock *sk)
  *
  * Returns 0 on success, errno otherwise
  */
-static int tipc_sk_create(struct net *net, struct socket *sock, int protocol,
-			  int kern)
+static int tipc_create(struct net *net, struct socket *sock, int protocol,
+		       int kern)
 {
 	const struct proto_ops *ops;
 	socket_state state;
@@ -186,17 +185,13 @@ static int tipc_sk_create(struct net *net, struct socket *sock, int protocol,
 	}
 
 	/* Allocate socket's protocol area */
-	if (!kern)
-		sk = sk_alloc(net, AF_TIPC, GFP_KERNEL, &tipc_proto);
-	else
-		sk = sk_alloc(net, AF_TIPC, GFP_KERNEL, &tipc_proto_kern);
-
+	sk = sk_alloc(net, AF_TIPC, GFP_KERNEL, &tipc_proto);
 	if (sk == NULL)
 		return -ENOMEM;
 
 	/* Allocate TIPC port for socket to use */
-	tp_ptr = tipc_createport(sk, &dispatch, &wakeupdispatch,
-				 TIPC_LOW_IMPORTANCE);
+	tp_ptr = tipc_createport_raw(sk, &dispatch, &wakeupdispatch,
+				     TIPC_LOW_IMPORTANCE);
 	if (unlikely(!tp_ptr)) {
 		sk_free(sk);
 		return -ENOMEM;
@@ -208,7 +203,6 @@ static int tipc_sk_create(struct net *net, struct socket *sock, int protocol,
 
 	sock_init_data(sock, sk);
 	sk->sk_backlog_rcv = backlog_rcv;
-	sk->sk_rcvbuf = sysctl_tipc_rmem[1];
 	sk->sk_data_ready = tipc_data_ready;
 	sk->sk_write_space = tipc_write_space;
 	tipc_sk(sk)->p = tp_ptr;
@@ -223,78 +217,6 @@ static int tipc_sk_create(struct net *net, struct socket *sock, int protocol,
 	}
 
 	return 0;
-}
-
-/**
- * tipc_sock_create_local - create TIPC socket from inside TIPC module
- * @type: socket type - SOCK_RDM or SOCK_SEQPACKET
- *
- * We cannot use sock_creat_kern here because it bumps module user count.
- * Since socket owner and creator is the same module we must make sure
- * that module count remains zero for module local sockets, otherwise
- * we cannot do rmmod.
- *
- * Returns 0 on success, errno otherwise
- */
-int tipc_sock_create_local(int type, struct socket **res)
-{
-	int rc;
-	struct sock *sk;
-
-	rc = sock_create_lite(AF_TIPC, type, 0, res);
-	if (rc < 0) {
-		pr_err("Failed to create kernel socket\n");
-		return rc;
-	}
-	tipc_sk_create(&init_net, *res, 0, 1);
-
-	sk = (*res)->sk;
-
-	return 0;
-}
-
-/**
- * tipc_sock_release_local - release socket created by tipc_sock_create_local
- * @sock: the socket to be released.
- *
- * Module reference count is not incremented when such sockets are created,
- * so we must keep it from being decremented when they are released.
- */
-void tipc_sock_release_local(struct socket *sock)
-{
-	release(sock);
-	sock->ops = NULL;
-	sock_release(sock);
-}
-
-/**
- * tipc_sock_accept_local - accept a connection on a socket created
- * with tipc_sock_create_local. Use this function to avoid that
- * module reference count is inadvertently incremented.
- *
- * @sock:    the accepting socket
- * @newsock: reference to the new socket to be created
- * @flags:   socket flags
- */
-
-int tipc_sock_accept_local(struct socket *sock, struct socket **newsock,
-			   int flags)
-{
-	struct sock *sk = sock->sk;
-	int ret;
-
-	ret = sock_create_lite(sk->sk_family, sk->sk_type,
-			       sk->sk_protocol, newsock);
-	if (ret < 0)
-		return ret;
-
-	ret = accept(sock, *newsock, flags);
-	if (ret < 0) {
-		sock_release(*newsock);
-		return ret;
-	}
-	(*newsock)->ops = sock->ops;
-	return ret;
 }
 
 /**
@@ -402,9 +324,7 @@ static int bind(struct socket *sock, struct sockaddr *uaddr, int uaddr_len)
 	else if (addr->addrtype != TIPC_ADDR_NAMESEQ)
 		return -EAFNOSUPPORT;
 
-	if ((addr->addr.nameseq.type < TIPC_RESERVED_TYPES) &&
-	    (addr->addr.nameseq.type != TIPC_TOP_SRV) &&
-	    (addr->addr.nameseq.type != TIPC_CFG_SRV))
+	if (addr->addr.nameseq.type < TIPC_RESERVED_TYPES)
 		return -EACCES;
 
 	return (addr->scope > 0) ?
@@ -599,7 +519,8 @@ static int send_msg(struct kiocb *iocb, struct socket *sock,
 			res = -EISCONN;
 			goto exit;
 		}
-		if (tport->published) {
+		if ((tport->published) ||
+		    ((sock->type == SOCK_STREAM) && (total_len != 0))) {
 			res = -EOPNOTSUPP;
 			goto exit;
 		}
@@ -889,7 +810,7 @@ static void set_orig_addr(struct msghdr *m, struct tipc_msg *msg)
  * Returns 0 if successful, otherwise errno
  */
 static int anc_data_recv(struct msghdr *m, struct tipc_msg *msg,
-			 struct tipc_port *tport)
+				struct tipc_port *tport)
 {
 	u32 anc_data[3];
 	u32 err;
@@ -983,6 +904,9 @@ static int recv_msg(struct kiocb *iocb, struct socket *sock,
 		res = -ENOTCONN;
 		goto exit;
 	}
+
+	/* will be updated in set_orig_addr() if needed */
+	m->msg_namelen = 0;
 
 	timeout = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
 restart:
@@ -1087,10 +1011,14 @@ static int recv_stream(struct kiocb *iocb, struct socket *sock,
 
 	lock_sock(sk);
 
-	if (unlikely((sock->state == SS_UNCONNECTED))) {
+	if (unlikely((sock->state == SS_UNCONNECTED) ||
+		     (sock->state == SS_CONNECTING))) {
 		res = -ENOTCONN;
 		goto exit;
 	}
+
+	/* will be updated in set_orig_addr() if needed */
+	m->msg_namelen = 0;
 
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, buf_len);
 	timeout = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
@@ -1305,10 +1233,10 @@ static u32 filter_connect(struct tipc_sock *tsock, struct sk_buff **buf)
  * For all connectionless messages, by default new queue limits are
  * as belows:
  *
- * TIPC_LOW_IMPORTANCE       (4 MB)
- * TIPC_MEDIUM_IMPORTANCE    (8 MB)
- * TIPC_HIGH_IMPORTANCE      (16 MB)
- * TIPC_CRITICAL_IMPORTANCE  (32 MB)
+ * TIPC_LOW_IMPORTANCE       (5MB)
+ * TIPC_MEDIUM_IMPORTANCE    (10MB)
+ * TIPC_HIGH_IMPORTANCE      (20MB)
+ * TIPC_CRITICAL_IMPORTANCE  (40MB)
  *
  * Returns overload limit according to corresponding message importance
  */
@@ -1318,10 +1246,9 @@ static unsigned int rcvbuf_limit(struct sock *sk, struct sk_buff *buf)
 	unsigned int limit;
 
 	if (msg_connected(msg))
-		limit = sysctl_tipc_rmem[2];
+		limit = CONN_OVERLOAD_LIMIT;
 	else
-		limit = sk->sk_rcvbuf >> TIPC_CRITICAL_IMPORTANCE <<
-			msg_importance(msg);
+		limit = sk->sk_rcvbuf << (msg_importance(msg) + 5);
 	return limit;
 }
 
@@ -1400,7 +1327,7 @@ static int backlog_rcv(struct sock *sk, struct sk_buff *buf)
  */
 static u32 dispatch(struct tipc_port *tport, struct sk_buff *buf)
 {
-	struct sock *sk = tport->sk;
+	struct sock *sk = (struct sock *)tport->usr_handle;
 	u32 res;
 
 	/*
@@ -1431,7 +1358,7 @@ static u32 dispatch(struct tipc_port *tport, struct sk_buff *buf)
  */
 static void wakeupdispatch(struct tipc_port *tport)
 {
-	struct sock *sk = tport->sk;
+	struct sock *sk = (struct sock *)tport->usr_handle;
 
 	sk->sk_write_space(sk);
 }
@@ -1604,10 +1531,9 @@ static int accept(struct socket *sock, struct socket *new_sock, int flags)
 
 	buf = skb_peek(&sk->sk_receive_queue);
 
-	res = tipc_sk_create(sock_net(sock->sk), new_sock, 0, 1);
+	res = tipc_create(sock_net(sock->sk), new_sock, 0, 0);
 	if (res)
 		goto exit;
-	security_sk_clone(sock->sk, new_sock->sk);
 
 	new_sk = new_sock->sk;
 	new_tsock = tipc_sk(new_sk);
@@ -1731,8 +1657,8 @@ restart:
  *
  * Returns 0 on success, errno otherwise
  */
-static int setsockopt(struct socket *sock, int lvl, int opt, char __user *ov,
-		      unsigned int ol)
+static int setsockopt(struct socket *sock,
+		      int lvl, int opt, char __user *ov, unsigned int ol)
 {
 	struct sock *sk = sock->sk;
 	struct tipc_port *tport = tipc_sk_port(sk);
@@ -1790,8 +1716,8 @@ static int setsockopt(struct socket *sock, int lvl, int opt, char __user *ov,
  *
  * Returns 0 on success, errno otherwise
  */
-static int getsockopt(struct socket *sock, int lvl, int opt, char __user *ov,
-		      int __user *ol)
+static int getsockopt(struct socket *sock,
+		      int lvl, int opt, char __user *ov, int __user *ol)
 {
 	struct sock *sk = sock->sk;
 	struct tipc_port *tport = tipc_sk_port(sk);
@@ -1915,20 +1841,13 @@ static const struct proto_ops stream_ops = {
 static const struct net_proto_family tipc_family_ops = {
 	.owner		= THIS_MODULE,
 	.family		= AF_TIPC,
-	.create		= tipc_sk_create
+	.create		= tipc_create
 };
 
 static struct proto tipc_proto = {
 	.name		= "TIPC",
 	.owner		= THIS_MODULE,
-	.obj_size	= sizeof(struct tipc_sock),
-	.sysctl_rmem	= sysctl_tipc_rmem
-};
-
-static struct proto tipc_proto_kern = {
-	.name		= "TIPC",
-	.obj_size	= sizeof(struct tipc_sock),
-	.sysctl_rmem	= sysctl_tipc_rmem
+	.obj_size	= sizeof(struct tipc_sock)
 };
 
 /**

@@ -51,8 +51,6 @@
 
 #define TTC_CNT_CNTRL_DISABLE_MASK	0x1
 
-#define TTC_CLK_CNTRL_CSRC_MASK		(1 << 5)	/* clock source */
-
 /*
  * Setup the timers to use pre-scaling, using a fixed value for now that will
  * work across most input frequency, but it may need to be more dynamic
@@ -398,9 +396,8 @@ static void __init ttc_timer_init(struct device_node *timer)
 {
 	unsigned int irq;
 	void __iomem *timer_baseaddr;
-	struct clk *clk_cs, *clk_ce;
+	struct clk *clk;
 	static int initialized;
-	int clksel;
 
 	if (initialized)
 		return;
@@ -424,24 +421,14 @@ static void __init ttc_timer_init(struct device_node *timer)
 		BUG();
 	}
 
-	clksel = __raw_readl(timer_baseaddr + TTC_CLK_CNTRL_OFFSET);
-	clksel = !!(clksel & TTC_CLK_CNTRL_CSRC_MASK);
-	clk_cs = of_clk_get(timer, clksel);
-	if (IS_ERR(clk_cs)) {
+	clk = of_clk_get_by_name(timer, "cpu_1x");
+	if (IS_ERR(clk)) {
 		pr_err("ERROR: timer input clock not found\n");
 		BUG();
 	}
 
-	clksel = __raw_readl(timer_baseaddr + 4 + TTC_CLK_CNTRL_OFFSET);
-	clksel = !!(clksel & TTC_CLK_CNTRL_CSRC_MASK);
-	clk_ce = of_clk_get(timer, clksel);
-	if (IS_ERR(clk_ce)) {
-		pr_err("ERROR: timer input clock not found\n");
-		BUG();
-	}
-
-	ttc_setup_clocksource(clk_cs, timer_baseaddr);
-	ttc_setup_clockevent(clk_ce, timer_baseaddr + 4, irq);
+	ttc_setup_clocksource(clk, timer_baseaddr);
+	ttc_setup_clockevent(clk, timer_baseaddr + 4, irq);
 
 	pr_info("%s #0 at %p, irq=%d\n", timer->name, timer_baseaddr, irq);
 }

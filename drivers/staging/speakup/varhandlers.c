@@ -137,15 +137,18 @@ struct st_var_header *spk_get_var_header(enum var_id_t var_id)
 struct st_var_header *spk_var_header_by_name(const char *name)
 {
 	int i;
+	struct st_var_header *where = NULL;
 
-	if (!name)
-		return NULL;
-
-	for (i = 0; i < MAXVARS; i++) {
-		if (strcmp(name, var_ptrs[i]->name) == 0)
-			return var_ptrs[i];
+	if (name != NULL) {
+		i = 0;
+		while ((i < MAXVARS) && (where == NULL)) {
+			if (strcmp(name, var_ptrs[i]->name) == 0)
+				where = var_ptrs[i];
+			else
+				i++;
+		}
 	}
-	return NULL;
+	return where;
 }
 
 struct var_t *spk_get_var(enum var_id_t var_id)
@@ -277,7 +280,7 @@ int spk_set_mask_bits(const char *input, const int which, const int how)
 			spk_chartab[*cp] &= ~mask;
 	}
 	cp = (u_char *)input;
-	if (!cp)
+	if (cp == 0)
 		cp = spk_punc_info[which].value;
 	else {
 		for ( ; *cp; cp++) {

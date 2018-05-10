@@ -4,7 +4,10 @@
 
 # Object file lists.
 
-obj-y				:= common.o devices.o
+obj-y			:= common.o
+obj-m			:=
+obj-n			:=
+obj-			:=
 
 obj-$(CONFIG_ARCH_AUTCPU12)	+= board-autcpu12.o
 obj-$(CONFIG_ARCH_CDB89712)	+= board-cdb89712.o

@@ -27,6 +27,8 @@ static int exynos_drm_create_enc_conn(struct drm_device *dev,
 	struct drm_connector *connector;
 	int ret;
 
+	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
 	subdrv->manager->dev = subdrv->dev;
 
 	/* create and initialize a encoder for this sub driver. */
@@ -100,6 +102,8 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 static void exynos_drm_subdrv_remove(struct drm_device *dev,
 				      struct exynos_drm_subdrv *subdrv)
 {
+	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
 	if (subdrv->remove)
 		subdrv->remove(dev, subdrv->dev);
 }
@@ -109,6 +113,8 @@ int exynos_drm_device_register(struct drm_device *dev)
 	struct exynos_drm_subdrv *subdrv, *n;
 	unsigned int fine_cnt = 0;
 	int err;
+
+	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
 	if (!dev)
 		return -EINVAL;
@@ -152,6 +158,8 @@ int exynos_drm_device_unregister(struct drm_device *dev)
 {
 	struct exynos_drm_subdrv *subdrv;
 
+	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
 	if (!dev) {
 		WARN(1, "Unexpected drm device unregister!\n");
 		return -EINVAL;
@@ -168,6 +176,8 @@ EXPORT_SYMBOL_GPL(exynos_drm_device_unregister);
 
 int exynos_drm_subdrv_register(struct exynos_drm_subdrv *subdrv)
 {
+	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
 	if (!subdrv)
 		return -EINVAL;
 
@@ -179,6 +189,8 @@ EXPORT_SYMBOL_GPL(exynos_drm_subdrv_register);
 
 int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *subdrv)
 {
+	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
 	if (!subdrv)
 		return -EINVAL;
 

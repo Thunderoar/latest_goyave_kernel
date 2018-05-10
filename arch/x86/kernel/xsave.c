@@ -243,7 +243,7 @@ int save_xstate_sig(void __user *buf, void __user *buf_fx, int size)
 	if (!access_ok(VERIFY_WRITE, buf, size))
 		return -EACCES;
 
-	if (!static_cpu_has(X86_FEATURE_FPU))
+	if (!HAVE_HWFP)
 		return fpregs_soft_get(current, NULL, 0,
 			sizeof(struct user_i387_ia32_struct), NULL,
 			(struct _fpstate_ia32 __user *) buf) ? -1 : 1;
@@ -267,6 +267,8 @@ int save_xstate_sig(void __user *buf, void __user *buf_fx, int size)
 
 	if (use_fxsr() && save_xstate_epilog(buf_fx, ia32_fxstate))
 		return -1;
+
+	drop_init_fpu(tsk);	/* trigger finit */
 
 	return 0;
 }
@@ -348,10 +350,11 @@ int __restore_xstate_sig(void __user *buf, void __user *buf_fx, int size)
 	if (!used_math() && init_fpu(tsk))
 		return -1;
 
-	if (!static_cpu_has(X86_FEATURE_FPU))
+	if (!HAVE_HWFP) {
 		return fpregs_soft_set(current, NULL,
 				       0, sizeof(struct user_i387_ia32_struct),
 				       NULL, buf) != 0;
+	}
 
 	if (use_xsave()) {
 		struct _fpx_sw_bytes fx_sw_user;
@@ -375,7 +378,7 @@ int __restore_xstate_sig(void __user *buf, void __user *buf_fx, int size)
 		 * thread's fpu state, reconstruct fxstate from the fsave
 		 * header. Sanitize the copied state etc.
 		 */
-		struct fpu *fpu = &tsk->thread.fpu;
+		struct xsave_struct *xsave = &tsk->thread.fpu.state->xsave;
 		struct user_i387_ia32_struct env;
 		int err = 0;
 
@@ -389,20 +392,16 @@ int __restore_xstate_sig(void __user *buf, void __user *buf_fx, int size)
 		 */
 		drop_fpu(tsk);
 
-		if (__copy_from_user(&fpu->state->xsave, buf_fx, state_size) ||
+		if (__copy_from_user(xsave, buf_fx, state_size) ||
 		    __copy_from_user(&env, buf, sizeof(env))) {
-			fpu_finit(fpu);
 			err = -1;
 		} else {
 			sanitize_restored_xstate(tsk, &env, xstate_bv, fx_only);
+			set_used_math();
 		}
 
-		set_used_math();
-		if (use_eager_fpu()) {
-			preempt_disable();
+		if (use_eager_fpu())
 			math_state_restore();
-			preempt_enable();
-		}
 
 		return err;
 	} else {

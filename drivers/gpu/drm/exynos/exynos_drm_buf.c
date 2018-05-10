@@ -24,6 +24,8 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 	enum dma_attr attr;
 	unsigned int nr_pages;
 
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
 	if (buf->dma_addr) {
 		DRM_DEBUG_KMS("already allocated.\n");
 		return 0;
@@ -117,6 +119,8 @@ err_free_attrs:
 static void lowlevel_buffer_deallocate(struct drm_device *dev,
 		unsigned int flags, struct exynos_drm_gem_buf *buf)
 {
+	DRM_DEBUG_KMS("%s.\n", __FILE__);
+
 	if (!buf->dma_addr) {
 		DRM_DEBUG_KMS("dma_addr is invalid.\n");
 		return;
@@ -147,6 +151,7 @@ struct exynos_drm_gem_buf *exynos_drm_init_buf(struct drm_device *dev,
 {
 	struct exynos_drm_gem_buf *buffer;
 
+	DRM_DEBUG_KMS("%s.\n", __FILE__);
 	DRM_DEBUG_KMS("desired size = 0x%x\n", size);
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
@@ -162,6 +167,8 @@ struct exynos_drm_gem_buf *exynos_drm_init_buf(struct drm_device *dev,
 void exynos_drm_fini_buf(struct drm_device *dev,
 				struct exynos_drm_gem_buf *buffer)
 {
+	DRM_DEBUG_KMS("%s.\n", __FILE__);
+
 	if (!buffer) {
 		DRM_DEBUG_KMS("buffer is null.\n");
 		return;

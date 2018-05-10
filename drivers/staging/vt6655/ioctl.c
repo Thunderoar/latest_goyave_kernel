@@ -64,6 +64,7 @@ int private_ioctl(PSDevice pDevice, struct ifreq *rq)
 	PKnownBSS	pBSS;
 	PKnownNodeDB	pNode;
 	unsigned int	ii, jj;
+	SCmdLinkStatus	sLinkStatus;
 	unsigned char	abySuppRates[] = {WLAN_EID_SUPP_RATES, 4, 0x02, 0x04, 0x0B, 0x16};
 	unsigned char	abyNullAddr[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 	unsigned long	dwKeyIndex = 0;
@@ -244,12 +245,10 @@ int private_ioctl(PSDevice pDevice, struct ifreq *rq)
 		pDevice->eEncryptionStatus = Ndis802_11Encryption1Enabled;
 		break;
 
-	case WLAN_CMD_GET_LINK: {
-		SCmdLinkStatus sLinkStatus;
-
+	case WLAN_CMD_GET_LINK:
 		DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO "WLAN_CMD_GET_LINK status.\n");
 
-		memset(&sLinkStatus, 0, sizeof(sLinkStatus));
+		memset(sLinkStatus.abySSID, 0 , WLAN_SSID_MAXLEN + 1);
 
 		if (pMgmt->eCurrMode == WMAC_MODE_IBSS_STA)
 			sLinkStatus.wBSSType = ADHOC;
@@ -278,7 +277,7 @@ int private_ioctl(PSDevice pDevice, struct ifreq *rq)
 			break;
 		}
 		break;
-	}
+
 	case WLAN_CMD_GET_LISTLEN:
 		cbListCount = 0;
 		pBSS = &(pMgmt->sBSSList[0]);

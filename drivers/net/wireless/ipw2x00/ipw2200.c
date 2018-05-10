@@ -3548,7 +3548,6 @@ static int ipw_load(struct ipw_priv *priv)
 		ipw_rx_queue_reset(priv, priv->rxq);
 	if (!priv->rxq) {
 		IPW_ERROR("Unable to initialize Rx queue\n");
-		rc = -ENOMEM;
 		goto error;
 	}
 

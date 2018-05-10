@@ -108,18 +108,18 @@ static int usb_console_setup(struct console *co, char *options)
 	 * no need to check the index here: if the index is wrong, console
 	 * code won't call us
 	 */
-	port = usb_serial_port_get_by_minor(co->index);
-	if (port == NULL) {
+	serial = usb_serial_get_by_index(co->index);
+	if (serial == NULL) {
 		/* no device is connected yet, sorry :( */
 		pr_err("No USB device connected to ttyUSB%i\n", co->index);
 		return -ENODEV;
 	}
-	serial = port->serial;
 
 	retval = usb_autopm_get_interface(serial->interface);
 	if (retval)
 		goto error_get_interface;
 
+	port = serial->port[co->index - serial->minor];
 	tty_port_tty_set(&port->port, NULL);
 
 	info->port = port;
@@ -188,7 +188,6 @@ static int usb_console_setup(struct console *co, char *options)
 	kfree(tty);
  reset_open_count:
 	port->port.count = 0;
-	info->port = NULL;
 	usb_autopm_put_interface(serial->interface);
  error_get_interface:
 	usb_serial_put(serial);
@@ -211,7 +210,7 @@ static void usb_console_write(struct console *co,
 	if (count == 0)
 		return;
 
-	pr_debug("%s - minor %d, %d byte(s)\n", __func__, port->minor, count);
+	pr_debug("%s - port %d, %d byte(s)\n", __func__, port->number, count);
 
 	if (!port->port.console) {
 		pr_debug("%s - port not opened\n", __func__);

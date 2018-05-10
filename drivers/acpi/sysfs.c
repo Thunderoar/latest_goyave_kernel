@@ -492,22 +492,23 @@ static void acpi_global_event_handler(u32 event_type, acpi_handle device,
 static int get_status(u32 index, acpi_event_status *status,
 		      acpi_handle *handle)
 {
-	int result;
+	int result = 0;
 
 	if (index >= num_gpes + ACPI_NUM_FIXED_EVENTS)
-		return -EINVAL;
+		goto end;
 
 	if (index < num_gpes) {
 		result = acpi_get_gpe_device(index, handle);
 		if (result) {
 			ACPI_EXCEPTION((AE_INFO, AE_NOT_FOUND,
 					"Invalid GPE 0x%x", index));
-			return result;
+			goto end;
 		}
 		result = acpi_get_gpe_status(*handle, index, status);
 	} else if (index < (num_gpes + ACPI_NUM_FIXED_EVENTS))
 		result = acpi_get_event_status(index - num_gpes, status);
 
+end:
 	return result;
 }
 
@@ -779,33 +780,6 @@ void acpi_sysfs_add_hotplug_profile(struct acpi_hotplug_profile *hotplug,
 	pr_err(PREFIX "Unable to add hotplug profile '%s'\n", name);
 }
 
-static ssize_t force_remove_show(struct kobject *kobj,
-				 struct kobj_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d\n", !!acpi_force_hot_remove);
-}
-
-static ssize_t force_remove_store(struct kobject *kobj,
-				  struct kobj_attribute *attr,
-				  const char *buf, size_t size)
-{
-	bool val;
-	int ret;
-
-	ret = strtobool(buf, &val);
-	if (ret < 0)
-		return ret;
-
-	lock_device_hotplug();
-	acpi_force_hot_remove = val;
-	unlock_device_hotplug();
-	return size;
-}
-
-static const struct kobj_attribute force_remove_attr =
-	__ATTR(force_remove, S_IRUGO | S_IWUSR, force_remove_show,
-	       force_remove_store);
-
 int __init acpi_sysfs_init(void)
 {
 	int result;
@@ -815,10 +789,6 @@ int __init acpi_sysfs_init(void)
 		return result;
 
 	hotplug_kobj = kobject_create_and_add("hotplug", acpi_kobj);
-	result = sysfs_create_file(hotplug_kobj, &force_remove_attr.attr);
-	if (result)
-		return result;
-
 	result = sysfs_create_file(acpi_kobj, &pm_profile_attr.attr);
 	return result;
 }

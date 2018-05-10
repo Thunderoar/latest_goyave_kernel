@@ -93,25 +93,6 @@ struct bcma_device *bcma_find_core_unit(struct bcma_bus *bus, u16 coreid,
 	return NULL;
 }
 
-bool bcma_wait_value(struct bcma_device *core, u16 reg, u32 mask, u32 value,
-		     int timeout)
-{
-	unsigned long deadline = jiffies + timeout;
-	u32 val;
-
-	do {
-		val = bcma_read32(core, reg);
-		if ((val & mask) == value)
-			return true;
-		cpu_relax();
-		udelay(10);
-	} while (!time_after_eq(jiffies, deadline));
-
-	bcma_warn(core->bus, "Timeout waiting for register 0x%04X!\n", reg);
-
-	return false;
-}
-
 static void bcma_release_core_dev(struct device *dev)
 {
 	struct bcma_device *core = container_of(dev, struct bcma_device, dev);
@@ -451,11 +432,8 @@ static int bcma_device_probe(struct device *dev)
 					       drv);
 	int err = 0;
 
-	get_device(dev);
 	if (adrv->probe)
 		err = adrv->probe(core);
-	if (err)
-		put_device(dev);
 
 	return err;
 }
@@ -468,7 +446,6 @@ static int bcma_device_remove(struct device *dev)
 
 	if (adrv->remove)
 		adrv->remove(core);
-	put_device(dev);
 
 	return 0;
 }

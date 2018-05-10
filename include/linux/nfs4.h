@@ -32,15 +32,6 @@ struct nfs4_acl {
 	struct nfs4_ace	aces[0];
 };
 
-#define NFS4_MAXLABELLEN	2048
-
-struct nfs4_label {
-	uint32_t	lfs;
-	uint32_t	pi;
-	u32		len;
-	char	*label;
-};
-
 typedef struct { char data[NFS4_VERIFIER_SIZE]; } nfs4_verifier;
 
 struct nfs_stateid4 {
@@ -228,19 +219,11 @@ enum nfsstat4 {
 	NFS4ERR_REJECT_DELEG	= 10085,	/* on callback */
 	NFS4ERR_RETURNCONFLICT	= 10086,	/* outstanding layoutreturn */
 	NFS4ERR_DELEG_REVOKED	= 10087,	/* deleg./layout revoked */
-
-	/* nfs42 */
-	NFS4ERR_PARTNER_NOTSUPP	= 10088,
-	NFS4ERR_PARTNER_NO_AUTH	= 10089,
-	NFS4ERR_METADATA_NOTSUPP = 10090,
-	NFS4ERR_OFFLOAD_DENIED = 10091,
-	NFS4ERR_WRONG_LFS = 10092,
-	NFS4ERR_BADLABEL = 10093,
 };
 
 static inline bool seqid_mutating_err(u32 err)
 {
-	/* See RFC 7530, section 9.1.7 */
+	/* rfc 3530 section 8.1.5: */
 	switch (err) {
 	case NFS4ERR_STALE_CLIENTID:
 	case NFS4ERR_STALE_STATEID:
@@ -249,7 +232,6 @@ static inline bool seqid_mutating_err(u32 err)
 	case NFS4ERR_BADXDR:
 	case NFS4ERR_RESOURCE:
 	case NFS4ERR_NOFILEHANDLE:
-	case NFS4ERR_MOVED:
 		return false;
 	};
 	return true;
@@ -396,7 +378,6 @@ enum lock_type4 {
 #define FATTR4_WORD1_FS_LAYOUT_TYPES    (1UL << 30)
 #define FATTR4_WORD2_LAYOUT_BLKSIZE     (1UL << 1)
 #define FATTR4_WORD2_MDSTHRESHOLD       (1UL << 4)
-#define FATTR4_WORD2_SECURITY_LABEL     (1UL << 17)
 
 /* MDS threshold bitmap bits */
 #define THRESHOLD_RD                    (1UL << 0)
@@ -409,15 +390,11 @@ enum lock_type4 {
 #define NFS4_VERSION 4
 #define NFS4_MINOR_VERSION 0
 
-#if defined(CONFIG_NFS_V4_2)
-#define NFS4_MAX_MINOR_VERSION 2
-#else
 #if defined(CONFIG_NFS_V4_1)
 #define NFS4_MAX_MINOR_VERSION 1
 #else
 #define NFS4_MAX_MINOR_VERSION 0
 #endif /* CONFIG_NFS_V4_1 */
-#endif /* CONFIG_NFS_V4_2 */
 
 #define NFS4_DEBUG 1
 

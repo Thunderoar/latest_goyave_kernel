@@ -358,38 +358,6 @@ bool radeon_ring_supports_scratch_reg(struct radeon_device *rdev,
 	}
 }
 
-u32 radeon_ring_generic_get_rptr(struct radeon_device *rdev,
-				 struct radeon_ring *ring)
-{
-	u32 rptr;
-
-	if (rdev->wb.enabled && ring != &rdev->ring[R600_RING_TYPE_UVD_INDEX])
-		rptr = le32_to_cpu(rdev->wb.wb[ring->rptr_offs/4]);
-	else
-		rptr = RREG32(ring->rptr_reg);
-	rptr = (rptr & ring->ptr_reg_mask) >> ring->ptr_reg_shift;
-
-	return rptr;
-}
-
-u32 radeon_ring_generic_get_wptr(struct radeon_device *rdev,
-				 struct radeon_ring *ring)
-{
-	u32 wptr;
-
-	wptr = RREG32(ring->wptr_reg);
-	wptr = (wptr & ring->ptr_reg_mask) >> ring->ptr_reg_shift;
-
-	return wptr;
-}
-
-void radeon_ring_generic_set_wptr(struct radeon_device *rdev,
-				  struct radeon_ring *ring)
-{
-	WREG32(ring->wptr_reg, (ring->wptr << ring->ptr_reg_shift) & ring->ptr_reg_mask);
-	(void)RREG32(ring->wptr_reg);
-}
-
 /**
  * radeon_ring_free_size - update the free size
  *
@@ -400,7 +368,13 @@ void radeon_ring_generic_set_wptr(struct radeon_device *rdev,
  */
 void radeon_ring_free_size(struct radeon_device *rdev, struct radeon_ring *ring)
 {
-	ring->rptr = radeon_ring_get_rptr(rdev, ring);
+	u32 rptr;
+
+	if (rdev->wb.enabled && ring != &rdev->ring[R600_RING_TYPE_UVD_INDEX])
+		rptr = le32_to_cpu(rdev->wb.wb[ring->rptr_offs/4]);
+	else
+		rptr = RREG32(ring->rptr_reg);
+	ring->rptr = (rptr & ring->ptr_reg_mask) >> ring->ptr_reg_shift;
 	/* This works because ring_size is a power of 2 */
 	ring->ring_free_dw = (ring->rptr + (ring->ring_size / 4));
 	ring->ring_free_dw -= ring->wptr;
@@ -492,7 +466,8 @@ void radeon_ring_commit(struct radeon_device *rdev, struct radeon_ring *ring)
 		radeon_ring_write(ring, ring->nop);
 	}
 	DRM_MEMORYBARRIER();
-	radeon_ring_set_wptr(rdev, ring);
+	WREG32(ring->wptr_reg, (ring->wptr << ring->ptr_reg_shift) & ring->ptr_reg_mask);
+	(void)RREG32(ring->wptr_reg);
 }
 
 /**
@@ -594,6 +569,7 @@ void radeon_ring_lockup_update(struct radeon_ring *ring)
 bool radeon_ring_test_lockup(struct radeon_device *rdev, struct radeon_ring *ring)
 {
 	unsigned long cjiffies, elapsed;
+	uint32_t rptr;
 
 	cjiffies = jiffies;
 	if (!time_after(cjiffies, ring->last_activity)) {
@@ -601,7 +577,8 @@ bool radeon_ring_test_lockup(struct radeon_device *rdev, struct radeon_ring *rin
 		radeon_ring_lockup_update(ring);
 		return false;
 	}
-	ring->rptr = radeon_ring_get_rptr(rdev, ring);
+	rptr = RREG32(ring->rptr_reg);
+	ring->rptr = (rptr & ring->ptr_reg_mask) >> ring->ptr_reg_shift;
 	if (ring->rptr != ring->last_rptr) {
 		/* CP is still working no lockup */
 		radeon_ring_lockup_update(ring);
@@ -828,9 +805,9 @@ static int radeon_debugfs_ring_info(struct seq_file *m, void *data)
 
 	radeon_ring_free_size(rdev, ring);
 	count = (ring->ring_size / 4) - ring->ring_free_dw;
-	tmp = radeon_ring_get_wptr(rdev, ring);
+	tmp = RREG32(ring->wptr_reg) >> ring->ptr_reg_shift;
 	seq_printf(m, "wptr(0x%04x): 0x%08x [%5d]\n", ring->wptr_reg, tmp, tmp);
-	tmp = radeon_ring_get_rptr(rdev, ring);
+	tmp = RREG32(ring->rptr_reg) >> ring->ptr_reg_shift;
 	seq_printf(m, "rptr(0x%04x): 0x%08x [%5d]\n", ring->rptr_reg, tmp, tmp);
 	if (ring->rptr_save_reg) {
 		seq_printf(m, "rptr next(0x%04x): 0x%08x\n", ring->rptr_save_reg,

@@ -254,7 +254,6 @@ struct acpi_create_field_info {
 	u32 field_bit_position;
 	u32 field_bit_length;
 	u16 resource_length;
-	u16 pin_number_index;
 	u8 field_flags;
 	u8 attribute;
 	u8 field_type;
@@ -362,6 +361,23 @@ union acpi_predefined_info {
 /* Reset to default packing */
 
 #pragma pack()
+
+/* Data block used during object validation */
+
+struct acpi_predefined_data {
+	char *pathname;
+	const union acpi_predefined_info *predefined;
+	union acpi_operand_object *parent_package;
+	struct acpi_namespace_node *node;
+	u32 flags;
+	u32 return_btype;
+	u8 node_flags;
+};
+
+/* Defines for Flags field above */
+
+#define ACPI_OBJECT_REPAIRED    1
+#define ACPI_OBJECT_WRAPPED     2
 
 /* Return object auto-repair info */
 

@@ -60,9 +60,8 @@ static struct fb_ops intelfb_ops = {
 static int intelfb_create(struct drm_fb_helper *helper,
 			  struct drm_fb_helper_surface_size *sizes)
 {
-	struct intel_fbdev *ifbdev =
-		container_of(helper, struct intel_fbdev, helper);
-	struct drm_device *dev = helper->dev;
+	struct intel_fbdev *ifbdev = (struct intel_fbdev *)helper;
+	struct drm_device *dev = ifbdev->helper.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct fb_info *info;
 	struct drm_framebuffer *fb;
@@ -109,7 +108,7 @@ static int intelfb_create(struct drm_fb_helper *helper,
 		goto out_unpin;
 	}
 
-	info->par = helper;
+	info->par = ifbdev;
 
 	ret = intel_framebuffer_init(dev, &ifbdev->ifb, &mode_cmd, obj);
 	if (ret)
@@ -218,7 +217,7 @@ static void intel_fbdev_destroy(struct drm_device *dev,
 int intel_fbdev_init(struct drm_device *dev)
 {
 	struct intel_fbdev *ifbdev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 	int ret;
 
 	ifbdev = kzalloc(sizeof(struct intel_fbdev), GFP_KERNEL);
@@ -243,7 +242,7 @@ int intel_fbdev_init(struct drm_device *dev)
 
 void intel_fbdev_initial_config(struct drm_device *dev)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 
 	/* Due to peculiar init order wrt to hpd handling this is separate. */
 	drm_fb_helper_initial_config(&dev_priv->fbdev->helper, 32);
@@ -251,7 +250,7 @@ void intel_fbdev_initial_config(struct drm_device *dev)
 
 void intel_fbdev_fini(struct drm_device *dev)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 	if (!dev_priv->fbdev)
 		return;
 
@@ -262,7 +261,7 @@ void intel_fbdev_fini(struct drm_device *dev)
 
 void intel_fbdev_set_suspend(struct drm_device *dev, int state)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct intel_fbdev *ifbdev = dev_priv->fbdev;
 	struct fb_info *info;
 
@@ -275,7 +274,7 @@ void intel_fbdev_set_suspend(struct drm_device *dev, int state)
 	 * been restored from swap. If the object is stolen however, it will be
 	 * full of whatever garbage was left in there.
 	 */
-	if (state == FBINFO_STATE_RUNNING && ifbdev->ifb.obj->stolen)
+	if (!state && ifbdev->ifb.obj->stolen)
 		memset_io(info->screen_base, 0, info->screen_size);
 
 	fb_set_suspend(info, state);
@@ -285,7 +284,7 @@ MODULE_LICENSE("GPL and additional rights");
 
 void intel_fb_output_poll_changed(struct drm_device *dev)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 	drm_fb_helper_hotplug_event(&dev_priv->fbdev->helper);
 }
 
@@ -293,6 +292,8 @@ void intel_fb_restore_mode(struct drm_device *dev)
 {
 	int ret;
 	drm_i915_private_t *dev_priv = dev->dev_private;
+	struct drm_mode_config *config = &dev->mode_config;
+	struct drm_plane *plane;
 
 	if (INTEL_INFO(dev)->num_pipes == 0)
 		return;
@@ -302,6 +303,11 @@ void intel_fb_restore_mode(struct drm_device *dev)
 	ret = drm_fb_helper_restore_fbdev_mode(&dev_priv->fbdev->helper);
 	if (ret)
 		DRM_DEBUG("failed to restore crtc mode\n");
+
+	/* Be sure to shut off any planes that may be active */
+	list_for_each_entry(plane, &config->plane_list, head)
+		if (plane->enabled)
+			plane->funcs->disable_plane(plane);
 
 	drm_modeset_unlock_all(dev);
 }

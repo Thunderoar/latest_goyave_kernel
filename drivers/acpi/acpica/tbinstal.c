@@ -141,7 +141,8 @@ acpi_tb_add_table(struct acpi_table_desc *table_desc, u32 *table_index)
 		ACPI_BIOS_ERROR((AE_INFO,
 				 "Table has invalid signature [%4.4s] (0x%8.8X), "
 				 "must be SSDT or OEMx",
-				 acpi_ut_valid_acpi_name(table_desc->pointer->
+				 acpi_ut_valid_acpi_name(*(u32 *)table_desc->
+							 pointer->
 							 signature) ?
 				 table_desc->pointer->signature : "????",
 				 *(u32 *)table_desc->pointer->signature));
@@ -300,7 +301,8 @@ struct acpi_table_header *acpi_tb_table_override(struct acpi_table_header
 			ACPI_EXCEPTION((AE_INFO, AE_NO_MEMORY,
 					"%4.4s %p Attempted physical table override failed",
 					table_header->signature,
-					ACPI_PHYSADDR_TO_PTR(table_desc->address)));
+					ACPI_CAST_PTR(void,
+						      table_desc->address)));
 			return (NULL);
 		}
 
@@ -316,7 +318,7 @@ struct acpi_table_header *acpi_tb_table_override(struct acpi_table_header
 	ACPI_INFO((AE_INFO,
 		   "%4.4s %p %s table override, new table: %p",
 		   table_header->signature,
-		   ACPI_PHYSADDR_TO_PTR(table_desc->address),
+		   ACPI_CAST_PTR(void, table_desc->address),
 		   override_type, new_table));
 
 	/* We can now unmap/delete the original table (if fully mapped) */
@@ -469,19 +471,15 @@ void acpi_tb_delete_table(struct acpi_table_desc *table_desc)
 	}
 	switch (table_desc->flags & ACPI_TABLE_ORIGIN_MASK) {
 	case ACPI_TABLE_ORIGIN_MAPPED:
-
 		acpi_os_unmap_memory(table_desc->pointer, table_desc->length);
 		break;
-
 	case ACPI_TABLE_ORIGIN_ALLOCATED:
-
 		ACPI_FREE(table_desc->pointer);
 		break;
 
 		/* Not mapped or allocated, there is nothing we can do */
 
 	default:
-
 		return;
 	}
 

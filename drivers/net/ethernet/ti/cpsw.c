@@ -35,7 +35,6 @@
 #include <linux/if_vlan.h>
 
 #include <linux/platform_data/cpsw.h>
-#include <linux/pinctrl/consumer.h>
 
 #include "cpsw_ale.h"
 #include "cpts.h"
@@ -1294,19 +1293,6 @@ static int cpsw_ndo_vlan_rx_add_vid(struct net_device *ndev,
 	if (vid == priv->data.default_vlan)
 		return 0;
 
-	if (priv->data.dual_emac) {
-		/* In dual EMAC, reserved VLAN id should not be used for
-		 * creating VLAN interfaces as this can break the dual
-		 * EMAC port separation
-		 */
-		int i;
-
-		for (i = 0; i < priv->data.slaves; i++) {
-			if (vid == priv->slaves[i].port_vlan)
-				return -EINVAL;
-		}
-	}
-
 	dev_info(priv->dev, "Adding vlanid %d to vlan filter\n", vid);
 	return cpsw_add_vlan_ale_entry(priv, vid);
 }
@@ -1319,15 +1305,6 @@ static int cpsw_ndo_vlan_rx_kill_vid(struct net_device *ndev,
 
 	if (vid == priv->data.default_vlan)
 		return 0;
-
-	if (priv->data.dual_emac) {
-		int i;
-
-		for (i = 0; i < priv->data.slaves; i++) {
-			if (vid == priv->slaves[i].port_vlan)
-				return -EINVAL;
-		}
-	}
 
 	dev_info(priv->dev, "removing vlanid %d from vlan filter\n", vid);
 	ret = cpsw_ale_del_vlan(priv->ale, vid, 0);
@@ -1570,18 +1547,12 @@ static int cpsw_probe_dt(struct cpsw_platform_data *data,
 		mdio_node = of_find_node_by_phandle(be32_to_cpup(parp));
 		phyid = be32_to_cpup(parp+1);
 		mdio = of_find_device_by_node(mdio_node);
-		if (!mdio) {
-			pr_err("Missing mdio platform device\n");
-			return -EINVAL;
-		}
 		snprintf(slave_data->phy_id, sizeof(slave_data->phy_id),
 			 PHY_ID_FMT, mdio->name, phyid);
 
 		mac_addr = of_get_mac_address(slave_node);
 		if (mac_addr)
 			memcpy(slave_data->mac_addr, mac_addr, ETH_ALEN);
-
-		slave_data->phy_if = of_get_phy_mode(slave_node);
 
 		if (data->dual_emac) {
 			if (of_property_read_u32(slave_node, "dual_emac_res_vlan",
@@ -1718,9 +1689,6 @@ static int cpsw_probe(struct platform_device *pdev)
 	 */
 	pm_runtime_enable(&pdev->dev);
 
-	/* Select default pin state */
-	pinctrl_pm_select_default_state(&pdev->dev);
-
 	if (cpsw_probe_dt(&priv->data, pdev)) {
 		pr_err("cpsw: platform data missing\n");
 		ret = -ENODEV;
@@ -1730,10 +1698,10 @@ static int cpsw_probe(struct platform_device *pdev)
 
 	if (is_valid_ether_addr(data->slave_data[0].mac_addr)) {
 		memcpy(priv->mac_addr, data->slave_data[0].mac_addr, ETH_ALEN);
-		pr_info("Detected MACID = %pM\n", priv->mac_addr);
+		pr_info("Detected MACID = %pM", priv->mac_addr);
 	} else {
 		eth_random_addr(priv->mac_addr);
-		pr_info("Random MACID = %pM\n", priv->mac_addr);
+		pr_info("Random MACID = %pM", priv->mac_addr);
 	}
 
 	memcpy(ndev->dev_addr, priv->mac_addr, ETH_ALEN);
@@ -1972,6 +1940,7 @@ static int cpsw_remove(struct platform_device *pdev)
 	struct cpsw_priv *priv = netdev_priv(ndev);
 	int i;
 
+	platform_set_drvdata(pdev, NULL);
 	if (priv->data.dual_emac)
 		unregister_netdev(cpsw_get_slave_ndev(priv, 1));
 	unregister_netdev(ndev);
@@ -2012,9 +1981,6 @@ static int cpsw_suspend(struct device *dev)
 	soft_reset("sliver 1", &priv->slaves[1].sliver->soft_reset);
 	pm_runtime_put_sync(&pdev->dev);
 
-	/* Select sleep pin state */
-	pinctrl_pm_select_sleep_state(&pdev->dev);
-
 	return 0;
 }
 
@@ -2024,10 +1990,6 @@ static int cpsw_resume(struct device *dev)
 	struct net_device	*ndev = platform_get_drvdata(pdev);
 
 	pm_runtime_get_sync(&pdev->dev);
-
-	/* Select default pin state */
-	pinctrl_pm_select_default_state(&pdev->dev);
-
 	if (netif_running(ndev))
 		cpsw_ndo_open(ndev);
 	return 0;

@@ -37,15 +37,15 @@ static int clocked;
 
 static void atmel_start_clock(void)
 {
-	clk_prepare_enable(iclk);
-	clk_prepare_enable(fclk);
+	clk_enable(iclk);
+	clk_enable(fclk);
 	clocked = 1;
 }
 
 static void atmel_stop_clock(void)
 {
-	clk_disable_unprepare(fclk);
-	clk_disable_unprepare(iclk);
+	clk_disable(fclk);
+	clk_disable(iclk);
 	clocked = 0;
 }
 

@@ -871,16 +871,12 @@ static ssize_t k2hh_selftest_show(struct device *dev,
 {
 	struct k2hh_p *data = dev_get_drvdata(dev);
 	struct k2hh_v acc;
-	unsigned char temp, prev_reg[4];
+	unsigned char temp;
 	int result = 1, i;
 	ssize_t ret;
 	s32 NO_ST[3] = {0, 0, 0};
 	s32 ST[3] = {0, 0, 0};
 
-	k2hh_i2c_read(data, CTRL1_REG, &prev_reg[0], 1);
-	k2hh_i2c_read(data, CTRL4_REG, &prev_reg[1], 1);
-	k2hh_i2c_read(data, CTRL5_REG, &prev_reg[2], 1);
-	k2hh_i2c_read(data, CTRL6_REG, &prev_reg[3], 1);
 	if (atomic_read(&data->enable) == OFF)
 		k2hh_set_mode(data, K2HH_MODE_NORMAL);
 	else
@@ -966,11 +962,6 @@ exit_status_err:
 exit:
 	k2hh_i2c_write(data, CTRL1_REG, 0x00);
 	k2hh_i2c_write(data, CTRL5_REG, 0x00);
-
-	k2hh_i2c_write(data, CTRL1_REG, prev_reg[0]);
-	k2hh_i2c_write(data, CTRL4_REG, prev_reg[1]);
-	k2hh_i2c_write(data, CTRL5_REG, prev_reg[2]);
-	k2hh_i2c_write(data, CTRL6_REG, prev_reg[3]);
 
 	if (atomic_read(&data->enable) == OFF) {
 		k2hh_set_mode(data, K2HH_MODE_SUSPEND);

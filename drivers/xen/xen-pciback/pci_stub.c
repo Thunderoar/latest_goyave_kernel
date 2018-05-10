@@ -4,9 +4,6 @@
  * Ryan Wilson <hap9@epoch.ncsc.mil>
  * Chris Bookholt <hap10@epoch.ncsc.mil>
  */
-
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/rwsem.h>
@@ -428,6 +425,8 @@ static int __init pcistub_init_devices_late(void)
 	unsigned long flags;
 	int err = 0;
 
+	pr_debug(DRV_NAME ": pcistub_init_devices_late\n");
+
 	spin_lock_irqsave(&pcistub_devices_lock, flags);
 
 	while (!list_empty(&seized_devices)) {
@@ -545,11 +544,15 @@ static void pcistub_remove(struct pci_dev *dev)
 			found_psdev->pdev);
 
 		if (found_psdev->pdev) {
-			pr_warn("****** removing device %s while still in-use! ******\n",
+			printk(KERN_WARNING DRV_NAME ": ****** removing device "
+			       "%s while still in-use! ******\n",
 			       pci_name(found_psdev->dev));
-			pr_warn("****** driver domain may still access this device's i/o resources!\n");
-			pr_warn("****** shutdown driver domain before binding device\n");
-			pr_warn("****** to other drivers or domains\n");
+			printk(KERN_WARNING DRV_NAME ": ****** driver domain may"
+			       " still access this device's i/o resources!\n");
+			printk(KERN_WARNING DRV_NAME ": ****** shutdown driver "
+			       "domain before binding device\n");
+			printk(KERN_WARNING DRV_NAME ": ****** to other drivers "
+			       "or domains\n");
 
 			xen_pcibk_release_pci_dev(found_psdev->pdev,
 						found_psdev->dev);
@@ -1015,7 +1018,7 @@ static int pcistub_device_id_add(int domain, int bus, int slot, int func)
 	pci_dev_id->bus = bus;
 	pci_dev_id->devfn = devfn;
 
-	pr_debug("wants to seize %04x:%02x:%02x.%d\n",
+	pr_debug(DRV_NAME ": wants to seize %04x:%02x:%02x.%d\n",
 		 domain, bus, slot, func);
 
 	spin_lock_irqsave(&device_ids_lock, flags);
@@ -1045,8 +1048,8 @@ static int pcistub_device_id_remove(int domain, int bus, int slot, int func)
 
 			err = 0;
 
-			pr_debug("removed %04x:%02x:%02x.%d from seize list\n",
-				 domain, bus, slot, func);
+			pr_debug(DRV_NAME ": removed %04x:%02x:%02x.%d from "
+				 "seize list\n", domain, bus, slot, func);
 		}
 	}
 	spin_unlock_irqrestore(&device_ids_lock, flags);
@@ -1193,23 +1196,19 @@ static ssize_t pcistub_irq_handler_switch(struct device_driver *drv,
 	struct pcistub_device *psdev;
 	struct xen_pcibk_dev_data *dev_data;
 	int domain, bus, slot, func;
-	int err;
+	int err = -ENOENT;
 
 	err = str_to_slot(buf, &domain, &bus, &slot, &func);
 	if (err)
 		return err;
 
 	psdev = pcistub_device_find(domain, bus, slot, func);
-	if (!psdev) {
-		err = -ENOENT;
+	if (!psdev)
 		goto out;
-	}
 
 	dev_data = pci_get_drvdata(psdev->dev);
-	if (!dev_data) {
-		err = -ENOENT;
+	if (!dev_data)
 		goto out;
-	}
 
 	dev_dbg(&psdev->dev->dev, "%s fake irq handler: %d->%d\n",
 		dev_data->irq_name, dev_data->isr_on,
@@ -1471,7 +1470,7 @@ out:
 	return err;
 
 parse_error:
-	pr_err("Error parsing pci_devs_to_hide at \"%s\"\n",
+	printk(KERN_ERR DRV_NAME ": Error parsing pci_devs_to_hide at \"%s\"\n",
 	       pci_devs_to_hide + pos);
 	return -EINVAL;
 }

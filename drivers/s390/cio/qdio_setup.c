@@ -254,31 +254,40 @@ int qdio_setup_get_ssqd(struct qdio_irq *irq_ptr,
 	int rc;
 
 	DBF_EVENT("getssqd:%4x", schid->sch_no);
-	if (!irq_ptr) {
-		ssqd = (struct chsc_ssqd_area *)__get_free_page(GFP_KERNEL);
-		if (!ssqd)
-			return -ENOMEM;
-	} else {
+	if (irq_ptr != NULL)
 		ssqd = (struct chsc_ssqd_area *)irq_ptr->chsc_page;
-	}
+	else
+		ssqd = (struct chsc_ssqd_area *)__get_free_page(GFP_KERNEL);
+	memset(ssqd, 0, PAGE_SIZE);
 
-	rc = chsc_ssqd(*schid, ssqd);
+	ssqd->request = (struct chsc_header) {
+		.length = 0x0010,
+		.code	= 0x0024,
+	};
+	ssqd->first_sch = schid->sch_no;
+	ssqd->last_sch = schid->sch_no;
+	ssqd->ssid = schid->ssid;
+
+	if (chsc(ssqd))
+		return -EIO;
+	rc = chsc_error_from_response(ssqd->response.code);
 	if (rc)
-		goto out;
+		return rc;
 
 	if (!(ssqd->qdio_ssqd.flags & CHSC_FLAG_QDIO_CAPABILITY) ||
 	    !(ssqd->qdio_ssqd.flags & CHSC_FLAG_VALIDITY) ||
 	    (ssqd->qdio_ssqd.sch != schid->sch_no))
-		rc = -EINVAL;
+		return -EINVAL;
 
-	if (!rc)
-		memcpy(data, &ssqd->qdio_ssqd, sizeof(*data));
-
-out:
-	if (!irq_ptr)
+	if (irq_ptr != NULL)
+		memcpy(&irq_ptr->ssqd_desc, &ssqd->qdio_ssqd,
+		       sizeof(struct qdio_ssqd_desc));
+	else {
+		memcpy(data, &ssqd->qdio_ssqd,
+		       sizeof(struct qdio_ssqd_desc));
 		free_page((unsigned long)ssqd);
-
-	return rc;
+	}
+	return 0;
 }
 
 void qdio_setup_ssqd_info(struct qdio_irq *irq_ptr)
@@ -286,7 +295,7 @@ void qdio_setup_ssqd_info(struct qdio_irq *irq_ptr)
 	unsigned char qdioac;
 	int rc;
 
-	rc = qdio_setup_get_ssqd(irq_ptr, &irq_ptr->schid, &irq_ptr->ssqd_desc);
+	rc = qdio_setup_get_ssqd(irq_ptr, &irq_ptr->schid, NULL);
 	if (rc) {
 		DBF_ERROR("%4x ssqd ERR", irq_ptr->schid.sch_no);
 		DBF_ERROR("rc:%x", rc);

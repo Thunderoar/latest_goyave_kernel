@@ -1578,7 +1578,19 @@ static struct pci_driver sc92031_pci_driver = {
 	.resume		= sc92031_resume,
 };
 
-module_pci_driver(sc92031_pci_driver);
+static int __init sc92031_init(void)
+{
+	return pci_register_driver(&sc92031_pci_driver);
+}
+
+static void __exit sc92031_exit(void)
+{
+	pci_unregister_driver(&sc92031_pci_driver);
+}
+
+module_init(sc92031_init);
+module_exit(sc92031_exit);
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Cesar Eduardo Barros <cesarb@cesarb.net>");
 MODULE_DESCRIPTION("Silan SC92031 PCI Fast Ethernet Adapter driver");

@@ -229,10 +229,4 @@
 /* SPRD UARTs */
 #define PORT_SPRD 103
 
-/* Freescale lpuart */
-#define PORT_LPUART	103
-
-/* SH-SCI */
-#define PORT_HSCIF	103
-
 #endif /* _UAPILINUX_SERIAL_CORE_H */

@@ -173,7 +173,7 @@ static inline void palmld_nor_init(void) {}
  * GPIO keyboard
  ******************************************************************************/
 #if defined(CONFIG_KEYBOARD_PXA27x) || defined(CONFIG_KEYBOARD_PXA27x_MODULE)
-static const unsigned int palmld_matrix_keys[] = {
+static unsigned int palmld_matrix_keys[] = {
 	KEY(0, 1, KEY_F2),
 	KEY(0, 2, KEY_UP),
 
@@ -190,15 +190,11 @@ static const unsigned int palmld_matrix_keys[] = {
 	KEY(3, 2, KEY_LEFT),
 };
 
-static struct matrix_keymap_data palmld_matrix_keymap_data = {
-	.keymap			= palmld_matrix_keys,
-	.keymap_size		= ARRAY_SIZE(palmld_matrix_keys),
-};
-
 static struct pxa27x_keypad_platform_data palmld_keypad_platform_data = {
 	.matrix_key_rows	= 4,
 	.matrix_key_cols	= 3,
-	.matrix_keymap_data	= &palmld_matrix_keymap_data,
+	.matrix_key_map		= palmld_matrix_keys,
+	.matrix_key_map_size	= ARRAY_SIZE(palmld_matrix_keys),
 
 	.debounce_interval	= 30,
 };

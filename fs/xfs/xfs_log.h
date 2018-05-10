@@ -88,8 +88,7 @@ static inline xfs_lsn_t	_lsn_cmp(xfs_lsn_t lsn1, xfs_lsn_t lsn2)
 #define XLOG_REG_TYPE_UNMOUNT		17
 #define XLOG_REG_TYPE_COMMIT		18
 #define XLOG_REG_TYPE_TRANSHDR		19
-#define XLOG_REG_TYPE_ICREATE		20
-#define XLOG_REG_TYPE_MAX		20
+#define XLOG_REG_TYPE_MAX		19
 
 typedef struct xfs_log_iovec {
 	void		*i_addr;	/* beginning address of region */
@@ -105,8 +104,6 @@ struct xfs_log_vec {
 	char			*lv_buf;	/* formatted buffer */
 	int			lv_buf_len;	/* size of formatted buffer */
 };
-
-#define XFS_LOG_VEC_ORDERED	(-1)
 
 /*
  * Structure used to pass callback function and the function's argument

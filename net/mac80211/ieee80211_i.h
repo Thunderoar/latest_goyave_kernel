@@ -60,24 +60,13 @@ struct ieee80211_local;
 #define IEEE80211_UNSET_POWER_LEVEL	INT_MIN
 
 /*
- * Some APs experience problems when working with U-APSD. Decreasing the
- * probability of that happening by using legacy mode for all ACs but VO isn't
- * enough.
- *
- * Cisco 4410N originally forced us to enable VO by default only because it
- * treated non-VO ACs as legacy.
- *
- * However some APs (notably Netgear R7000) silently reclassify packets to
- * different ACs. Since u-APSD ACs require trigger frames for frame retrieval
- * clients would never see some frames (e.g. ARP responses) or would fetch them
- * accidentally after a long time.
- *
- * It makes little sense to enable u-APSD queues by default because it needs
- * userspace applications to be aware of it to actually take advantage of the
- * possible additional powersavings. Implicitly depending on driver autotrigger
- * frame support doesn't make much sense.
+ * Some APs experience problems when working with U-APSD. Decrease the
+ * probability of that happening by using legacy mode for all ACs but VO.
+ * The AP that caused us trouble was a Cisco 4410N. It ignores our
+ * setting, and always treats non-VO ACs as legacy.
  */
-#define IEEE80211_DEFAULT_UAPSD_QUEUES 0
+#define IEEE80211_DEFAULT_UAPSD_QUEUES \
+	IEEE80211_WMM_IE_STA_QOSINFO_AC_VO
 
 #define IEEE80211_DEFAULT_MAX_SP_LEN		\
 	IEEE80211_WMM_IE_STA_QOSINFO_SP_ALL
@@ -105,7 +94,6 @@ struct ieee80211_bss {
 #define IEEE80211_MAX_SUPP_RATES 32
 	u8 supp_rates[IEEE80211_MAX_SUPP_RATES];
 	size_t supp_rates_len;
-	struct ieee80211_rate *beacon_rate;
 
 	/*
 	 * During association, we save an ERP value from a probe response so
@@ -323,7 +311,6 @@ struct ieee80211_roc_work {
 
 	bool started, abort, hw_begun, notified;
 	bool to_be_freed;
-	bool on_channel;
 
 	unsigned long hw_start_time;
 
@@ -379,7 +366,7 @@ struct ieee80211_mgd_assoc_data {
 	u8 ssid_len;
 	u8 supp_rates_len;
 	bool wmm, uapsd;
-	bool need_beacon;
+	bool have_beacon, need_beacon;
 	bool synced;
 	bool timeout_started;
 
@@ -418,7 +405,6 @@ struct ieee80211_if_managed {
 
 	bool powersave; /* powersave requested for this iface */
 	bool broken_ap; /* AP is broken -- turn off powersave */
-	bool have_beacon;
 	u8 dtim_period;
 	enum ieee80211_smps_mode req_smps, /* requested smps mode */
 				 driver_smps_mode; /* smps mode request */
@@ -513,12 +499,14 @@ struct ieee80211_if_ibss {
 	bool privacy;
 
 	bool control_port;
+	unsigned int auth_frame_registrations;
 
 	u8 bssid[ETH_ALEN] __aligned(2);
 	u8 ssid[IEEE80211_MAX_SSID_LEN];
 	u8 ssid_len, ie_len;
 	u8 *ie;
-	struct cfg80211_chan_def chandef;
+	struct ieee80211_channel *channel;
+	enum nl80211_channel_type channel_type;
 
 	unsigned long ibss_join_req;
 	/* probe response/beacon for IBSS */
@@ -557,7 +545,6 @@ struct ieee80211_if_mesh {
 	struct timer_list mesh_path_root_timer;
 
 	unsigned long wrkq_flags;
-	unsigned long mbss_changed;
 
 	u8 mesh_id[IEEE80211_MAX_MESH_ID_LEN];
 	size_t mesh_id_len;
@@ -855,8 +842,6 @@ struct tpt_led_trigger {
  *	that the scan completed.
  * @SCAN_ABORTED: Set for our scan work function when the driver reported
  *	a scan complete for an aborted scan.
- * @SCAN_HW_CANCELLED: Set for our scan work function when the scan is being
- *	cancelled.
  */
 enum {
 	SCAN_SW_SCANNING,
@@ -864,7 +849,6 @@ enum {
 	SCAN_ONCHANNEL_SCANNING,
 	SCAN_COMPLETED,
 	SCAN_ABORTED,
-	SCAN_HW_CANCELLED,
 };
 
 /**
@@ -1283,7 +1267,6 @@ void ieee80211_sta_reset_conn_monitor(struct ieee80211_sub_if_data *sdata);
 void ieee80211_mgd_stop(struct ieee80211_sub_if_data *sdata);
 void ieee80211_mgd_conn_tx_status(struct ieee80211_sub_if_data *sdata,
 				  __le16 fc, bool acked);
-void ieee80211_mgd_quiesce(struct ieee80211_sub_if_data *sdata);
 void ieee80211_sta_restart(struct ieee80211_sub_if_data *sdata);
 
 /* IBSS code */

@@ -115,13 +115,16 @@ static void dwc2_sof_intr(struct dwc2_hsotg *hsotg)
 {
 	struct list_head *qh_entry;
 	struct dwc2_qh *qh;
+	u32 hfnum;
 	enum dwc2_transaction_type tr_type;
 
 #ifdef DEBUG_SOF
 	dev_vdbg(hsotg->dev, "--Start of Frame Interrupt--\n");
 #endif
 
-	hsotg->frame_number = dwc2_hcd_get_frame_number(hsotg);
+	hfnum = readl(hsotg->regs + HFNUM);
+	hsotg->frame_number = hfnum >> HFNUM_FRNUM_SHIFT &
+			    HFNUM_FRNUM_MASK >> HFNUM_FRNUM_SHIFT;
 
 	dwc2_track_missed_sofs(hsotg);
 
@@ -241,7 +244,6 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 	u32 usbcfg;
 	u32 prtspd;
 	u32 hcfg;
-	u32 fslspclksel;
 	u32 hfir;
 
 	dev_vdbg(hsotg->dev, "%s(%p)\n", __func__, hsotg);
@@ -273,7 +275,6 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 		}
 
 		hcfg = readl(hsotg->regs + HCFG);
-		fslspclksel = hcfg & HCFG_FSLSPCLKSEL_MASK;
 
 		if (prtspd == HPRT0_SPD_LOW_SPEED &&
 		    params->host_ls_low_power_phy_clk ==
@@ -281,7 +282,8 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 			/* 6 MHZ */
 			dev_vdbg(hsotg->dev,
 				 "FS_PHY programming HCFG to 6 MHz\n");
-			if (fslspclksel != HCFG_FSLSPCLKSEL_6_MHZ) {
+			if ((hcfg & HCFG_FSLSPCLKSEL_MASK) !=
+			    HCFG_FSLSPCLKSEL_6_MHZ) {
 				hcfg &= ~HCFG_FSLSPCLKSEL_MASK;
 				hcfg |= HCFG_FSLSPCLKSEL_6_MHZ;
 				writel(hcfg, hsotg->regs + HCFG);
@@ -291,7 +293,8 @@ static void dwc2_hprt0_enable(struct dwc2_hsotg *hsotg, u32 hprt0,
 			/* 48 MHZ */
 			dev_vdbg(hsotg->dev,
 				 "FS_PHY programming HCFG to 48 MHz\n");
-			if (fslspclksel != HCFG_FSLSPCLKSEL_48_MHZ) {
+			if ((hcfg & HCFG_FSLSPCLKSEL_MASK) !=
+			    HCFG_FSLSPCLKSEL_48_MHZ) {
 				hcfg &= ~HCFG_FSLSPCLKSEL_MASK;
 				hcfg |= HCFG_FSLSPCLKSEL_48_MHZ;
 				writel(hcfg, hsotg->regs + HCFG);
@@ -2057,14 +2060,14 @@ static void dwc2_hc_intr(struct dwc2_hsotg *hsotg)
 }
 
 /* This function handles interrupts for the HCD */
-irqreturn_t dwc2_handle_hcd_intr(struct dwc2_hsotg *hsotg)
+int dwc2_hcd_intr(struct dwc2_hsotg *hsotg)
 {
 	u32 gintsts, dbg_gintsts;
-	irqreturn_t retval = IRQ_NONE;
+	int retval = 0;
 
 	if (dwc2_check_core_status(hsotg) < 0) {
 		dev_warn(hsotg->dev, "Controller is disconnected\n");
-		return retval;
+		return 0;
 	}
 
 	spin_lock(&hsotg->lock);
@@ -2074,10 +2077,10 @@ irqreturn_t dwc2_handle_hcd_intr(struct dwc2_hsotg *hsotg)
 		gintsts = dwc2_read_core_intr(hsotg);
 		if (!gintsts) {
 			spin_unlock(&hsotg->lock);
-			return retval;
+			return 0;
 		}
 
-		retval = IRQ_HANDLED;
+		retval = 1;
 
 		dbg_gintsts = gintsts;
 #ifndef DEBUG_SOF
@@ -2099,6 +2102,9 @@ irqreturn_t dwc2_handle_hcd_intr(struct dwc2_hsotg *hsotg)
 			dwc2_rx_fifo_level_intr(hsotg);
 		if (gintsts & GINTSTS_NPTXFEMP)
 			dwc2_np_tx_fifo_empty_intr(hsotg);
+		if (gintsts & GINTSTS_I2CINT)
+			/* Todo: Implement i2cintr handler */
+			writel(GINTSTS_I2CINT, hsotg->regs + GINTSTS);
 		if (gintsts & GINTSTS_PRTINT)
 			dwc2_port_intr(hsotg);
 		if (gintsts & GINTSTS_HCHINT)

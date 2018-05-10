@@ -577,7 +577,7 @@ static int hv_probe(struct platform_device *op)
 	if (err)
 		goto out_remove_port;
 
-	platform_set_drvdata(op, port);
+	dev_set_drvdata(&op->dev, port);
 
 	return 0;
 
@@ -601,7 +601,7 @@ out_free_port:
 
 static int hv_remove(struct platform_device *dev)
 {
-	struct uart_port *port = platform_get_drvdata(dev);
+	struct uart_port *port = dev_get_drvdata(&dev->dev);
 
 	free_irq(port->irq, port);
 
@@ -611,6 +611,8 @@ static int hv_remove(struct platform_device *dev)
 
 	kfree(port);
 	sunhv_port = NULL;
+
+	dev_set_drvdata(&dev->dev, NULL);
 
 	return 0;
 }

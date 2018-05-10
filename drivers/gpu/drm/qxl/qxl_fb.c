@@ -91,7 +91,7 @@ static void qxl_fb_dirty_flush(struct fb_info *info)
 	u32 x1, x2, y1, y2;
 
 	/* TODO: hard coding 32 bpp */
-	int stride = qfbdev->qfb.base.pitches[0];
+	int stride = qfbdev->qfb.base.pitches[0] * 4;
 
 	x1 = qfbdev->dirty.x1;
 	x2 = qfbdev->dirty.x2;
@@ -520,6 +520,10 @@ static int qxl_fbdev_destroy(struct drm_device *dev, struct qxl_fbdev *qfbdev)
 }
 
 static struct drm_fb_helper_funcs qxl_fb_helper_funcs = {
+	/* TODO
+	.gamma_set = qxl_crtc_fb_gamma_set,
+	.gamma_get = qxl_crtc_fb_gamma_get,
+	*/
 	.fb_probe = qxl_fb_find_or_create_single,
 };
 

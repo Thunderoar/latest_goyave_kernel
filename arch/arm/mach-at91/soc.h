@@ -6,7 +6,6 @@
 
 struct at91_init_soc {
 	int builtin;
-	u32 extern_irq;
 	unsigned int *default_irq_priority;
 	void (*map_io)(void);
 	void (*ioremap_registers)(void);

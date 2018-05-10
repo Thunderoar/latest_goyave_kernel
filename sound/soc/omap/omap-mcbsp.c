@@ -814,6 +814,8 @@ static int asoc_mcbsp_remove(struct platform_device *pdev)
 
 	clk_put(mcbsp->fclk);
 
+	platform_set_drvdata(pdev, NULL);
+
 	return 0;
 }
 

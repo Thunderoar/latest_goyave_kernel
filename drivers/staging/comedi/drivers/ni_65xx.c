@@ -17,6 +17,11 @@
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
 */
 /*
 Driver: ni_65xx
@@ -279,6 +284,15 @@ static inline struct ni_65xx_subdevice_private *sprivate(struct comedi_subdevice
 							 *subdev)
 {
 	return subdev->private;
+}
+
+static struct ni_65xx_subdevice_private *ni_65xx_alloc_subdevice_private(void)
+{
+	struct ni_65xx_subdevice_private *subdev_private =
+	    kzalloc(sizeof(struct ni_65xx_subdevice_private), GFP_KERNEL);
+	if (subdev_private == NULL)
+		return NULL;
+	return subdev_private;
 }
 
 static int ni_65xx_config_filter(struct comedi_device *dev,
@@ -570,7 +584,6 @@ static int ni_65xx_auto_attach(struct comedi_device *dev,
 	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
 	const struct ni_65xx_board *board = NULL;
 	struct ni_65xx_private *devpriv;
-	struct ni_65xx_subdevice_private *spriv;
 	struct comedi_subdevice *s;
 	unsigned i;
 	int ret;
@@ -619,10 +632,10 @@ static int ni_65xx_auto_attach(struct comedi_device *dev,
 		s->maxdata = 1;
 		s->insn_config = ni_65xx_dio_insn_config;
 		s->insn_bits = ni_65xx_dio_insn_bits;
-		spriv = comedi_alloc_spriv(s, sizeof(*spriv));
-		if (!spriv)
+		s->private = ni_65xx_alloc_subdevice_private();
+		if (s->private == NULL)
 			return -ENOMEM;
-		spriv->base_port = 0;
+		sprivate(s)->base_port = 0;
 	} else {
 		s->type = COMEDI_SUBD_UNUSED;
 	}
@@ -636,10 +649,10 @@ static int ni_65xx_auto_attach(struct comedi_device *dev,
 		s->range_table = &range_digital;
 		s->maxdata = 1;
 		s->insn_bits = ni_65xx_dio_insn_bits;
-		spriv = comedi_alloc_spriv(s, sizeof(*spriv));
-		if (!spriv)
+		s->private = ni_65xx_alloc_subdevice_private();
+		if (s->private == NULL)
 			return -ENOMEM;
-		spriv->base_port = board->num_di_ports;
+		sprivate(s)->base_port = board->num_di_ports;
 	} else {
 		s->type = COMEDI_SUBD_UNUSED;
 	}
@@ -654,10 +667,10 @@ static int ni_65xx_auto_attach(struct comedi_device *dev,
 		s->maxdata = 1;
 		s->insn_config = ni_65xx_dio_insn_config;
 		s->insn_bits = ni_65xx_dio_insn_bits;
-		spriv = comedi_alloc_spriv(s, sizeof(*spriv));
-		if (!spriv)
+		s->private = ni_65xx_alloc_subdevice_private();
+		if (s->private == NULL)
 			return -ENOMEM;
-		spriv->base_port = 0;
+		sprivate(s)->base_port = 0;
 		for (i = 0; i < board->num_dio_ports; ++i) {
 			/*  configure all ports for input */
 			writeb(0x1,
@@ -712,6 +725,7 @@ static int ni_65xx_auto_attach(struct comedi_device *dev,
 static void ni_65xx_detach(struct comedi_device *dev)
 {
 	struct ni_65xx_private *devpriv = dev->private;
+	int i;
 
 	if (devpriv && devpriv->mite && devpriv->mite->daq_io_addr) {
 		writeb(0x00,
@@ -720,6 +734,8 @@ static void ni_65xx_detach(struct comedi_device *dev)
 	}
 	if (dev->irq)
 		free_irq(dev->irq, dev);
+	for (i = 0; i < dev->n_subdevices; ++i)
+		comedi_spriv_free(dev, i);
 	if (devpriv) {
 		if (devpriv->mite) {
 			mite_unsetup(devpriv->mite);

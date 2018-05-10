@@ -446,15 +446,11 @@ static void target_remove_from_state_list(struct se_cmd *cmd)
 	spin_unlock_irqrestore(&dev->execute_task_lock, flags);
 }
 
-static int transport_cmd_check_stop(struct se_cmd *cmd, bool remove_from_lists,
-				    bool write_pending)
+static int transport_cmd_check_stop(struct se_cmd *cmd, bool remove_from_lists)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&cmd->t_state_lock, flags);
-	if (write_pending)
-		cmd->t_state = TRANSPORT_WRITE_PENDING;
-
 	/*
 	 * Determine if IOCTL context caller in requesting the stopping of this
 	 * command for LUN shutdown purposes.
@@ -492,7 +488,7 @@ static int transport_cmd_check_stop(struct se_cmd *cmd, bool remove_from_lists,
 
 		spin_unlock_irqrestore(&cmd->t_state_lock, flags);
 
-		complete_all(&cmd->t_transport_stop_comp);
+		complete(&cmd->t_transport_stop_comp);
 		return 1;
 	}
 
@@ -519,7 +515,7 @@ static int transport_cmd_check_stop(struct se_cmd *cmd, bool remove_from_lists,
 
 static int transport_cmd_check_stop_to_fabric(struct se_cmd *cmd)
 {
-	return transport_cmd_check_stop(cmd, true, false);
+	return transport_cmd_check_stop(cmd, true);
 }
 
 static void transport_lun_remove_cmd(struct se_cmd *cmd)
@@ -529,6 +525,13 @@ static void transport_lun_remove_cmd(struct se_cmd *cmd)
 
 	if (!lun)
 		return;
+
+	spin_lock_irqsave(&cmd->t_state_lock, flags);
+	if (cmd->transport_state & CMD_T_DEV_ACTIVE) {
+		cmd->transport_state &= ~CMD_T_DEV_ACTIVE;
+		target_remove_from_state_list(cmd);
+	}
+	spin_unlock_irqrestore(&cmd->t_state_lock, flags);
 
 	spin_lock_irqsave(&lun->lun_cmd_lock, flags);
 	if (!list_empty(&cmd->se_lun_node))
@@ -614,7 +617,7 @@ void target_complete_cmd(struct se_cmd *cmd, u8 scsi_status)
 	if (cmd->transport_state & CMD_T_ABORTED &&
 	    cmd->transport_state & CMD_T_STOP) {
 		spin_unlock_irqrestore(&cmd->t_state_lock, flags);
-		complete_all(&cmd->t_transport_stop_comp);
+		complete(&cmd->t_transport_stop_comp);
 		return;
 	} else if (cmd->transport_state & CMD_T_FAILED) {
 		INIT_WORK(&cmd->work, target_complete_failure_work);
@@ -629,23 +632,6 @@ void target_complete_cmd(struct se_cmd *cmd, u8 scsi_status)
 	queue_work(target_completion_wq, &cmd->work);
 }
 EXPORT_SYMBOL(target_complete_cmd);
-
-void target_complete_cmd_with_length(struct se_cmd *cmd, u8 scsi_status, int length)
-{
-	if (scsi_status == SAM_STAT_GOOD && length < cmd->data_length) {
-		if (cmd->se_cmd_flags & SCF_UNDERFLOW_BIT) {
-			cmd->residual_count += cmd->data_length - length;
-		} else {
-			cmd->se_cmd_flags |= SCF_UNDERFLOW_BIT;
-			cmd->residual_count = cmd->data_length - length;
-		}
-
-		cmd->data_length = length;
-	}
-
-	target_complete_cmd(cmd, scsi_status);
-}
-EXPORT_SYMBOL(target_complete_cmd_with_length);
 
 static void target_add_to_state_list(struct se_cmd *cmd)
 {
@@ -1106,6 +1092,7 @@ sense_reason_t
 target_setup_cmd_from_cdb(struct se_cmd *cmd, unsigned char *cdb)
 {
 	struct se_device *dev = cmd->se_dev;
+	unsigned long flags;
 	sense_reason_t ret;
 
 	/*
@@ -1165,7 +1152,9 @@ target_setup_cmd_from_cdb(struct se_cmd *cmd, unsigned char *cdb)
 	if (ret)
 		return ret;
 
+	spin_lock_irqsave(&cmd->t_state_lock, flags);
 	cmd->se_cmd_flags |= SCF_SUPPORTED_SAM_OPCODE;
+	spin_unlock_irqrestore(&cmd->t_state_lock, flags);
 
 	spin_lock(&cmd->se_lun->lun_sep_lock);
 	if (cmd->se_lun->lun_sep)
@@ -1594,6 +1583,10 @@ static void __target_execute_cmd(struct se_cmd *cmd)
 {
 	sense_reason_t ret;
 
+	spin_lock_irq(&cmd->t_state_lock);
+	cmd->transport_state |= (CMD_T_BUSY|CMD_T_SENT);
+	spin_unlock_irq(&cmd->t_state_lock);
+
 	if (cmd->execute_cmd) {
 		ret = cmd->execute_cmd(cmd);
 		if (ret) {
@@ -1695,22 +1688,16 @@ void target_execute_cmd(struct se_cmd *cmd)
 			cmd->se_tfo->get_task_tag(cmd));
 
 		spin_unlock_irq(&cmd->t_state_lock);
-		complete_all(&cmd->t_transport_stop_comp);
+		complete(&cmd->t_transport_stop_comp);
 		return;
 	}
 
 	cmd->t_state = TRANSPORT_PROCESSING;
-	cmd->transport_state |= CMD_T_ACTIVE|CMD_T_BUSY|CMD_T_SENT;
+	cmd->transport_state |= CMD_T_ACTIVE;
 	spin_unlock_irq(&cmd->t_state_lock);
 
-	if (target_handle_task_attr(cmd)) {
-		spin_lock_irq(&cmd->t_state_lock);
-		cmd->transport_state &= ~CMD_T_BUSY|CMD_T_SENT;
-		spin_unlock_irq(&cmd->t_state_lock);
-		return;
-	}
-
-	__target_execute_cmd(cmd);
+	if (!target_handle_task_attr(cmd))
+		__target_execute_cmd(cmd);
 }
 EXPORT_SYMBOL(target_execute_cmd);
 
@@ -1784,7 +1771,8 @@ static void transport_complete_qf(struct se_cmd *cmd)
 
 	if (cmd->se_cmd_flags & SCF_TRANSPORT_TASK_SENSE) {
 		ret = cmd->se_tfo->queue_status(cmd);
-		goto out;
+		if (ret)
+			goto out;
 	}
 
 	switch (cmd->data_direction) {
@@ -1968,7 +1956,11 @@ static int transport_release_cmd(struct se_cmd *cmd)
 	 * If this cmd has been setup with target_get_sess_cmd(), drop
 	 * the kref and call ->release_cmd() in kref callback.
 	 */
-	return target_put_sess_cmd(cmd->se_sess, cmd);
+	 if (cmd->check_release != 0)
+		return target_put_sess_cmd(cmd->se_sess, cmd);
+
+	cmd->se_tfo->release_cmd(cmd);
+	return 1;
 }
 
 /**
@@ -1979,6 +1971,21 @@ static int transport_release_cmd(struct se_cmd *cmd)
  */
 static int transport_put_cmd(struct se_cmd *cmd)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&cmd->t_state_lock, flags);
+	if (atomic_read(&cmd->t_fe_count) &&
+	    !atomic_dec_and_test(&cmd->t_fe_count)) {
+		spin_unlock_irqrestore(&cmd->t_state_lock, flags);
+		return 0;
+	}
+
+	if (cmd->transport_state & CMD_T_DEV_ACTIVE) {
+		cmd->transport_state &= ~CMD_T_DEV_ACTIVE;
+		target_remove_from_state_list(cmd);
+	}
+	spin_unlock_irqrestore(&cmd->t_state_lock, flags);
+
 	transport_free_pages(cmd);
 	return transport_release_cmd(cmd);
 }
@@ -2096,17 +2103,25 @@ transport_generic_new_cmd(struct se_cmd *cmd)
 		if (ret < 0)
 			return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
+
+	atomic_inc(&cmd->t_fe_count);
+
 	/*
 	 * If this command is not a write we can execute it right here,
 	 * for write buffers we need to notify the fabric driver first
 	 * and let it call back once the write buffers are ready.
 	 */
 	target_add_to_state_list(cmd);
-	if (cmd->data_direction != DMA_TO_DEVICE || cmd->data_length == 0) {
+	if (cmd->data_direction != DMA_TO_DEVICE) {
 		target_execute_cmd(cmd);
 		return 0;
 	}
-	transport_cmd_check_stop(cmd, false, true);
+
+	spin_lock_irq(&cmd->t_state_lock);
+	cmd->t_state = TRANSPORT_WRITE_PENDING;
+	spin_unlock_irq(&cmd->t_state_lock);
+
+	transport_cmd_check_stop(cmd, false);
 
 	ret = cmd->se_tfo->write_pending(cmd);
 	if (ret == -EAGAIN || ret == -ENOMEM)
@@ -2187,12 +2202,10 @@ int target_get_sess_cmd(struct se_session *se_sess, struct se_cmd *se_cmd,
 		goto out;
 	}
 	list_add_tail(&se_cmd->se_cmd_list, &se_sess->sess_cmd_list);
+	se_cmd->check_release = 1;
+
 out:
 	spin_unlock_irqrestore(&se_sess->sess_cmd_lock, flags);
-
-	if (ret && ack_kref)
-		target_put_sess_cmd(se_sess, se_cmd);
-
 	return ret;
 }
 EXPORT_SYMBOL(target_get_sess_cmd);
@@ -2306,7 +2319,7 @@ static int transport_lun_wait_for_tasks(struct se_cmd *cmd, struct se_lun *lun)
 		pr_debug("ConfigFS ITT[0x%08x] - CMD_T_STOP, skipping\n",
 			 cmd->se_tfo->get_task_tag(cmd));
 		spin_unlock_irqrestore(&cmd->t_state_lock, flags);
-		transport_cmd_check_stop(cmd, false, false);
+		transport_cmd_check_stop(cmd, false);
 		return -EPERM;
 	}
 	cmd->transport_state |= CMD_T_LUN_FE_STOP;
@@ -2414,7 +2427,7 @@ check_cond:
 
 			spin_unlock_irqrestore(&cmd->t_state_lock,
 					cmd_flags);
-			transport_cmd_check_stop(cmd, false, false);
+			transport_cmd_check_stop(cmd, false);
 			complete(&cmd->transport_lun_fe_stop_comp);
 			spin_lock_irqsave(&lun->lun_cmd_lock, lun_flags);
 			continue;
@@ -2864,12 +2877,6 @@ static void target_tmr_work(struct work_struct *work)
 int transport_generic_handle_tmr(
 	struct se_cmd *cmd)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&cmd->t_state_lock, flags);
-	cmd->transport_state |= CMD_T_ACTIVE;
-	spin_unlock_irqrestore(&cmd->t_state_lock, flags);
-
 	INIT_WORK(&cmd->work, target_tmr_work);
 	queue_work(cmd->se_dev->tmr_wq, &cmd->work);
 	return 0;

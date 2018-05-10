@@ -296,13 +296,13 @@ static inline unsigned type in##bwl##_p(int port)			\
 static inline void outs##bwl(int port, const void *addr, unsigned long count) \
 {									\
 	asm volatile("rep; outs" #bwl					\
-		     : "+S"(addr), "+c"(count) : "d"(port) : "memory");	\
+		     : "+S"(addr), "+c"(count) : "d"(port));		\
 }									\
 									\
 static inline void ins##bwl(int port, void *addr, unsigned long count)	\
 {									\
 	asm volatile("rep; ins" #bwl					\
-		     : "+D"(addr), "+c"(count) : "d"(port) : "memory");	\
+		     : "+D"(addr), "+c"(count) : "d"(port));		\
 }
 
 BUILDIO(b, b, char)
@@ -344,12 +344,5 @@ extern bool xen_biovec_phys_mergeable(const struct bio_vec *vec1,
 #endif	/* CONFIG_XEN */
 
 #define IO_SPACE_LIMIT 0xffff
-
-#ifdef CONFIG_MTRR
-extern int __must_check arch_phys_wc_add(unsigned long base,
-					 unsigned long size);
-extern void arch_phys_wc_del(int handle);
-#define arch_phys_wc_add arch_phys_wc_add
-#endif
 
 #endif /* _ASM_X86_IO_H */

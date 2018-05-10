@@ -17,6 +17,7 @@
 #include <linux/regmap.h>
 #include <linux/atomic.h>
 
+#define PM80X_VERSION_MASK		(0xFF)	/* 80X chip ID mask */
 enum {
 	CHIP_INVALID = 0,
 	CHIP_PM800,
@@ -298,7 +299,8 @@ struct pm80x_chip {
 	struct regmap *regmap;
 	struct regmap_irq_chip *regmap_irq_chip;
 	struct regmap_irq_chip_data *irq_data;
-	int type;
+	unsigned char version;
+	int id;
 	int irq;
 	int irq_mode;
 	unsigned long wu_flag;
@@ -307,14 +309,8 @@ struct pm80x_chip {
 
 struct pm80x_platform_data {
 	struct pm80x_rtc_pdata *rtc;
-	/*
-	 * For the regulator not defined, set regulators[not_defined] to be
-	 * NULL. num_regulators are the number of regulators supposed to be
-	 * initialized. If all regulators are not defined, set num_regulators
-	 * to be 0.
-	 */
-	struct regulator_init_data *regulators[PM800_ID_RG_MAX];
-	unsigned int num_regulators;
+	unsigned short power_page_addr;	/* power page I2C address */
+	unsigned short gpadc_page_addr;	/* gpadc page I2C address */
 	int irq_mode;		/* Clear interrupt by read/write(0/1) */
 	int batt_det;		/* enable/disable */
 	int (*plat_config)(struct pm80x_chip *chip,
@@ -349,7 +345,7 @@ static inline int pm80x_dev_suspend(struct device *dev)
 	int irq = platform_get_irq(pdev, 0);
 
 	if (device_may_wakeup(dev))
-		set_bit(irq, &chip->wu_flag);
+		set_bit((1 << irq), &chip->wu_flag);
 
 	return 0;
 }
@@ -361,12 +357,13 @@ static inline int pm80x_dev_resume(struct device *dev)
 	int irq = platform_get_irq(pdev, 0);
 
 	if (device_may_wakeup(dev))
-		clear_bit(irq, &chip->wu_flag);
+		clear_bit((1 << irq), &chip->wu_flag);
 
 	return 0;
 }
 #endif
 
-extern int pm80x_init(struct i2c_client *client);
+extern int pm80x_init(struct i2c_client *client,
+		      const struct i2c_device_id *id);
 extern int pm80x_deinit(void);
 #endif /* __LINUX_MFD_88PM80X_H */

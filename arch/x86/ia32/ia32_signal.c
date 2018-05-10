@@ -34,6 +34,8 @@
 #include <asm/sys_ia32.h>
 #include <asm/smap.h>
 
+#define FIX_EFLAGS	__FIX_EFLAGS
+
 int copy_siginfo_to_user32(compat_siginfo_t __user *to, siginfo_t *from)
 {
 	int err = 0;

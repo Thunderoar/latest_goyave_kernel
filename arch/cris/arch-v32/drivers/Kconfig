@@ -2,7 +2,9 @@ if ETRAX_ARCH_V32
 
 config ETRAX_ETHERNET
 	bool "Ethernet support"
-	depends on ETRAX_ARCH_V32 && NETDEVICES
+	depends on ETRAX_ARCH_V32
+	select ETHERNET
+	select NET_CORE
 	select MII
 	help
 	  This option enables the ETRAX FS built-in 10/100Mbit Ethernet
@@ -615,6 +617,7 @@ config ETRAX_PV_CHANGEABLE_BITS
 config ETRAX_CARDBUS
         bool "Cardbus support"
         depends on ETRAX_ARCH_V32
+        select HOTPLUG
         help
 	 Enabled the ETRAX Cardbus driver.
 
@@ -637,6 +640,8 @@ config ETRAX_STREAMCOPROC
 	help
 	  This option enables a driver for the stream co-processor
 	  for cryptographic operations.
+
+source drivers/mmc/Kconfig
 
 config ETRAX_MMC_IOP
 	tristate "MMC/SD host driver using IO-processor"
@@ -828,5 +833,10 @@ config ETRAX_SPI_MMC_WP_GPIO_PIN
 	help
 	  The pin to use for the SD/MMC write-protect signal for a memory
 	  card.  If defined as " " (space), the card is considered writable.
+
+# Avoid choices causing non-working configs by conditionalizing the inclusion.
+if ETRAX_SPI_MMC
+source drivers/spi/Kconfig
+endif
 
 endif

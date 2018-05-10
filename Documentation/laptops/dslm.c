@@ -2,7 +2,7 @@
  * dslm.c
  * Simple Disk Sleep Monitor
  *  by Bartek Kania
- * Licensed under the GPL
+ * Licenced under the GPL
  */
 #include <unistd.h>
 #include <stdlib.h>

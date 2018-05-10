@@ -519,17 +519,13 @@ extern struct hv_context hv_context;
 
 extern int hv_init(void);
 
-extern void hv_cleanup(bool crash);
+extern void hv_cleanup(void);
 
 extern int hv_post_message(union hv_connection_id connection_id,
 			 enum hv_message_type message_type,
 			 void *payload, size_t payload_size);
 
 extern u16 hv_signal_event(void *con_id);
-
-extern int hv_synic_alloc(void);
-
-extern void hv_synic_free(void);
 
 extern void hv_synic_init(void *irqarg);
 

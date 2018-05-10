@@ -1646,7 +1646,7 @@ static int grcan_setup_netdev(struct platform_device *ofdev,
 	if (err)
 		goto exit_free_candev;
 
-	platform_set_drvdata(ofdev, dev);
+	dev_set_drvdata(&ofdev->dev, dev);
 
 	/* Reset device to allow bit-timing to be set. No need to call
 	 * grcan_reset at this stage. That is done in grcan_open.
@@ -1683,9 +1683,10 @@ static int grcan_probe(struct platform_device *ofdev)
 	}
 
 	res = platform_get_resource(ofdev, IORESOURCE_MEM, 0);
-	base = devm_ioremap_resource(&ofdev->dev, res);
-	if (IS_ERR(base)) {
-		err = PTR_ERR(base);
+	base = devm_request_and_ioremap(&ofdev->dev, res);
+	if (!base) {
+		dev_err(&ofdev->dev, "couldn't map IO resource\n");
+		err = -EADDRNOTAVAIL;
 		goto exit_error;
 	}
 
@@ -1715,12 +1716,13 @@ exit_error:
 
 static int grcan_remove(struct platform_device *ofdev)
 {
-	struct net_device *dev = platform_get_drvdata(ofdev);
+	struct net_device *dev = dev_get_drvdata(&ofdev->dev);
 	struct grcan_priv *priv = netdev_priv(dev);
 
 	unregister_candev(dev); /* Will in turn call grcan_close */
 
 	irq_dispose_mapping(dev->irq);
+	dev_set_drvdata(&ofdev->dev, NULL);
 	netif_napi_del(&priv->napi);
 	free_candev(dev);
 

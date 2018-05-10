@@ -307,6 +307,7 @@ acpi_ex_resolve_operands(u16 opcode,
 		case ARGI_TARGETREF:	/* Allows implicit conversion rules before store */
 		case ARGI_FIXED_TARGET:	/* No implicit conversion before store to target */
 		case ARGI_SIMPLE_TARGET:	/* Name, Local, or arg - no implicit conversion  */
+
 			/*
 			 * Need an operand of type ACPI_TYPE_LOCAL_REFERENCE
 			 * A Namespace Node is OK as-is
@@ -325,6 +326,7 @@ acpi_ex_resolve_operands(u16 opcode,
 			goto next_operand;
 
 		case ARGI_DATAREFOBJ:	/* Store operator only */
+
 			/*
 			 * We don't want to resolve index_op reference objects during
 			 * a store because this would be an implicit de_ref_of operation.
@@ -341,9 +343,7 @@ acpi_ex_resolve_operands(u16 opcode,
 			break;
 
 		default:
-
 			/* All cases covered above */
-
 			break;
 		}
 
@@ -433,6 +433,7 @@ acpi_ex_resolve_operands(u16 opcode,
 			goto next_operand;
 
 		case ARGI_BUFFER:
+
 			/*
 			 * Need an operand of type ACPI_TYPE_BUFFER,
 			 * But we can implicitly convert from a STRING or INTEGER
@@ -458,6 +459,7 @@ acpi_ex_resolve_operands(u16 opcode,
 			goto next_operand;
 
 		case ARGI_STRING:
+
 			/*
 			 * Need an operand of type ACPI_TYPE_STRING,
 			 * But we can implicitly convert from a BUFFER or INTEGER
@@ -560,7 +562,6 @@ acpi_ex_resolve_operands(u16 opcode,
 				break;
 
 			default:
-
 				ACPI_ERROR((AE_INFO,
 					    "Needed [Buffer/String/Package/Reference], found [%s] %p",
 					    acpi_ut_get_object_type_name
@@ -583,7 +584,6 @@ acpi_ex_resolve_operands(u16 opcode,
 				break;
 
 			default:
-
 				ACPI_ERROR((AE_INFO,
 					    "Needed [Buffer/String/Package], found [%s] %p",
 					    acpi_ut_get_object_type_name
@@ -605,7 +605,6 @@ acpi_ex_resolve_operands(u16 opcode,
 				break;
 
 			default:
-
 				ACPI_ERROR((AE_INFO,
 					    "Needed [Region/Buffer], found [%s] %p",
 					    acpi_ut_get_object_type_name

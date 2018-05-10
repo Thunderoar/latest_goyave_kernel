@@ -144,18 +144,18 @@ EXPORT_SYMBOL_GPL(vm_sockets_get_local_cid);
  * VSOCK_HASH_SIZE + 1 so that vsock_bind_table[0] through
  * vsock_bind_table[VSOCK_HASH_SIZE - 1] are for bound sockets and
  * vsock_bind_table[VSOCK_HASH_SIZE] is for unbound sockets.  The hash function
- * mods with VSOCK_HASH_SIZE to ensure this.
+ * mods with VSOCK_HASH_SIZE - 1 to ensure this.
  */
 #define VSOCK_HASH_SIZE         251
 #define MAX_PORT_RETRIES        24
 
-#define VSOCK_HASH(addr)        ((addr)->svm_port % VSOCK_HASH_SIZE)
+#define VSOCK_HASH(addr)        ((addr)->svm_port % (VSOCK_HASH_SIZE - 1))
 #define vsock_bound_sockets(addr) (&vsock_bind_table[VSOCK_HASH(addr)])
 #define vsock_unbound_sockets     (&vsock_bind_table[VSOCK_HASH_SIZE])
 
 /* XXX This can probably be implemented in a better way. */
 #define VSOCK_CONN_HASH(src, dst)				\
-	(((src)->svm_cid ^ (dst)->svm_port) % VSOCK_HASH_SIZE)
+	(((src)->svm_cid ^ (dst)->svm_port) % (VSOCK_HASH_SIZE - 1))
 #define vsock_connected_sockets(src, dst)		\
 	(&vsock_connected_table[VSOCK_CONN_HASH(src, dst)])
 #define vsock_connected_sockets_vsk(vsk)				\
@@ -164,18 +164,6 @@ EXPORT_SYMBOL_GPL(vm_sockets_get_local_cid);
 static struct list_head vsock_bind_table[VSOCK_HASH_SIZE + 1];
 static struct list_head vsock_connected_table[VSOCK_HASH_SIZE];
 static DEFINE_SPINLOCK(vsock_table_lock);
-
-/* Autobind this socket to the local address if necessary. */
-static int vsock_auto_bind(struct vsock_sock *vsk)
-{
-	struct sock *sk = sk_vsock(vsk);
-	struct sockaddr_vm local_addr;
-
-	if (vsock_addr_bound(&vsk->local_addr))
-		return 0;
-	vsock_addr_init(&local_addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
-	return __vsock_bind(sk, &local_addr);
-}
 
 static void vsock_init_tables(void)
 {
@@ -968,10 +956,15 @@ static int vsock_dgram_sendmsg(struct kiocb *kiocb, struct socket *sock,
 
 	lock_sock(sk);
 
-	err = vsock_auto_bind(vsk);
-	if (err)
-		goto out;
+	if (!vsock_addr_bound(&vsk->local_addr)) {
+		struct sockaddr_vm local_addr;
 
+		vsock_addr_init(&local_addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
+		err = __vsock_bind(sk, &local_addr);
+		if (err != 0)
+			goto out;
+
+	}
 
 	/* If the provided message contains an address, use that.  Otherwise
 	 * fall back on the socket's remote handle (if it has been connected).
@@ -1045,9 +1038,15 @@ static int vsock_dgram_connect(struct socket *sock,
 
 	lock_sock(sk);
 
-	err = vsock_auto_bind(vsk);
-	if (err)
-		goto out;
+	if (!vsock_addr_bound(&vsk->local_addr)) {
+		struct sockaddr_vm local_addr;
+
+		vsock_addr_init(&local_addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
+		err = __vsock_bind(sk, &local_addr);
+		if (err != 0)
+			goto out;
+
+	}
 
 	if (!transport->dgram_allow(remote_addr->svm_cid,
 				    remote_addr->svm_port)) {
@@ -1164,9 +1163,17 @@ static int vsock_stream_connect(struct socket *sock, struct sockaddr *addr,
 		memcpy(&vsk->remote_addr, remote_addr,
 		       sizeof(vsk->remote_addr));
 
-		err = vsock_auto_bind(vsk);
-		if (err)
-			goto out;
+		/* Autobind this socket to the local address if necessary. */
+		if (!vsock_addr_bound(&vsk->local_addr)) {
+			struct sockaddr_vm local_addr;
+
+			vsock_addr_init(&local_addr, VMADDR_CID_ANY,
+					VMADDR_PORT_ANY);
+			err = __vsock_bind(sk, &local_addr);
+			if (err != 0)
+				goto out;
+
+		}
 
 		sk->sk_state = SS_CONNECTING;
 
@@ -1663,6 +1670,8 @@ vsock_stream_recvmsg(struct kiocb *kiocb,
 	vsk = vsock_sk(sk);
 	err = 0;
 
+	msg->msg_namelen = 0;
+
 	lock_sock(sk);
 
 	if (sk->sk_state != SS_CONNECTED) {
@@ -1797,8 +1806,27 @@ vsock_stream_recvmsg(struct kiocb *kiocb,
 	else if (sk->sk_shutdown & RCV_SHUTDOWN)
 		err = 0;
 
-	if (copied > 0)
+	if (copied > 0) {
+		/* We only do these additional bookkeeping/notification steps
+		 * if we actually copied something out of the queue pair
+		 * instead of just peeking ahead.
+		 */
+
+		if (!(flags & MSG_PEEK)) {
+			/* If the other side has shutdown for sending and there
+			 * is nothing more to read, then modify the socket
+			 * state.
+			 */
+			if (vsk->peer_shutdown & SEND_SHUTDOWN) {
+				if (vsock_stream_has_data(vsk) <= 0) {
+					sk->sk_state = SS_UNCONNECTED;
+					sock_set_flag(sk, SOCK_DONE);
+					sk->sk_state_change(sk);
+				}
+			}
+		}
 		err = copied;
+	}
 
 out_wait:
 	finish_wait(sk_sleep(sk), &wait);

@@ -396,8 +396,9 @@ nouveau_ttm_init(struct nouveau_drm *drm)
 		return ret;
 	}
 
-	drm->ttm.mtrr = arch_phys_wc_add(pci_resource_start(dev->pdev, 1),
-					 pci_resource_len(dev->pdev, 1));
+	drm->ttm.mtrr = drm_mtrr_add(pci_resource_start(dev->pdev, 1),
+				     pci_resource_len(dev->pdev, 1),
+				     DRM_MTRR_WC);
 
 	/* GART init */
 	if (drm->agp.stat != ENABLED) {
@@ -432,6 +433,10 @@ nouveau_ttm_fini(struct nouveau_drm *drm)
 
 	nouveau_ttm_global_release(drm);
 
-	arch_phys_wc_del(drm->ttm.mtrr);
-	drm->ttm.mtrr = 0;
+	if (drm->ttm.mtrr >= 0) {
+		drm_mtrr_del(drm->ttm.mtrr,
+			     pci_resource_start(drm->dev->pdev, 1),
+			     pci_resource_len(drm->dev->pdev, 1), DRM_MTRR_WC);
+		drm->ttm.mtrr = -1;
+	}
 }

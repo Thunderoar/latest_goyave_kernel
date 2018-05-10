@@ -564,8 +564,6 @@ static int bitmap_read_sb(struct bitmap *bitmap)
 	if (err)
 		return err;
 
-	err = -EINVAL;
-
 	sb = kmap_atomic(sb_page);
 
 	chunksize = le32_to_cpu(sb->chunksize);
@@ -885,6 +883,7 @@ void bitmap_unplug(struct bitmap *bitmap)
 {
 	unsigned long i;
 	int dirty, need_write;
+	int wait = 0;
 
 	if (!bitmap || !bitmap->storage.filemap ||
 	    test_bit(BITMAP_STALE, &bitmap->flags))
@@ -902,13 +901,16 @@ void bitmap_unplug(struct bitmap *bitmap)
 			clear_page_attr(bitmap, i, BITMAP_PAGE_PENDING);
 			write_page(bitmap, bitmap->storage.filemap[i], 0);
 		}
+		if (dirty)
+			wait = 1;
 	}
-	if (bitmap->storage.file)
-		wait_event(bitmap->write_wait,
-			   atomic_read(&bitmap->pending_writes)==0);
-	else
-		md_super_wait(bitmap->mddev);
-
+	if (wait) { /* if any writes were performed, we need to wait on them */
+		if (bitmap->storage.file)
+			wait_event(bitmap->write_wait,
+				   atomic_read(&bitmap->pending_writes)==0);
+		else
+			md_super_wait(bitmap->mddev);
+	}
 	if (test_bit(BITMAP_WRITE_ERROR, &bitmap->flags))
 		bitmap_file_kick(bitmap);
 }
@@ -1806,11 +1808,6 @@ int bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 	long pages;
 	struct bitmap_page *new_bp;
 
-	if (bitmap->storage.file && !init) {
-		pr_info("md: cannot resize file-based bitmap\n");
-		return -EINVAL;
-	}
-
 	if (chunksize == 0) {
 		/* If there is enough space, leave the chunk size unchanged,
 		 * else increase by factor of two until there is enough space.
@@ -2005,9 +2002,9 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 		} else {
 			int rv;
 			if (buf[0] == '+')
-				rv = kstrtoll(buf+1, 10, &offset);
+				rv = strict_strtoll(buf+1, 10, &offset);
 			else
-				rv = kstrtoll(buf, 10, &offset);
+				rv = strict_strtoll(buf, 10, &offset);
 			if (rv)
 				return rv;
 			if (offset == 0)
@@ -2142,7 +2139,7 @@ static ssize_t
 backlog_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	unsigned long backlog;
-	int rv = kstrtoul(buf, 10, &backlog);
+	int rv = strict_strtoul(buf, 10, &backlog);
 	if (rv)
 		return rv;
 	if (backlog > COUNTER_MAX)
@@ -2168,7 +2165,7 @@ chunksize_store(struct mddev *mddev, const char *buf, size_t len)
 	unsigned long csize;
 	if (mddev->bitmap)
 		return -EBUSY;
-	rv = kstrtoul(buf, 10, &csize);
+	rv = strict_strtoul(buf, 10, &csize);
 	if (rv)
 		return rv;
 	if (csize < 512 ||

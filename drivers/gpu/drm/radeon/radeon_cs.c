@@ -96,12 +96,6 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 			uint32_t domain = r->write_domain ?
 				r->write_domain : r->read_domains;
 
-			if (domain & RADEON_GEM_DOMAIN_CPU) {
-				DRM_ERROR("RADEON_GEM_DOMAIN_CPU is not valid "
-					  "for command submission\n");
-				return -EINVAL;
-			}
-
 			p->relocs[i].lobj.domain = domain;
 			if (domain == RADEON_GEM_DOMAIN_VRAM)
 				domain |= RADEON_GEM_DOMAIN_GTT;
@@ -114,7 +108,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 		radeon_bo_list_add_object(&p->relocs[i].lobj,
 					  &p->validated);
 	}
-	return radeon_bo_list_validate(&p->ticket, &p->validated, p->ring);
+	return radeon_bo_list_validate(&p->validated, p->ring);
 }
 
 static int radeon_cs_get_ring(struct radeon_cs_parser *p, u32 ring, s32 priority)
@@ -177,13 +171,11 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 	u32 ring = RADEON_CS_RING_GFX;
 	s32 priority = 0;
 
-	INIT_LIST_HEAD(&p->validated);
-
 	if (!cs->num_chunks) {
 		return 0;
 	}
-
 	/* get chunks */
+	INIT_LIST_HEAD(&p->validated);
 	p->idx = 0;
 	p->ib.sa_bo = NULL;
 	p->ib.semaphore = NULL;
@@ -324,17 +316,15 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
  * If error is set than unvalidate buffer, otherwise just free memory
  * used by parsing context.
  **/
-static void radeon_cs_parser_fini(struct radeon_cs_parser *parser, int error, bool backoff)
+static void radeon_cs_parser_fini(struct radeon_cs_parser *parser, int error)
 {
 	unsigned i;
 
 	if (!error) {
-		ttm_eu_fence_buffer_objects(&parser->ticket,
-					    &parser->validated,
+		ttm_eu_fence_buffer_objects(&parser->validated,
 					    parser->ib.fence);
-	} else if (backoff) {
-		ttm_eu_backoff_reservation(&parser->ticket,
-					   &parser->validated);
+	} else {
+		ttm_eu_backoff_reservation(&parser->validated);
 	}
 
 	if (parser->relocs != NULL) {
@@ -547,7 +537,7 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	r = radeon_cs_parser_init(&parser, data);
 	if (r) {
 		DRM_ERROR("Failed to initialize parser !\n");
-		radeon_cs_parser_fini(&parser, r, false);
+		radeon_cs_parser_fini(&parser, r);
 		up_read(&rdev->exclusive_lock);
 		r = radeon_cs_handle_lockup(rdev, r);
 		return r;
@@ -556,13 +546,12 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	if (r) {
 		if (r != -ERESTARTSYS)
 			DRM_ERROR("Failed to parse relocation %d!\n", r);
-		radeon_cs_parser_fini(&parser, r, false);
+		radeon_cs_parser_fini(&parser, r);
 		up_read(&rdev->exclusive_lock);
 		r = radeon_cs_handle_lockup(rdev, r);
 		return r;
 	}
 
-	/* XXX pick SD/HD/MVC */
 	if (parser.ring == R600_RING_TYPE_UVD_INDEX)
 		radeon_uvd_note_usage(rdev);
 
@@ -575,7 +564,7 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 		goto out;
 	}
 out:
-	radeon_cs_parser_fini(&parser, r, true);
+	radeon_cs_parser_fini(&parser, r);
 	up_read(&rdev->exclusive_lock);
 	r = radeon_cs_handle_lockup(rdev, r);
 	return r;

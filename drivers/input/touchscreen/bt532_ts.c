@@ -78,7 +78,7 @@ static bool ta_connected =0;
 #include <linux/cpufreq_limit.h>
 extern int _store_cpu_num_min_limit(unsigned int input);
 struct cpufreq_limit_handle *min_handle = NULL;
-static const unsigned long touch_cpufreq_lock = 800000;
+static const unsigned long touch_cpufreq_lock = 1200000;
 #endif
 
 #ifdef SUPPORTED_PALM_TOUCH
@@ -2264,10 +2264,8 @@ static irqreturn_t bt532_touch_work(int irq, void *data)
 						touch_cpufreq_lock, PTR_ERR(min_handle));
 						min_handle = NULL;
 					}
-#ifdef CONFIG_SPRD_DEBUG
 					_store_cpu_num_min_limit(2);
 					dev_info(&client->dev,"cpu freq on\n");
-#endif
 				}
 				info->finger_cnt++;
 #endif
@@ -2327,10 +2325,8 @@ static irqreturn_t bt532_touch_work(int irq, void *data)
 			{
 				cpufreq_limit_put(min_handle);
 				min_handle = NULL;
-#ifdef CONFIG_SPRD_DEBUG
 				_store_cpu_num_min_limit(1);
 				dev_info(&client->dev, "cpu freq off\n");
-#endif
 			}
 #endif
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)

@@ -107,15 +107,11 @@ static bool test_flags(unsigned long flags0, unsigned long flags1,
 
 int line6_pcm_acquire(struct snd_line6_pcm *line6pcm, int channels)
 {
-	unsigned long flags_old, flags_new, flags_final;
-	int err;
-
-	do {
-		flags_old = ACCESS_ONCE(line6pcm->flags);
-		flags_new = flags_old | channels;
-	} while (cmpxchg(&line6pcm->flags, flags_old, flags_new) != flags_old);
-
-	flags_final = flags_old;
+	unsigned long flags_old =
+	    __sync_fetch_and_or(&line6pcm->flags, channels);
+	unsigned long flags_new = flags_old | channels;
+	unsigned long flags_final = flags_old;
+	int err = 0;
 
 	line6pcm->prev_fbuf = NULL;
 
@@ -201,12 +197,9 @@ pcm_acquire_error:
 
 int line6_pcm_release(struct snd_line6_pcm *line6pcm, int channels)
 {
-	unsigned long flags_old, flags_new;
-
-	do {
-		flags_old = ACCESS_ONCE(line6pcm->flags);
-		flags_new = flags_old & ~channels;
-	} while (cmpxchg(&line6pcm->flags, flags_old, flags_new) != flags_old);
+	unsigned long flags_old =
+	    __sync_fetch_and_and(&line6pcm->flags, ~channels);
+	unsigned long flags_new = flags_old & ~channels;
 
 	if (test_flags(flags_new, flags_old, LINE6_BITS_CAPTURE_STREAM))
 		line6_unlink_audio_in_urbs(line6pcm);

@@ -79,7 +79,7 @@ static void seed_unwind_frame_info(struct task_struct *tsk,
 		 * assembly code
 		 */
 		frame_info->regs.r27 = 0;
-		frame_info->regs.r28 += 60;
+		frame_info->regs.r28 += 64;
 		frame_info->call_frame = 0;
 
 	} else {
@@ -131,7 +131,7 @@ arc_unwind_core(struct task_struct *tsk, struct pt_regs *regs,
 	 * prelogue is setup (callee regs saved and then fp set and not other
 	 * way around
 	 */
-	pr_warn_once("CONFIG_ARC_DW2_UNWIND needs to be enabled\n");
+	pr_warn("CONFIG_ARC_DW2_UNWIND needs to be enabled\n");
 	return 0;
 
 #endif

@@ -122,8 +122,8 @@ struct jbd2_revoke_table_s
 
 #ifdef __KERNEL__
 static void write_one_revoke_record(journal_t *, transaction_t *,
-				    struct list_head *,
-				    struct buffer_head **, int *,
+					struct list_head *,
+					struct buffer_head **, int *,
 				    struct jbd2_revoke_record_s *, int);
 static void flush_descriptor(journal_t *, struct buffer_head *, int, int);
 #endif
@@ -533,7 +533,7 @@ void jbd2_journal_switch_revoke_table(journal_t *journal)
 void jbd2_journal_write_revoke_records(journal_t *journal,
 				       transaction_t *transaction,
 				       struct list_head *log_bufs,
-				       int write_op)
+					   int write_op)
 {
 	struct buffer_head *descriptor;
 	struct jbd2_revoke_record_s *record;
@@ -575,9 +575,9 @@ void jbd2_journal_write_revoke_records(journal_t *journal,
 
 static void write_one_revoke_record(journal_t *journal,
 				    transaction_t *transaction,
-				    struct list_head *log_bufs,
-				    struct buffer_head **descriptorp,
-				    int *offsetp,
+					struct list_head *log_bufs,
+					struct buffer_head **descriptorp,
+					int *offsetp,
 				    struct jbd2_revoke_record_s *record,
 				    int write_op)
 {

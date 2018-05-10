@@ -2641,6 +2641,7 @@ LOCAL struct video_device sprd_v4l2_template = {
 	.minor                   = -1,
 	.release                 = video_device_release,
 	.tvnorms                 = V4L2_STD_525_60,
+	.current_norm            = V4L2_STD_NTSC_M,
 };
 LOCAL int release(void)
 {

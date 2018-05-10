@@ -438,7 +438,7 @@ static int mpc52xx_spi_probe(struct platform_device *op)
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST;
 	master->dev.of_node = op->dev.of_node;
 
-	platform_set_drvdata(op, master);
+	dev_set_drvdata(&op->dev, master);
 
 	ms = spi_master_get_devdata(master);
 	ms->master = master;
@@ -529,7 +529,7 @@ static int mpc52xx_spi_probe(struct platform_device *op)
 
 static int mpc52xx_spi_remove(struct platform_device *op)
 {
-	struct spi_master *master = spi_master_get(platform_get_drvdata(op));
+	struct spi_master *master = spi_master_get(dev_get_drvdata(&op->dev));
 	struct mpc52xx_spi *ms = spi_master_get_devdata(master);
 	int i;
 

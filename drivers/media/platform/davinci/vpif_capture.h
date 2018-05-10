@@ -22,8 +22,11 @@
 #ifdef __KERNEL__
 
 /* Header files */
-#include <media/videobuf2-dma-contig.h>
+#include <linux/videodev2.h>
+#include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
+#include <media/videobuf2-dma-contig.h>
+#include <media/davinci/vpif_types.h>
 
 #include "vpif.h"
 

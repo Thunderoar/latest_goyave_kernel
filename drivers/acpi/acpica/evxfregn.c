@@ -139,7 +139,6 @@ acpi_install_address_space_handler(acpi_handle device,
 		break;
 
 	default:
-
 		break;
 	}
 

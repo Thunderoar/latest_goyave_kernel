@@ -330,7 +330,6 @@ static int process_pool_aeb(struct ubi_device *ubi, struct ubi_attach_info *ai,
 		av = tmp_av;
 	else {
 		ubi_err("orphaned volume in fastmap pool!");
-		kmem_cache_free(ai->aeb_slab_cache, new_aeb);
 		return UBI_BAD_FASTMAP;
 	}
 
@@ -438,11 +437,10 @@ static int scan_pool(struct ubi_device *ubi, struct ubi_attach_info *ai,
 			unsigned long long ec = be64_to_cpu(ech->ec);
 			unmap_peb(ai, pnum);
 			dbg_bld("Adding PEB to free: %i", pnum);
-
 			if (err == UBI_IO_FF_BITFLIPS)
-				scrub = 1;
-
-			add_aeb(ai, free, pnum, ec, scrub);
+				add_aeb(ai, free, pnum, ec, 1);
+			else
+				add_aeb(ai, free, pnum, ec, 0);
 			continue;
 		} else if (err == 0 || err == UBI_IO_BITFLIPS) {
 			dbg_bld("Found non empty PEB:%i in pool", pnum);
@@ -729,10 +727,8 @@ static int ubi_attach_fastmap(struct ubi_device *ubi,
 
 			aeb = NULL;
 			list_for_each_entry(tmp_aeb, &used, u.list) {
-				if (tmp_aeb->pnum == pnum) {
+				if (tmp_aeb->pnum == pnum)
 					aeb = tmp_aeb;
-					break;
-				}
 			}
 
 			/* This can happen if a PEB is already in an EBA known

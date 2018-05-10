@@ -514,8 +514,7 @@ struct uvc_device {
 	char name[32];
 
 	enum uvc_device_state state;
-	struct mutex lock;		/* Protects users */
-	unsigned int users;
+	atomic_t users;
 	atomic_t nmappings;
 
 	/* Video control interface */
@@ -661,8 +660,10 @@ void uvc_video_clock_update(struct uvc_streaming *stream,
 /* Status */
 extern int uvc_status_init(struct uvc_device *dev);
 extern void uvc_status_cleanup(struct uvc_device *dev);
-extern int uvc_status_start(struct uvc_device *dev, gfp_t flags);
+extern int uvc_status_start(struct uvc_device *dev);
 extern void uvc_status_stop(struct uvc_device *dev);
+extern int uvc_status_suspend(struct uvc_device *dev);
+extern int uvc_status_resume(struct uvc_device *dev);
 
 /* Controls */
 extern const struct v4l2_subscribed_event_ops uvc_ctrl_sub_ev_ops;

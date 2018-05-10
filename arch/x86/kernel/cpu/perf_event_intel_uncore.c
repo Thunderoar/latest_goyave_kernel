@@ -536,7 +536,7 @@ __snbep_cbox_get_constraint(struct intel_uncore_box *box, struct perf_event *eve
 	if (!uncore_box_is_fake(box))
 		reg1->alloc |= alloc;
 
-	return NULL;
+	return 0;
 fail:
 	for (; i >= 0; i--) {
 		if (alloc & (0x1 << i))
@@ -644,7 +644,7 @@ snbep_pcu_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 	    (!uncore_box_is_fake(box) && reg1->alloc))
 		return NULL;
 again:
-	mask = 0xffULL << (idx * 8);
+	mask = 0xff << (idx * 8);
 	raw_spin_lock_irqsave(&er->lock, flags);
 	if (!__BITS_VALUE(atomic_read(&er->ref), idx, 8) ||
 	    !((config1 ^ er->config) & mask)) {
@@ -1923,7 +1923,7 @@ static u64 nhmex_mbox_alter_er(struct perf_event *event, int new_idx, bool modif
 {
 	struct hw_perf_event *hwc = &event->hw;
 	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
-	u64 idx, orig_idx = __BITS_VALUE(reg1->idx, 0, 8);
+	int idx, orig_idx = __BITS_VALUE(reg1->idx, 0, 8);
 	u64 config = reg1->config;
 
 	/* get the non-shared control bits and shift them */
@@ -2657,17 +2657,6 @@ static struct intel_uncore_box *uncore_event_to_box(struct perf_event *event)
 	return uncore_pmu_to_box(uncore_event_to_pmu(event), smp_processor_id());
 }
 
-/*
- * Using uncore_pmu_event_init pmu event_init callback
- * as a detection point for uncore events.
- */
-static int uncore_pmu_event_init(struct perf_event *event);
-
-static bool is_uncore_event(struct perf_event *event)
-{
-	return event->pmu->event_init == uncore_pmu_event_init;
-}
-
 static int
 uncore_collect_events(struct intel_uncore_box *box, struct perf_event *leader, bool dogrp)
 {
@@ -2682,18 +2671,13 @@ uncore_collect_events(struct intel_uncore_box *box, struct perf_event *leader, b
 		return -EINVAL;
 
 	n = box->n_events;
-
-	if (is_uncore_event(leader)) {
-		box->event_list[n] = leader;
-		n++;
-	}
-
+	box->event_list[n] = leader;
+	n++;
 	if (!dogrp)
 		return n;
 
 	list_for_each_entry(event, &leader->sibling_list, group_entry) {
-		if (!is_uncore_event(event) ||
-		    event->state <= PERF_EVENT_STATE_OFF)
+		if (event->state <= PERF_EVENT_STATE_OFF)
 			continue;
 
 		if (n >= max_count)
@@ -2739,16 +2723,15 @@ static void uncore_put_event_constraint(struct intel_uncore_box *box, struct per
 static int uncore_assign_events(struct intel_uncore_box *box, int assign[], int n)
 {
 	unsigned long used_mask[BITS_TO_LONGS(UNCORE_PMC_IDX_MAX)];
-	struct event_constraint *c;
+	struct event_constraint *c, *constraints[UNCORE_PMC_IDX_MAX];
 	int i, wmin, wmax, ret = 0;
 	struct hw_perf_event *hwc;
 
 	bitmap_zero(used_mask, UNCORE_PMC_IDX_MAX);
 
 	for (i = 0, wmin = UNCORE_PMC_IDX_MAX, wmax = 0; i < n; i++) {
-		hwc = &box->event_list[i]->hw;
 		c = uncore_get_event_constraint(box, box->event_list[i]);
-		hwc->constraint = c;
+		constraints[i] = c;
 		wmin = min(wmin, c->weight);
 		wmax = max(wmax, c->weight);
 	}
@@ -2756,7 +2739,7 @@ static int uncore_assign_events(struct intel_uncore_box *box, int assign[], int 
 	/* fastpath, try to reuse previous register */
 	for (i = 0; i < n; i++) {
 		hwc = &box->event_list[i]->hw;
-		c = hwc->constraint;
+		c = constraints[i];
 
 		/* never assigned */
 		if (hwc->idx == -1)
@@ -2776,8 +2759,7 @@ static int uncore_assign_events(struct intel_uncore_box *box, int assign[], int 
 	}
 	/* slow path */
 	if (i != n)
-		ret = perf_assign_events(box->event_list, n,
-					 wmin, wmax, assign);
+		ret = perf_assign_events(constraints, n, wmin, wmax, assign);
 
 	if (!assign || ret) {
 		for (i = 0; i < n; i++)

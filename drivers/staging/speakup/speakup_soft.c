@@ -179,45 +179,45 @@ static int softsynth_open(struct inode *inode, struct file *fp)
 	unsigned long flags;
 	/*if ((fp->f_flags & O_ACCMODE) != O_RDONLY) */
 	/*	return -EPERM; */
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	if (synth_soft.alive) {
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		return -EBUSY;
 	}
 	synth_soft.alive = 1;
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return 0;
 }
 
 static int softsynth_close(struct inode *inode, struct file *fp)
 {
 	unsigned long flags;
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	synth_soft.alive = 0;
 	init_pos = 0;
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	/* Make sure we let applications go before leaving */
 	speakup_start_ttys();
 	return 0;
 }
 
-static ssize_t softsynth_read(struct file *fp, char __user *buf, size_t count,
+static ssize_t softsynth_read(struct file *fp, char *buf, size_t count,
 			      loff_t *pos)
 {
 	int chars_sent = 0;
-	char __user *cp;
+	char *cp;
 	char *init;
 	char ch;
 	int empty;
 	unsigned long flags;
 	DEFINE_WAIT(wait);
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	while (1) {
 		prepare_to_wait(&speakup_event, &wait, TASK_INTERRUPTIBLE);
 		if (!synth_buffer_empty() || speakup_info.flushing)
 			break;
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		if (fp->f_flags & O_NONBLOCK) {
 			finish_wait(&speakup_event, &wait);
 			return -EAGAIN;
@@ -227,7 +227,7 @@ static ssize_t softsynth_read(struct file *fp, char __user *buf, size_t count,
 			return -ERESTARTSYS;
 		}
 		schedule();
-		spin_lock_irqsave(&speakup_info.spinlock, flags);
+		spk_lock(flags);
 	}
 	finish_wait(&speakup_event, &wait);
 
@@ -244,16 +244,16 @@ static ssize_t softsynth_read(struct file *fp, char __user *buf, size_t count,
 		} else {
 			ch = synth_buffer_getc();
 		}
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		if (copy_to_user(cp, &ch, 1))
 			return -EFAULT;
-		spin_lock_irqsave(&speakup_info.spinlock, flags);
+		spk_lock(flags);
 		chars_sent++;
 		cp++;
 	}
 	*pos += chars_sent;
 	empty = synth_buffer_empty();
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	if (empty) {
 		speakup_start_ttys();
 		*pos = 0;
@@ -263,8 +263,8 @@ static ssize_t softsynth_read(struct file *fp, char __user *buf, size_t count,
 
 static int last_index;
 
-static ssize_t softsynth_write(struct file *fp, const char __user *buf,
-			       size_t count, loff_t *pos)
+static ssize_t softsynth_write(struct file *fp, const char *buf, size_t count,
+			       loff_t *pos)
 {
 	unsigned long supplied_index = 0;
 	int converted;
@@ -285,10 +285,10 @@ static unsigned int softsynth_poll(struct file *fp,
 	int ret = 0;
 	poll_wait(fp, &speakup_event, wait);
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	if (!synth_buffer_empty() || speakup_info.flushing)
 		ret = POLLIN | POLLRDNORM;
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return ret;
 }
 

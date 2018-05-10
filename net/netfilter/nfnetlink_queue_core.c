@@ -41,14 +41,6 @@
 
 #define NFQNL_QMAX_DEFAULT 1024
 
-/* We're using struct nlattr which has 16bit nla_len. Note that nla_len
- * includes the header length. Thus, the maximum packet length that we
- * support is 65531 bytes. We send truncated packets if the specified length
- * is larger than that.  Userspace can check for presence of NFQA_CAP_LEN
- * attribute to detect truncation.
- */
-#define NFQNL_MAX_COPY_RANGE (0xffff - NLA_HDRLEN)
-
 struct nfqnl_instance {
 	struct hlist_node hlist;		/* global list of queues */
 	struct rcu_head rcu;
@@ -130,7 +122,7 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num,
 	inst->queue_num = queue_num;
 	inst->peer_portid = portid;
 	inst->queue_maxlen = NFQNL_QMAX_DEFAULT;
-	inst->copy_range = NFQNL_MAX_COPY_RANGE;
+	inst->copy_range = 0xffff;
 	inst->copy_mode = NFQNL_COPY_NONE;
 	spin_lock_init(&inst->lock);
 	INIT_LIST_HEAD(&inst->queue_list);
@@ -235,23 +227,22 @@ nfqnl_flush(struct nfqnl_instance *queue, nfqnl_cmpfn cmpfn, unsigned long data)
 	spin_unlock_bh(&queue->lock);
 }
 
-static int
-nfqnl_zcopy(struct sk_buff *to, struct sk_buff *from, int len, int hlen)
+static void
+nfqnl_zcopy(struct sk_buff *to, const struct sk_buff *from, int len, int hlen)
 {
 	int i, j = 0;
 	int plen = 0; /* length of skb->head fragment */
-	int ret;
 	struct page *page;
 	unsigned int offset;
 
 	/* dont bother with small payloads */
-	if (len <= skb_tailroom(to))
-		return skb_copy_bits(from, 0, skb_put(to, len), len);
+	if (len <= skb_tailroom(to)) {
+		skb_copy_bits(from, 0, skb_put(to, len), len);
+		return;
+	}
 
 	if (hlen) {
-		ret = skb_copy_bits(from, 0, skb_put(to, hlen), hlen);
-		if (unlikely(ret))
-			return ret;
+		skb_copy_bits(from, 0, skb_put(to, hlen), hlen);
 		len -= hlen;
 	} else {
 		plen = min_t(int, skb_headlen(from), len);
@@ -269,11 +260,6 @@ nfqnl_zcopy(struct sk_buff *to, struct sk_buff *from, int len, int hlen)
 	to->len += len + plen;
 	to->data_len += len + plen;
 
-	if (unlikely(skb_orphan_frags(from, GFP_ATOMIC))) {
-		skb_tx_error(from);
-		return -ENOMEM;
-	}
-
 	for (i = 0; i < skb_shinfo(from)->nr_frags; i++) {
 		if (!len)
 			break;
@@ -284,8 +270,6 @@ nfqnl_zcopy(struct sk_buff *to, struct sk_buff *from, int len, int hlen)
 		j++;
 	}
 	skb_shinfo(to)->nr_frags = j;
-
-	return 0;
 }
 
 static int nfqnl_put_packet_info(struct sk_buff *nlskb, struct sk_buff *packet)
@@ -349,8 +333,9 @@ nfqnl_build_packet_message(struct nfqnl_instance *queue,
 			return NULL;
 
 		data_len = ACCESS_ONCE(queue->copy_range);
-		if (data_len > entskb->len)
+		if (data_len == 0 || data_len > entskb->len)
 			data_len = entskb->len;
+
 
 		if (!entskb->head_frag ||
 		    skb_headlen(entskb) < L1_CACHE_BYTES ||
@@ -370,16 +355,13 @@ nfqnl_build_packet_message(struct nfqnl_instance *queue,
 
 	skb = nfnetlink_alloc_skb(&init_net, size, queue->peer_portid,
 				  GFP_ATOMIC);
-	if (!skb) {
-		skb_tx_error(entskb);
+	if (!skb)
 		return NULL;
-	}
 
 	nlh = nlmsg_put(skb, 0, 0,
 			NFNL_SUBSYS_QUEUE << 8 | NFQNL_MSG_PACKET,
 			sizeof(struct nfgenmsg), 0);
 	if (!nlh) {
-		skb_tx_error(entskb);
 		kfree_skb(skb);
 		return NULL;
 	}
@@ -483,8 +465,7 @@ nfqnl_build_packet_message(struct nfqnl_instance *queue,
 	if (ct && nfqnl_ct_put(skb, ct, ctinfo) < 0)
 		goto nla_put_failure;
 
-	if (cap_len > data_len &&
-	    nla_put_be32(skb, NFQA_CAP_LEN, htonl(cap_len)))
+	if (cap_len > 0 && nla_put_be32(skb, NFQA_CAP_LEN, htonl(cap_len)))
 		goto nla_put_failure;
 
 	if (nfqnl_put_packet_info(skb, entskb))
@@ -500,15 +481,13 @@ nfqnl_build_packet_message(struct nfqnl_instance *queue,
 		nla->nla_type = NFQA_PAYLOAD;
 		nla->nla_len = nla_attr_size(data_len);
 
-		if (nfqnl_zcopy(skb, entskb, data_len, hlen))
-			goto nla_put_failure;
+		nfqnl_zcopy(skb, entskb, data_len, hlen);
 	}
 
 	nlh->nlmsg_len = skb->len;
 	return skb;
 
 nla_put_failure:
-	skb_tx_error(entskb);
 	kfree_skb(skb);
 	net_err_ratelimited("nf_queue: error creating packet message\n");
 	return NULL;
@@ -530,6 +509,10 @@ __nfqnl_enqueue_packet(struct net *net, struct nfqnl_instance *queue,
 	}
 	spin_lock_bh(&queue->lock);
 
+	if (!queue->peer_portid) {
+		err = -EINVAL;
+		goto err_out_free_nskb;
+	}
 	if (queue->queue_total >= queue->queue_maxlen) {
 		if (queue->flags & NFQA_CFG_F_FAIL_OPEN) {
 			failopen = 1;
@@ -748,8 +731,13 @@ nfqnl_set_mode(struct nfqnl_instance *queue,
 
 	case NFQNL_COPY_PACKET:
 		queue->copy_mode = mode;
-		if (range == 0 || range > NFQNL_MAX_COPY_RANGE)
-			queue->copy_range = NFQNL_MAX_COPY_RANGE;
+		/* We're using struct nlattr which has 16bit nla_len. Note that
+		 * nla_len includes the header length. Thus, the maximum packet
+		 * length that we support is 65531 bytes. We send truncated
+		 * packets if the specified length is larger than that.
+		 */
+		if (range > 0xffff - NLA_HDRLEN)
+			queue->copy_range = 0xffff - NLA_HDRLEN;
 		else
 			queue->copy_range = range;
 		break;

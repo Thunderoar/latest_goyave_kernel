@@ -9,8 +9,6 @@
 #include "bset.h"
 #include "debug.h"
 
-#include <linux/blkdev.h>
-
 static void bch_bi_idx_hack_endio(struct bio *bio, int error)
 {
 	struct bio *p = bio->bi_private;

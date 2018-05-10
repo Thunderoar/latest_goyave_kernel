@@ -1384,22 +1384,6 @@ out:
 	return ret;
 }
 
-/*
- * Function to update ctime/mtime for a given device path.
- * Mainly used for ctime/mtime based probe like libblkid.
- */
-static void update_dev_time(char *path_name)
-{
-	struct file *filp;
-
-	filp = filp_open(path_name, O_RDWR, 0);
-	if (!filp)
-		return;
-	file_update_time(filp);
-	filp_close(filp, NULL);
-	return;
-}
-
 static int btrfs_rm_dev_item(struct btrfs_root *root,
 			     struct btrfs_device *device)
 {
@@ -1478,23 +1462,31 @@ int btrfs_rm_device(struct btrfs_root *root, char *device_path)
 	btrfs_dev_replace_unlock(&root->fs_info->dev_replace);
 
 	if ((all_avail & BTRFS_BLOCK_GROUP_RAID10) && num_devices <= 4) {
-		ret = BTRFS_ERROR_DEV_RAID10_MIN_NOT_MET;
+		printk(KERN_ERR "btrfs: unable to go below four devices "
+		       "on raid10\n");
+		ret = -EINVAL;
 		goto out;
 	}
 
 	if ((all_avail & BTRFS_BLOCK_GROUP_RAID1) && num_devices <= 2) {
-		ret = BTRFS_ERROR_DEV_RAID1_MIN_NOT_MET;
+		printk(KERN_ERR "btrfs: unable to go below two "
+		       "devices on raid1\n");
+		ret = -EINVAL;
 		goto out;
 	}
 
 	if ((all_avail & BTRFS_BLOCK_GROUP_RAID5) &&
 	    root->fs_info->fs_devices->rw_devices <= 2) {
-		ret = BTRFS_ERROR_DEV_RAID5_MIN_NOT_MET;
+		printk(KERN_ERR "btrfs: unable to go below two "
+		       "devices on raid5\n");
+		ret = -EINVAL;
 		goto out;
 	}
 	if ((all_avail & BTRFS_BLOCK_GROUP_RAID6) &&
 	    root->fs_info->fs_devices->rw_devices <= 3) {
-		ret = BTRFS_ERROR_DEV_RAID6_MIN_NOT_MET;
+		printk(KERN_ERR "btrfs: unable to go below three "
+		       "devices on raid6\n");
+		ret = -EINVAL;
 		goto out;
 	}
 
@@ -1520,7 +1512,8 @@ int btrfs_rm_device(struct btrfs_root *root, char *device_path)
 		bh = NULL;
 		disk_super = NULL;
 		if (!device) {
-			ret = BTRFS_ERROR_DEV_MISSING_NOT_FOUND;
+			printk(KERN_ERR "btrfs: no missing devices found to "
+			       "remove\n");
 			goto out;
 		}
 	} else {
@@ -1542,12 +1535,15 @@ int btrfs_rm_device(struct btrfs_root *root, char *device_path)
 	}
 
 	if (device->is_tgtdev_for_dev_replace) {
-		ret = BTRFS_ERROR_DEV_TGT_REPLACE;
+		pr_err("btrfs: unable to remove the dev_replace target dev\n");
+		ret = -EINVAL;
 		goto error_brelse;
 	}
 
 	if (device->writeable && root->fs_info->fs_devices->rw_devices == 1) {
-		ret = BTRFS_ERROR_DEV_ONLY_WRITABLE;
+		printk(KERN_ERR "btrfs: unable to remove the only writeable "
+		       "device\n");
+		ret = -EINVAL;
 		goto error_brelse;
 	}
 
@@ -1616,12 +1612,11 @@ int btrfs_rm_device(struct btrfs_root *root, char *device_path)
 		struct btrfs_fs_devices *fs_devices;
 		fs_devices = root->fs_info->fs_devices;
 		while (fs_devices) {
-			if (fs_devices->seed == cur_devices) {
-				fs_devices->seed = cur_devices->seed;
+			if (fs_devices->seed == cur_devices)
 				break;
-			}
 			fs_devices = fs_devices->seed;
 		}
+		fs_devices->seed = cur_devices->seed;
 		cur_devices->seed = NULL;
 		lock_chunks(root);
 		__btrfs_close_devices(cur_devices);
@@ -1647,13 +1642,9 @@ int btrfs_rm_device(struct btrfs_root *root, char *device_path)
 
 	ret = 0;
 
-	if (bdev) {
-		/* Notify udev that device has changed */
+	/* Notify udev that device has changed */
+	if (bdev)
 		btrfs_kobject_uevent(bdev, KOBJ_CHANGE);
-
-		/* Update ctime/mtime for device path for libblkid */
-		update_dev_time(device_path);
-	}
 
 error_brelse:
 	brelse(bh);
@@ -1826,6 +1817,7 @@ static int btrfs_prepare_sprout(struct btrfs_root *root)
 	fs_devices->seeding = 0;
 	fs_devices->num_devices = 0;
 	fs_devices->open_devices = 0;
+	fs_devices->total_devices = 0;
 	fs_devices->seed = seed_devices;
 
 	generate_random_uuid(fs_devices->fsid);
@@ -2097,8 +2089,6 @@ int btrfs_init_new_device(struct btrfs_root *root, char *device_path)
 		ret = btrfs_commit_transaction(trans, root);
 	}
 
-	/* Update ctime/mtime for libblkid */
-	update_dev_time(device_path);
 	return ret;
 
 error_trans:
@@ -3305,7 +3295,10 @@ int btrfs_resume_balance_async(struct btrfs_fs_info *fs_info)
 	}
 
 	tsk = kthread_run(balance_kthread, fs_info, "btrfs-balance");
-	return PTR_RET(tsk);
+	if (IS_ERR(tsk))
+		return PTR_ERR(tsk);
+
+	return 0;
 }
 
 int btrfs_recover_balance(struct btrfs_fs_info *fs_info)
@@ -4255,7 +4248,6 @@ int btrfs_num_copies(struct btrfs_fs_info *fs_info, u64 logical, u64 len)
 		btrfs_emerg(fs_info, "Invalid mapping for %Lu-%Lu, got "
 			    "%Lu-%Lu\n", logical, logical+len, em->start,
 			    em->start + em->len);
-		free_extent_map(em);
 		return 1;
 	}
 
@@ -4437,7 +4429,6 @@ static int __btrfs_map_block(struct btrfs_fs_info *fs_info, int rw,
 		btrfs_crit(fs_info, "found a bad mapping, wanted %Lu, "
 			   "found %Lu-%Lu\n", logical, em->start,
 			   em->start + em->len);
-		free_extent_map(em);
 		return -EINVAL;
 	}
 
@@ -5376,6 +5367,7 @@ static struct btrfs_device *add_missing_dev(struct btrfs_root *root,
 		return NULL;
 	list_add(&device->dev_list,
 		 &fs_devices->devices);
+	device->dev_root = root->fs_info->dev_root;
 	device->devid = devid;
 	device->work.func = pending_bios_fn;
 	device->fs_devices = fs_devices;
@@ -5601,6 +5593,7 @@ static int read_one_dev(struct btrfs_root *root,
 	}
 
 	fill_device_from_item(leaf, dev_item, device);
+	device->dev_root = root->fs_info->dev_root;
 	device->in_fs_metadata = 1;
 	if (device->writeable && !device->is_tgtdev_for_dev_replace) {
 		device->fs_devices->total_rw_bytes += device->total_bytes;
@@ -5756,17 +5749,6 @@ error:
 
 	btrfs_free_path(path);
 	return ret;
-}
-
-void btrfs_init_devices_late(struct btrfs_fs_info *fs_info)
-{
-	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
-	struct btrfs_device *device;
-
-	mutex_lock(&fs_devices->device_list_mutex);
-	list_for_each_entry(device, &fs_devices->devices, dev_list)
-		device->dev_root = fs_info->dev_root;
-	mutex_unlock(&fs_devices->device_list_mutex);
 }
 
 static void __btrfs_reset_dev_stats(struct btrfs_device *dev)

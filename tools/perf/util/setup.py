@@ -18,9 +18,8 @@ class install_lib(_install_lib):
         self.build_dir = build_lib
 
 
-cflags = getenv('CFLAGS', '').split()
-# switch off several checks (need to be at the end of cflags list)
-cflags += ['-fno-strict-aliasing', '-Wno-write-strings', '-Wno-unused-parameter' ]
+cflags = ['-fno-strict-aliasing', '-Wno-write-strings']
+cflags += getenv('CFLAGS', '').split()
 
 build_lib = getenv('PYTHON_EXTBUILD_LIB')
 build_tmp = getenv('PYTHON_EXTBUILD_TMP')

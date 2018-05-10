@@ -79,20 +79,12 @@ static int verify_group_input(struct super_block *sb,
 	ext4_fsblk_t end = start + input->blocks_count;
 	ext4_group_t group = input->group;
 	ext4_fsblk_t itend = input->inode_table + sbi->s_itb_per_group;
-	unsigned overhead;
-	ext4_fsblk_t metaend;
+	unsigned overhead = ext4_group_overhead_blocks(sb, group);
+	ext4_fsblk_t metaend = start + overhead;
 	struct buffer_head *bh = NULL;
 	ext4_grpblk_t free_blocks_count, offset;
 	int err = -EINVAL;
 
-	if (group != sbi->s_groups_count) {
-		ext4_warning(sb, "Cannot add at group %u (only %u groups)",
-			     input->group, sbi->s_groups_count);
-		return -EINVAL;
-	}
-
-	overhead = ext4_group_overhead_blocks(sb, group);
-	metaend = start + overhead;
 	input->free_blocks_count = free_blocks_count =
 		input->blocks_count - 2 - overhead - sbi->s_itb_per_group;
 
@@ -104,7 +96,10 @@ static int verify_group_input(struct super_block *sb,
 		       free_blocks_count, input->reserved_blocks);
 
 	ext4_get_group_no_and_offset(sb, start, NULL, &offset);
-	if (offset != 0)
+	if (group != sbi->s_groups_count)
+		ext4_warning(sb, "Cannot add at group %u (only %u groups)",
+			     input->group, sbi->s_groups_count);
+	else if (offset != 0)
 			ext4_warning(sb, "Last group not full");
 	else if (input->reserved_blocks > input->blocks_count / 5)
 		ext4_warning(sb, "Reserved blocks too high (%u)",
@@ -186,7 +181,7 @@ static struct ext4_new_flex_group_data *alloc_flex_gd(unsigned long flexbg_size)
 	if (flex_gd == NULL)
 		goto out3;
 
-	if (flexbg_size >= UINT_MAX / sizeof(struct ext4_new_group_data))
+	if (flexbg_size >= UINT_MAX / sizeof(struct ext4_new_flex_group_data))
 		goto out2;
 	flex_gd->count = flexbg_size;
 
@@ -243,7 +238,6 @@ static int ext4_alloc_group_tables(struct super_block *sb,
 	ext4_group_t group;
 	ext4_group_t last_group;
 	unsigned overhead;
-	__u16 uninit_mask = (flexbg_size > 1) ? ~EXT4_BG_BLOCK_UNINIT : ~0;
 
 	BUG_ON(flex_gd->count == 0 || group_data == NULL);
 
@@ -267,7 +261,7 @@ next_group:
 	src_group++;
 	for (; src_group <= last_group; src_group++) {
 		overhead = ext4_group_overhead_blocks(sb, src_group);
-		if (overhead == 0)
+		if (overhead != 0)
 			last_blk += group_data[src_group - group].blocks_count;
 		else
 			break;
@@ -281,7 +275,8 @@ next_group:
 		group = ext4_get_group_number(sb, start_blk - 1);
 		group -= group_data[0].group;
 		group_data[group].free_blocks_count--;
-		flex_gd->bg_flags[group] &= uninit_mask;
+		if (flexbg_size > 1)
+			flex_gd->bg_flags[group] &= ~EXT4_BG_BLOCK_UNINIT;
 	}
 
 	/* Allocate inode bitmaps */
@@ -292,30 +287,22 @@ next_group:
 		group = ext4_get_group_number(sb, start_blk - 1);
 		group -= group_data[0].group;
 		group_data[group].free_blocks_count--;
-		flex_gd->bg_flags[group] &= uninit_mask;
+		if (flexbg_size > 1)
+			flex_gd->bg_flags[group] &= ~EXT4_BG_BLOCK_UNINIT;
 	}
 
 	/* Allocate inode tables */
 	for (; it_index < flex_gd->count; it_index++) {
-		unsigned int itb = EXT4_SB(sb)->s_itb_per_group;
-		ext4_fsblk_t next_group_start;
-
-		if (start_blk + itb > last_blk)
+		if (start_blk + EXT4_SB(sb)->s_itb_per_group > last_blk)
 			goto next_group;
 		group_data[it_index].inode_table = start_blk;
-		group = ext4_get_group_number(sb, start_blk);
-		next_group_start = ext4_group_first_block_no(sb, group + 1);
+		group = ext4_get_group_number(sb, start_blk - 1);
 		group -= group_data[0].group;
+		group_data[group].free_blocks_count -=
+					EXT4_SB(sb)->s_itb_per_group;
+		if (flexbg_size > 1)
+			flex_gd->bg_flags[group] &= ~EXT4_BG_BLOCK_UNINIT;
 
-		if (start_blk + itb > next_group_start) {
-			flex_gd->bg_flags[group + 1] &= uninit_mask;
-			overhead = start_blk + itb - next_group_start;
-			group_data[group + 1].free_blocks_count -= overhead;
-			itb -= overhead;
-		}
-
-		group_data[group].free_blocks_count -= itb;
-		flex_gd->bg_flags[group] &= uninit_mask;
 		start_blk += EXT4_SB(sb)->s_itb_per_group;
 	}
 
@@ -409,7 +396,7 @@ static int set_flexbg_block_bitmap(struct super_block *sb, handle_t *handle,
 		start = ext4_group_first_block_no(sb, group);
 		group -= flex_gd->groups[0].group;
 
-		count2 = EXT4_BLOCKS_PER_GROUP(sb) - (block - start);
+		count2 = sb->s_blocksize * 8 - (block - start);
 		if (count2 > count)
 			count2 = count;
 
@@ -628,7 +615,7 @@ handle_ib:
 			if (err)
 				goto out;
 			count = group_table_count[j];
-			start = (&group_data[i].block_bitmap)[j];
+			start = group_data[i].block_bitmap;
 			block = start;
 		}
 
@@ -1030,7 +1017,7 @@ exit_free:
  * do not copy the full number of backups at this time.  The resize
  * which changed s_groups_count will backup again.
  */
-static void update_backups(struct super_block *sb, sector_t blk_off, char *data,
+static void update_backups(struct super_block *sb, int blk_off, char *data,
 			   int size, int meta_bg)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
@@ -1055,7 +1042,7 @@ static void update_backups(struct super_block *sb, sector_t blk_off, char *data,
 		group = ext4_list_backups(sb, &three, &five, &seven);
 		last = sbi->s_groups_count;
 	} else {
-		group = ext4_get_group_number(sb, blk_off) + 1;
+		group = ext4_meta_bg_first_group(sb, group) + 1;
 		last = (ext4_group_t)(group + EXT4_DESC_PER_BLOCK(sb) - 2);
 	}
 
@@ -1071,7 +1058,7 @@ static void update_backups(struct super_block *sb, sector_t blk_off, char *data,
 			break;
 
 		if (meta_bg == 0)
-			backup_block = ((ext4_fsblk_t)group) * bpg + blk_off;
+			backup_block = group * bpg + blk_off;
 		else
 			backup_block = (ext4_group_first_block_no(sb, group) +
 					ext4_bg_has_super(sb, group));
@@ -1564,10 +1551,11 @@ int ext4_group_add(struct super_block *sb, struct ext4_new_group_data *input)
 	int reserved_gdb = ext4_bg_has_super(sb, input->group) ?
 		le16_to_cpu(es->s_reserved_gdt_blocks) : 0;
 	struct inode *inode = NULL;
-	int gdb_off;
+	int gdb_off, gdb_num;
 	int err;
 	__u16 bg_flags = 0;
 
+	gdb_num = input->group / EXT4_DESC_PER_BLOCK(sb);
 	gdb_off = input->group % EXT4_DESC_PER_BLOCK(sb);
 
 	if (gdb_off == 0 && !EXT4_HAS_RO_COMPAT_FEATURE(sb,
@@ -1915,8 +1903,7 @@ retry:
 			n_desc_blocks = o_desc_blocks +
 				le16_to_cpu(es->s_reserved_gdt_blocks);
 			n_group = n_desc_blocks * EXT4_DESC_PER_BLOCK(sb);
-			n_blocks_count = (ext4_fsblk_t)n_group *
-				EXT4_BLOCKS_PER_GROUP(sb);
+			n_blocks_count = n_group * EXT4_BLOCKS_PER_GROUP(sb);
 			n_group--; /* set to last group number */
 		}
 

@@ -495,7 +495,7 @@ acpi_get_sleep_type_data(u8 sleep_state, u8 *sleep_type_a, u8 *sleep_type_b)
 	 * Evaluate the \_Sx namespace object containing the register values
 	 * for this state
 	 */
-	info->relative_pathname =
+	info->pathname =
 	    ACPI_CAST_PTR(char, acpi_gbl_sleep_state_names[sleep_state]);
 	status = acpi_ns_evaluate(info);
 	if (ACPI_FAILURE(status)) {
@@ -506,7 +506,7 @@ acpi_get_sleep_type_data(u8 sleep_state, u8 *sleep_type_a, u8 *sleep_type_b)
 
 	if (!info->return_object) {
 		ACPI_ERROR((AE_INFO, "No Sleep State object returned from [%s]",
-			    info->relative_pathname));
+			    info->pathname));
 		status = AE_AML_NO_RETURN_VALUE;
 		goto cleanup;
 	}
@@ -528,12 +528,10 @@ acpi_get_sleep_type_data(u8 sleep_state, u8 *sleep_type_a, u8 *sleep_type_b)
 	elements = info->return_object->package.elements;
 	switch (info->return_object->package.count) {
 	case 0:
-
 		status = AE_AML_PACKAGE_LIMIT;
 		break;
 
 	case 1:
-
 		if (elements[0]->common.type != ACPI_TYPE_INTEGER) {
 			status = AE_AML_OPERAND_TYPE;
 			break;
@@ -547,7 +545,6 @@ acpi_get_sleep_type_data(u8 sleep_state, u8 *sleep_type_a, u8 *sleep_type_b)
 
 	case 2:
 	default:
-
 		if ((elements[0]->common.type != ACPI_TYPE_INTEGER) ||
 		    (elements[1]->common.type != ACPI_TYPE_INTEGER)) {
 			status = AE_AML_OPERAND_TYPE;
@@ -568,7 +565,7 @@ acpi_get_sleep_type_data(u8 sleep_state, u8 *sleep_type_a, u8 *sleep_type_b)
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
 				"While evaluating Sleep State [%s]",
-				info->relative_pathname));
+				info->pathname));
 	}
 
 	ACPI_FREE(info);

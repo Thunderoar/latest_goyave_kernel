@@ -85,8 +85,13 @@ void core_tmr_release_req(
 static void core_tmr_handle_tas_abort(
 	struct se_node_acl *tmr_nacl,
 	struct se_cmd *cmd,
-	int tas)
+	int tas,
+	int fe_count)
 {
+	if (!fe_count) {
+		transport_cmd_finish_abort(cmd, 1);
+		return;
+	}
 	/*
 	 * TASK ABORTED status (TAS) bit support
 	*/
@@ -248,6 +253,7 @@ static void core_tmr_drain_state_list(
 	LIST_HEAD(drain_task_list);
 	struct se_cmd *cmd, *next;
 	unsigned long flags;
+	int fe_count;
 
 	/*
 	 * Complete outstanding commands with TASK_ABORTED SAM status.
@@ -323,10 +329,12 @@ static void core_tmr_drain_state_list(
 		spin_lock_irqsave(&cmd->t_state_lock, flags);
 		target_stop_cmd(cmd, &flags);
 
+		fe_count = atomic_read(&cmd->t_fe_count);
+
 		cmd->transport_state |= CMD_T_ABORTED;
 		spin_unlock_irqrestore(&cmd->t_state_lock, flags);
 
-		core_tmr_handle_tas_abort(tmr_nacl, cmd, tas);
+		core_tmr_handle_tas_abort(tmr_nacl, cmd, tas, fe_count);
 	}
 }
 

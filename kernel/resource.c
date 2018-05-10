@@ -409,7 +409,6 @@ int __weak page_is_ram(unsigned long pfn)
 {
 	return walk_system_ram_range(pfn, 1, NULL, __is_ram) == 1;
 }
-EXPORT_SYMBOL_GPL(page_is_ram);
 
 void __weak arch_remove_reservations(struct resource *avail)
 {
@@ -962,10 +961,9 @@ struct resource * __request_region(struct resource *parent,
 		if (!conflict)
 			break;
 		if (conflict != parent) {
-			if (!(conflict->flags & IORESOURCE_BUSY)) {
-				parent = conflict;
+			parent = conflict;
+			if (!(conflict->flags & IORESOURCE_BUSY))
 				continue;
-			}
 		}
 		if (conflict->flags & flags & IORESOURCE_MUXED) {
 			add_wait_queue(&muxed_resource_wait, &wait);

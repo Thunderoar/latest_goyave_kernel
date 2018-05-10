@@ -51,7 +51,6 @@ static const char *wm8962_supply_names[WM8962_NUM_SUPPLIES] = {
 
 /* codec private data */
 struct wm8962_priv {
-	struct wm8962_pdata pdata;
 	struct regmap *regmap;
 	struct snd_soc_codec *codec;
 
@@ -154,7 +153,6 @@ static struct reg_default wm8962_reg[] = {
 	{ 40, 0x0000 },   /* R40    - SPKOUTL volume */
 	{ 41, 0x0000 },   /* R41    - SPKOUTR volume */
 
-	{ 49, 0x0010 },   /* R49    - Class D Control 1 */
 	{ 51, 0x0003 },   /* R51    - Class D Control 2 */
 
 	{ 56, 0x0506 },   /* R56    - Clocking 4 */
@@ -364,8 +362,8 @@ static struct reg_default wm8962_reg[] = {
 	{ 16924, 0x0059 },   /* R16924 - HDBASS_PG_1 */
 	{ 16925, 0x999A },   /* R16925 - HDBASS_PG_0 */
 
-	{ 17408, 0x0083 },   /* R17408 - HPF_C_1 */
-	{ 17409, 0x98AD },   /* R17409 - HPF_C_0 */
+	{ 17048, 0x0083 },   /* R17408 - HPF_C_1 */
+	{ 17049, 0x98AD },   /* R17409 - HPF_C_0 */
 
 	{ 17920, 0x007F },   /* R17920 - ADCL_RETUNE_C1_1 */
 	{ 17921, 0xFFFF },   /* R17921 - ADCL_RETUNE_C1_0 */
@@ -796,6 +794,7 @@ static bool wm8962_volatile_register(struct device *dev, unsigned int reg)
 	case WM8962_ALC2:
 	case WM8962_THERMAL_SHUTDOWN_STATUS:
 	case WM8962_ADDITIONAL_CONTROL_4:
+	case WM8962_CLASS_D_CONTROL_1:
 	case WM8962_DC_SERVO_6:
 	case WM8962_INTERRUPT_STATUS_1:
 	case WM8962_INTERRUPT_STATUS_2:
@@ -2348,13 +2347,12 @@ static const struct snd_soc_dapm_route wm8962_spk_stereo_intercon[] = {
 
 static int wm8962_add_widgets(struct snd_soc_codec *codec)
 {
-	struct wm8962_priv *wm8962 = snd_soc_codec_get_drvdata(codec);
-	struct wm8962_pdata *pdata = &wm8962->pdata;
+	struct wm8962_pdata *pdata = dev_get_platdata(codec->dev);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 
 	snd_soc_add_codec_controls(codec, wm8962_snd_controls,
 			     ARRAY_SIZE(wm8962_snd_controls));
-	if (pdata->spk_mono)
+	if (pdata && pdata->spk_mono)
 		snd_soc_add_codec_controls(codec, wm8962_spk_mono_controls,
 				     ARRAY_SIZE(wm8962_spk_mono_controls));
 	else
@@ -2364,7 +2362,7 @@ static int wm8962_add_widgets(struct snd_soc_codec *codec)
 
 	snd_soc_dapm_new_controls(dapm, wm8962_dapm_widgets,
 				  ARRAY_SIZE(wm8962_dapm_widgets));
-	if (pdata->spk_mono)
+	if (pdata && pdata->spk_mono)
 		snd_soc_dapm_new_controls(dapm, wm8962_dapm_spk_mono_widgets,
 					  ARRAY_SIZE(wm8962_dapm_spk_mono_widgets));
 	else
@@ -2373,7 +2371,7 @@ static int wm8962_add_widgets(struct snd_soc_codec *codec)
 
 	snd_soc_dapm_add_routes(dapm, wm8962_intercon,
 				ARRAY_SIZE(wm8962_intercon));
-	if (pdata->spk_mono)
+	if (pdata && pdata->spk_mono)
 		snd_soc_dapm_add_routes(dapm, wm8962_spk_mono_intercon,
 					ARRAY_SIZE(wm8962_spk_mono_intercon));
 	else
@@ -2903,21 +2901,12 @@ static int wm8962_set_fll(struct snd_soc_codec *codec, int fll_id, int source,
 static int wm8962_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
-	int val, ret;
+	int val;
 
 	if (mute)
-		val = WM8962_DAC_MUTE | WM8962_DAC_MUTE_ALT;
+		val = WM8962_DAC_MUTE;
 	else
 		val = 0;
-
-	/**
-	 * The DAC mute bit is mirrored in two registers, update both to keep
-	 * the register cache consistent.
-	 */
-	ret = snd_soc_update_bits(codec, WM8962_CLASS_D_CONTROL_1,
-				  WM8962_DAC_MUTE_ALT, val);
-	if (ret < 0)
-		return ret;
 
 	return snd_soc_update_bits(codec, WM8962_ADC_DAC_CONTROL_1,
 				   WM8962_DAC_MUTE, val);
@@ -3346,14 +3335,14 @@ static struct gpio_chip wm8962_template_chip = {
 static void wm8962_init_gpio(struct snd_soc_codec *codec)
 {
 	struct wm8962_priv *wm8962 = snd_soc_codec_get_drvdata(codec);
-	struct wm8962_pdata *pdata = &wm8962->pdata;
+	struct wm8962_pdata *pdata = dev_get_platdata(codec->dev);
 	int ret;
 
 	wm8962->gpio_chip = wm8962_template_chip;
 	wm8962->gpio_chip.ngpio = WM8962_MAX_GPIO;
 	wm8962->gpio_chip.dev = codec->dev;
 
-	if (pdata->gpio_base)
+	if (pdata && pdata->gpio_base)
 		wm8962->gpio_chip.base = pdata->gpio_base;
 	else
 		wm8962->gpio_chip.base = -1;
@@ -3448,20 +3437,16 @@ static int wm8962_probe(struct snd_soc_codec *codec)
 				WM8962_SPK_MONO_MASK, WM8962_SPK_MONO);
 
 
-	/* Put the speakers into mono mode? */
-	if (pdata->spk_mono)
-		reg_cache[WM8962_CLASS_D_CONTROL_2]
-			|= WM8962_SPK_MONO;
-
-	/* Micbias setup, detection enable and detection
-	 * threasholds. */
-	if (pdata->mic_cfg)
-		snd_soc_update_bits(codec, WM8962_ADDITIONAL_CONTROL_4,
-				    WM8962_MICDET_ENA |
-				    WM8962_MICDET_THR_MASK |
-				    WM8962_MICSHORT_THR_MASK |
-				    WM8962_MICBIAS_LVL,
-				    pdata->mic_cfg);
+		/* Micbias setup, detection enable and detection
+		 * threasholds. */
+		if (pdata->mic_cfg)
+			snd_soc_update_bits(codec, WM8962_ADDITIONAL_CONTROL_4,
+					    WM8962_MICDET_ENA |
+					    WM8962_MICDET_THR_MASK |
+					    WM8962_MICSHORT_THR_MASK |
+					    WM8962_MICBIAS_LVL,
+					    pdata->mic_cfg);
+	}
 
 	/* Latch volume update bits */
 	snd_soc_update_bits(codec, WM8962_LEFT_INPUT_VOLUME,
@@ -3523,7 +3508,7 @@ static int wm8962_probe(struct snd_soc_codec *codec)
 	wm8962_init_gpio(codec);
 
 	if (wm8962->irq) {
-		if (pdata->irq_active_low) {
+		if (pdata && pdata->irq_active_low) {
 			trigger = IRQF_TRIGGER_LOW;
 			irq_pol = WM8962_IRQ_POL;
 		} else {
@@ -3601,34 +3586,6 @@ static const struct regmap_config wm8962_regmap = {
 	.cache_type = REGCACHE_RBTREE,
 };
 
-static int wm8962_set_pdata_from_of(struct i2c_client *i2c,
-				    struct wm8962_pdata *pdata)
-{
-	const struct device_node *np = i2c->dev.of_node;
-	u32 val32;
-	int i;
-
-	if (of_property_read_bool(np, "spk-mono"))
-		pdata->spk_mono = true;
-
-	if (of_property_read_u32(np, "mic-cfg", &val32) >= 0)
-		pdata->mic_cfg = val32;
-
-	if (of_property_read_u32_array(np, "gpio-cfg", pdata->gpio_init,
-				       ARRAY_SIZE(pdata->gpio_init)) >= 0)
-		for (i = 0; i < ARRAY_SIZE(pdata->gpio_init); i++) {
-			/*
-			 * The range of GPIO register value is [0x0, 0xffff]
-			 * While the default value of each register is 0x0
-			 * Any other value will be regarded as default value
-			 */
-			if (pdata->gpio_init[i] > 0xffff)
-				pdata->gpio_init[i] = 0x0;
-		}
-
-	return 0;
-}
-
 static int wm8962_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
@@ -3647,15 +3604,6 @@ static int wm8962_i2c_probe(struct i2c_client *i2c,
 	INIT_DELAYED_WORK(&wm8962->mic_work, wm8962_mic_work);
 	init_completion(&wm8962->fll_lock);
 	wm8962->irq = i2c->irq;
-
-	/* If platform data was supplied, update the default data in priv */
-	if (pdata) {
-		memcpy(&wm8962->pdata, pdata, sizeof(struct wm8962_pdata));
-	} else if (i2c->dev.of_node) {
-		ret = wm8962_set_pdata_from_of(i2c, &wm8962->pdata);
-		if (ret != 0)
-			return ret;
-	}
 
 	for (i = 0; i < ARRAY_SIZE(wm8962->supplies); i++)
 		wm8962->supplies[i].supply = wm8962_supply_names[i];
@@ -3720,7 +3668,7 @@ static int wm8962_i2c_probe(struct i2c_client *i2c,
 		goto err_enable;
 	}
 
-	if (wm8962->pdata.in4_dc_measure) {
+	if (pdata && pdata->in4_dc_measure) {
 		ret = regmap_register_patch(wm8962->regmap,
 					    wm8962_dc_measure,
 					    ARRAY_SIZE(wm8962_dc_measure));
@@ -3737,8 +3685,6 @@ static int wm8962_i2c_probe(struct i2c_client *i2c,
 				     &soc_codec_dev_wm8962, &wm8962_dai, 1);
 	if (ret < 0)
 		goto err_enable;
-
-	regcache_cache_only(wm8962->regmap, true);
 
 	/* The drivers should power up as needed */
 	regulator_bulk_disable(ARRAY_SIZE(wm8962->supplies), wm8962->supplies);
@@ -3775,33 +3721,7 @@ static int wm8962_runtime_resume(struct device *dev)
 
 	wm8962_reset(wm8962);
 
-	/* SYSCLK defaults to on; make sure it is off so we can safely
-	 * write to registers if the device is declocked.
-	 */
-	regmap_update_bits(wm8962->regmap, WM8962_CLOCKING2,
-			   WM8962_SYSCLK_ENA, 0);
-
-	/* Ensure we have soft control over all registers */
-	regmap_update_bits(wm8962->regmap, WM8962_CLOCKING2,
-			   WM8962_CLKREG_OVD, WM8962_CLKREG_OVD);
-
-	/* Ensure that the oscillator and PLLs are disabled */
-	regmap_update_bits(wm8962->regmap, WM8962_PLL2,
-			   WM8962_OSC_ENA | WM8962_PLL2_ENA | WM8962_PLL3_ENA,
-			   0);
-
 	regcache_sync(wm8962->regmap);
-
-	regmap_update_bits(wm8962->regmap, WM8962_ANTI_POP,
-			   WM8962_STARTUP_BIAS_ENA | WM8962_VMID_BUF_ENA,
-			   WM8962_STARTUP_BIAS_ENA | WM8962_VMID_BUF_ENA);
-
-	/* Bias enable at 2*5k (fast start-up) */
-	regmap_update_bits(wm8962->regmap, WM8962_PWR_MGMT_1,
-			   WM8962_BIAS_ENA | WM8962_VMID_SEL_MASK,
-			   WM8962_BIAS_ENA | 0x180);
-
-	msleep(5);
 
 	return 0;
 }

@@ -1022,23 +1022,11 @@ static int atmel_startup(struct uart_port *port)
 static void atmel_shutdown(struct uart_port *port)
 {
 	struct atmel_uart_port *atmel_port = to_atmel_uart_port(port);
-
 	/*
-	 * Clear out any scheduled tasklets before
-	 * we destroy the buffers
-	 */
-	tasklet_kill(&atmel_port->tasklet);
-
-	/*
-	 * Ensure everything is stopped and
-	 * disable all interrupts, port and break condition.
+	 * Ensure everything is stopped.
 	 */
 	atmel_stop_rx(port);
 	atmel_stop_tx(port);
-
-	UART_PUT_CR(port, ATMEL_US_RSTSTA);
-	UART_PUT_IDR(port, -1);
-
 
 	/*
 	 * Shut-down the DMA.
@@ -1064,6 +1052,12 @@ static void atmel_shutdown(struct uart_port *port)
 				 pdc->dma_size,
 				 DMA_TO_DEVICE);
 	}
+
+	/*
+	 * Disable all interrupts, port and break condition.
+	 */
+	UART_PUT_CR(port, ATMEL_US_RSTSTA);
+	UART_PUT_IDR(port, -1);
 
 	/*
 	 * Free the interrupt
@@ -1106,7 +1100,7 @@ static void atmel_serial_pm(struct uart_port *port, unsigned int state,
 		 * Enable the peripheral clock for this serial port.
 		 * This is called on uart_open() or a resume event.
 		 */
-		clk_prepare_enable(atmel_port->clk);
+		clk_enable(atmel_port->clk);
 
 		/* re-enable interrupts if we disabled some on suspend */
 		UART_PUT_IER(port, atmel_port->backup_imr);
@@ -1120,7 +1114,7 @@ static void atmel_serial_pm(struct uart_port *port, unsigned int state,
 		 * Disable the peripheral clock for this serial port.
 		 * This is called on uart_close() or a suspend event.
 		 */
-		clk_disable_unprepare(atmel_port->clk);
+		clk_disable(atmel_port->clk);
 		break;
 	default:
 		printk(KERN_ERR "atmel_serial: unknown pm %d\n", state);
@@ -1464,10 +1458,9 @@ static void atmel_of_init_port(struct atmel_uart_port *atmel_port,
 /*
  * Configure the port from the platform device resource info.
  */
-static int atmel_init_port(struct atmel_uart_port *atmel_port,
+static void atmel_init_port(struct atmel_uart_port *atmel_port,
 				      struct platform_device *pdev)
 {
-	int ret;
 	struct uart_port *port = &atmel_port->uart;
 	struct atmel_uart_data *pdata = pdev->dev.platform_data;
 
@@ -1503,19 +1496,9 @@ static int atmel_init_port(struct atmel_uart_port *atmel_port,
 	/* for console, the clock could already be configured */
 	if (!atmel_port->clk) {
 		atmel_port->clk = clk_get(&pdev->dev, "usart");
-		if (IS_ERR(atmel_port->clk)) {
-			ret = PTR_ERR(atmel_port->clk);
-			atmel_port->clk = NULL;
-			return ret;
-		}
-		ret = clk_prepare_enable(atmel_port->clk);
-		if (ret) {
-			clk_put(atmel_port->clk);
-			atmel_port->clk = NULL;
-			return ret;
-		}
+		clk_enable(atmel_port->clk);
 		port->uartclk = clk_get_rate(atmel_port->clk);
-		clk_disable_unprepare(atmel_port->clk);
+		clk_disable(atmel_port->clk);
 		/* only enable clock when USART is in use */
 	}
 
@@ -1528,8 +1511,6 @@ static int atmel_init_port(struct atmel_uart_port *atmel_port,
 	} else {
 		atmel_port->tx_done_mask = ATMEL_US_TXRDY;
 	}
-
-	return 0;
 }
 
 struct platform_device *atmel_default_console_device;	/* the serial console device */
@@ -1620,7 +1601,6 @@ static void __init atmel_console_get_options(struct uart_port *port, int *baud,
 
 static int __init atmel_console_setup(struct console *co, char *options)
 {
-	int ret;
 	struct uart_port *port = &atmel_ports[co->index].uart;
 	int baud = 115200;
 	int bits = 8;
@@ -1632,9 +1612,7 @@ static int __init atmel_console_setup(struct console *co, char *options)
 		return -ENODEV;
 	}
 
-	ret = clk_prepare_enable(atmel_ports[co->index].clk);
-	if (ret)
-		return ret;
+	clk_enable(atmel_ports[co->index].clk);
 
 	UART_PUT_IDR(port, -1);
 	UART_PUT_CR(port, ATMEL_US_RSTSTA | ATMEL_US_RSTRX);
@@ -1667,7 +1645,6 @@ static struct console atmel_console = {
  */
 static int __init atmel_console_init(void)
 {
-	int ret;
 	if (atmel_default_console_device) {
 		struct atmel_uart_data *pdata =
 			atmel_default_console_device->dev.platform_data;
@@ -1678,9 +1655,7 @@ static int __init atmel_console_init(void)
 		port->uart.line = id;
 
 		add_preferred_console(ATMEL_DEVICENAME, id, NULL);
-		ret = atmel_init_port(port, atmel_default_console_device);
-		if (ret)
-			return ret;
+		atmel_init_port(port, atmel_default_console_device);
 		register_console(&atmel_console);
 	}
 
@@ -1811,9 +1786,7 @@ static int atmel_serial_probe(struct platform_device *pdev)
 	port->backup_imr = 0;
 	port->uart.line = ret;
 
-	ret = atmel_init_port(port, pdev);
-	if (ret)
-		goto err;
+	atmel_init_port(port, pdev);
 
 	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
 	if (IS_ERR(pinctrl)) {
@@ -1839,9 +1812,9 @@ static int atmel_serial_probe(struct platform_device *pdev)
 			&& ATMEL_CONSOLE_DEVICE->flags & CON_ENABLED) {
 		/*
 		 * The serial core enabled the clock for us, so undo
-		 * the clk_prepare_enable() in atmel_console_setup()
+		 * the clk_enable() in atmel_console_setup()
 		 */
-		clk_disable_unprepare(port->clk);
+		clk_disable(port->clk);
 	}
 #endif
 

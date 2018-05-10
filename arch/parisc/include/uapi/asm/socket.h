@@ -1,5 +1,5 @@
-#ifndef _UAPI_ASM_SOCKET_H
-#define _UAPI_ASM_SOCKET_H
+#ifndef _ASM_SOCKET_H
+#define _ASM_SOCKET_H
 
 #include <asm/sockios.h>
 
@@ -72,8 +72,6 @@
 #define SO_LOCK_FILTER		0x4025
 
 #define SO_SELECT_ERR_QUEUE	0x4026
-
-#define SO_LL			0x4027
 
 /* O_NONBLOCK clashes with the bits used for socket types.  Therefore we
  * have to define SOCK_NONBLOCK to a different value here.

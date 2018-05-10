@@ -44,21 +44,10 @@ void xenvif_get(struct xenvif *vif)
 	atomic_inc(&vif->refcnt);
 }
 
-void xenvif_get_rings(struct xenvif *vif)
-{
-	atomic_inc(&vif->ring_refcnt);
-}
-
 void xenvif_put(struct xenvif *vif)
 {
 	if (atomic_dec_and_test(&vif->refcnt))
 		wake_up(&vif->waiting_to_free);
-}
-
-void xenvif_put_rings(struct xenvif *vif)
-{
-	if (atomic_dec_and_test(&vif->ring_refcnt))
-		wake_up(&vif->waiting_to_unmap);
 }
 
 int xenvif_schedulable(struct xenvif *vif)
@@ -71,35 +60,17 @@ static int xenvif_rx_schedulable(struct xenvif *vif)
 	return xenvif_schedulable(vif) && !xen_netbk_rx_ring_full(vif);
 }
 
-static irqreturn_t xenvif_tx_interrupt(int irq, void *dev_id)
+static irqreturn_t xenvif_interrupt(int irq, void *dev_id)
 {
 	struct xenvif *vif = dev_id;
 
 	if (vif->netbk == NULL)
-		return IRQ_HANDLED;
+		return IRQ_NONE;
 
 	xen_netbk_schedule_xenvif(vif);
 
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t xenvif_rx_interrupt(int irq, void *dev_id)
-{
-	struct xenvif *vif = dev_id;
-
-	if (vif->netbk == NULL)
-		return IRQ_HANDLED;
-
 	if (xenvif_rx_schedulable(vif))
 		netif_wake_queue(vif->dev);
-
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t xenvif_interrupt(int irq, void *dev_id)
-{
-	xenvif_tx_interrupt(irq, dev_id);
-	xenvif_rx_interrupt(irq, dev_id);
 
 	return IRQ_HANDLED;
 }
@@ -120,7 +91,6 @@ static int xenvif_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Reserve ring slots for the worst-case number of fragments. */
 	vif->rx_req_cons_peek += xen_netbk_count_skb_slots(vif, skb);
 	xenvif_get(vif);
-	xenvif_get_rings(vif);
 
 	if (vif->can_queue && xen_netbk_must_stop_queue(vif))
 		netif_stop_queue(dev);
@@ -155,17 +125,13 @@ static struct net_device_stats *xenvif_get_stats(struct net_device *dev)
 static void xenvif_up(struct xenvif *vif)
 {
 	xen_netbk_add_xenvif(vif);
-	enable_irq(vif->tx_irq);
-	if (vif->tx_irq != vif->rx_irq)
-		enable_irq(vif->rx_irq);
+	enable_irq(vif->irq);
 	xen_netbk_check_rx_xenvif(vif);
 }
 
 static void xenvif_down(struct xenvif *vif)
 {
-	disable_irq(vif->tx_irq);
-	if (vif->tx_irq != vif->rx_irq)
-		disable_irq(vif->rx_irq);
+	disable_irq(vif->irq);
 	del_timer_sync(&vif->credit_timeout);
 	xen_netbk_deschedule_xenvif(vif);
 	xen_netbk_remove_xenvif(vif);
@@ -305,12 +271,12 @@ struct xenvif *xenvif_alloc(struct device *parent, domid_t domid,
 	vif->dev = dev;
 	INIT_LIST_HEAD(&vif->schedule_list);
 	INIT_LIST_HEAD(&vif->notify_list);
-	init_waitqueue_head(&vif->waiting_to_unmap);
 
 	vif->credit_bytes = vif->remaining_credit = ~0UL;
 	vif->credit_usec  = 0UL;
 	init_timer(&vif->credit_timeout);
-	vif->credit_window_start = get_jiffies_64();
+	/* Initialize 'expires' now: it's used to track the credit window. */
+	vif->credit_timeout.expires = jiffies;
 
 	dev->netdev_ops	= &xenvif_netdev_ops;
 	dev->hw_features = NETIF_F_SG | NETIF_F_IP_CSUM | NETIF_F_TSO;
@@ -338,59 +304,29 @@ struct xenvif *xenvif_alloc(struct device *parent, domid_t domid,
 	}
 
 	netdev_dbg(dev, "Successfully created xenvif\n");
-
-	__module_get(THIS_MODULE);
-
 	return vif;
 }
 
 int xenvif_connect(struct xenvif *vif, unsigned long tx_ring_ref,
-		   unsigned long rx_ring_ref, unsigned int tx_evtchn,
-		   unsigned int rx_evtchn)
+		   unsigned long rx_ring_ref, unsigned int evtchn)
 {
 	int err = -ENOMEM;
 
 	/* Already connected through? */
-	if (vif->tx_irq)
+	if (vif->irq)
 		return 0;
-
-	__module_get(THIS_MODULE);
 
 	err = xen_netbk_map_frontend_rings(vif, tx_ring_ref, rx_ring_ref);
 	if (err < 0)
 		goto err;
 
-	if (tx_evtchn == rx_evtchn) {
-		/* feature-split-event-channels == 0 */
-		err = bind_interdomain_evtchn_to_irqhandler(
-			vif->domid, tx_evtchn, xenvif_interrupt, 0,
-			vif->dev->name, vif);
-		if (err < 0)
-			goto err_unmap;
-		vif->tx_irq = vif->rx_irq = err;
-		disable_irq(vif->tx_irq);
-	} else {
-		/* feature-split-event-channels == 1 */
-		snprintf(vif->tx_irq_name, sizeof(vif->tx_irq_name),
-			 "%s-tx", vif->dev->name);
-		err = bind_interdomain_evtchn_to_irqhandler(
-			vif->domid, tx_evtchn, xenvif_tx_interrupt, 0,
-			vif->tx_irq_name, vif);
-		if (err < 0)
-			goto err_unmap;
-		vif->tx_irq = err;
-		disable_irq(vif->tx_irq);
-
-		snprintf(vif->rx_irq_name, sizeof(vif->rx_irq_name),
-			 "%s-rx", vif->dev->name);
-		err = bind_interdomain_evtchn_to_irqhandler(
-			vif->domid, rx_evtchn, xenvif_rx_interrupt, 0,
-			vif->rx_irq_name, vif);
-		if (err < 0)
-			goto err_tx_unbind;
-		vif->rx_irq = err;
-		disable_irq(vif->rx_irq);
-	}
+	err = bind_interdomain_evtchn_to_irqhandler(
+		vif->domid, evtchn, xenvif_interrupt, 0,
+		vif->dev->name, vif);
+	if (err < 0)
+		goto err_unmap;
+	vif->irq = err;
+	disable_irq(vif->irq);
 
 	xenvif_get(vif);
 
@@ -404,13 +340,9 @@ int xenvif_connect(struct xenvif *vif, unsigned long tx_ring_ref,
 	rtnl_unlock();
 
 	return 0;
-err_tx_unbind:
-	unbind_from_irqhandler(vif->tx_irq, vif);
-	vif->tx_irq = 0;
 err_unmap:
 	xen_netbk_unmap_frontend_rings(vif);
 err:
-	module_put(THIS_MODULE);
 	return err;
 }
 
@@ -428,45 +360,18 @@ void xenvif_carrier_off(struct xenvif *vif)
 
 void xenvif_disconnect(struct xenvif *vif)
 {
-	/* Disconnect funtion might get called by generic framework
-	 * even before vif connects, so we need to check if we really
-	 * need to do a module_put.
-	 */
-	int need_module_put = 0;
-
 	if (netif_carrier_ok(vif->dev))
 		xenvif_carrier_off(vif);
 
-	disable_irq(vif->irq);
-	xen_netbk_unmap_frontend_rings(vif);
-	if (vif->irq) {
-		unbind_from_irqhandler(vif->irq, vif);
-		vif->irq = 0;
-	}
-}
-
-void xenvif_free(struct xenvif *vif)
-{
 	atomic_dec(&vif->refcnt);
 	wait_event(vif->waiting_to_free, atomic_read(&vif->refcnt) == 0);
 
-	if (vif->tx_irq) {
-		if (vif->tx_irq == vif->rx_irq)
-			unbind_from_irqhandler(vif->tx_irq, vif);
-		else {
-			unbind_from_irqhandler(vif->tx_irq, vif);
-			unbind_from_irqhandler(vif->rx_irq, vif);
-		}
-		/* vif->irq is valid, we had a module_get in
-		 * xenvif_connect.
-		 */
-		need_module_put = 1;
-	}
+	if (vif->irq)
+		unbind_from_irqhandler(vif->irq, vif);
 
 	unregister_netdev(vif->dev);
 
-	free_netdev(vif->dev);
+	xen_netbk_unmap_frontend_rings(vif);
 
-	if (need_module_put)
-		module_put(THIS_MODULE);
+	free_netdev(vif->dev);
 }

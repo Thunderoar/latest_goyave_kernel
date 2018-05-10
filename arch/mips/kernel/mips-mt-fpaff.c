@@ -27,12 +27,12 @@ unsigned long mt_fpemul_threshold;
  * FPU affinity with the user's requested processor affinity.
  * This code is 98% identical with the sys_sched_setaffinity()
  * and sys_sched_getaffinity() system calls, and should be
- * updated when kernel/sched/core.c changes.
+ * updated when kernel/sched.c changes.
  */
 
 /*
  * find_process_by_pid - find a process with a matching PID value.
- * used in sys_sched_set/getaffinity() in kernel/sched/core.c, so
+ * used in sys_sched_set/getaffinity() in kernel/sched.c, so
  * cloned here.
  */
 static inline struct task_struct *find_process_by_pid(pid_t pid)
@@ -154,7 +154,7 @@ asmlinkage long mipsmt_sys_sched_getaffinity(pid_t pid, unsigned int len,
 				      unsigned long __user *user_mask_ptr)
 {
 	unsigned int real_len;
-	cpumask_t allowed, mask;
+	cpumask_t mask;
 	int retval;
 	struct task_struct *p;
 
@@ -173,8 +173,7 @@ asmlinkage long mipsmt_sys_sched_getaffinity(pid_t pid, unsigned int len,
 	if (retval)
 		goto out_unlock;
 
-	cpumask_or(&allowed, &p->thread.user_cpus_allowed, &p->cpus_allowed);
-	cpumask_and(&mask, &allowed, cpu_active_mask);
+	cpumask_and(&mask, &p->thread.user_cpus_allowed, cpu_possible_mask);
 
 out_unlock:
 	read_unlock(&tasklist_lock);

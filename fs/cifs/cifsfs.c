@@ -312,14 +312,11 @@ cifs_show_address(struct seq_file *s, struct TCP_Server_Info *server)
 }
 
 static void
-cifs_show_security(struct seq_file *s, struct cifs_ses *ses)
+cifs_show_security(struct seq_file *s, struct TCP_Server_Info *server)
 {
-	if (ses->sectype == Unspecified)
-		return;
-
 	seq_printf(s, ",sec=");
 
-	switch (ses->sectype) {
+	switch (server->secType) {
 	case LANMAN:
 		seq_printf(s, "lanman");
 		break;
@@ -341,7 +338,7 @@ cifs_show_security(struct seq_file *s, struct cifs_ses *ses)
 		break;
 	}
 
-	if (ses->sign)
+	if (server->sec_mode & (SECMODE_SIGN_REQUIRED | SECMODE_SIGN_ENABLED))
 		seq_printf(s, "i");
 }
 
@@ -372,7 +369,7 @@ cifs_show_options(struct seq_file *s, struct dentry *root)
 	srcaddr = (struct sockaddr *)&tcon->ses->server->srcaddr;
 
 	seq_printf(s, ",vers=%s", tcon->ses->server->vals->version_string);
-	cifs_show_security(s, tcon->ses);
+	cifs_show_security(s, tcon->ses->server);
 	cifs_show_cache_flavor(s, cifs_sb);
 
 	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_MULTIUSER)
@@ -568,9 +565,6 @@ cifs_get_root(struct smb_vol *vol, struct super_block *sb)
 	char *s, *p;
 	char sep;
 
-	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_USE_PREFIX_PATH)
-		return dget(sb->s_root);
-
 	full_path = cifs_build_path_to_root(vol, cifs_sb,
 					    cifs_sb_master_tcon(cifs_sb));
 	if (full_path == NULL)
@@ -650,14 +644,10 @@ cifs_do_mount(struct file_system_type *fs_type,
 	cifs_sb->mountdata = kstrndup(data, PAGE_SIZE, GFP_KERNEL);
 	if (cifs_sb->mountdata == NULL) {
 		root = ERR_PTR(-ENOMEM);
-		goto out_free;
+		goto out_cifs_sb;
 	}
 
-	rc = cifs_setup_cifs_sb(volume_info, cifs_sb);
-	if (rc) {
-		root = ERR_PTR(rc);
-		goto out_free;
-	}
+	cifs_setup_cifs_sb(volume_info, cifs_sb);
 
 	rc = cifs_mount(cifs_sb, volume_info);
 	if (rc) {
@@ -665,7 +655,7 @@ cifs_do_mount(struct file_system_type *fs_type,
 			cifs_dbg(VFS, "cifs_mount failed w/return code = %d\n",
 				 rc);
 		root = ERR_PTR(rc);
-		goto out_free;
+		goto out_mountdata;
 	}
 
 	mnt_data.vol = volume_info;
@@ -708,9 +698,9 @@ out:
 	cifs_cleanup_volume_info(volume_info);
 	return root;
 
-out_free:
-	kfree(cifs_sb->prepath);
+out_mountdata:
 	kfree(cifs_sb->mountdata);
+out_cifs_sb:
 	kfree(cifs_sb);
 out_nls:
 	unload_nls(volume_info->local_nls);

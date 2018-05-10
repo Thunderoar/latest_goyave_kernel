@@ -87,7 +87,7 @@ static int s3c64xx_cpufreq_set_target(struct cpufreq_policy *policy,
 	freqs.old = clk_get_rate(armclk) / 1000;
 	freqs.new = s3c64xx_freq_table[i].frequency;
 	freqs.flags = 0;
-	dvfs = &s3c64xx_dvfs_table[s3c64xx_freq_table[i].driver_data];
+	dvfs = &s3c64xx_dvfs_table[s3c64xx_freq_table[i].index];
 
 	if (freqs.old == freqs.new)
 		return 0;
@@ -104,8 +104,7 @@ static int s3c64xx_cpufreq_set_target(struct cpufreq_policy *policy,
 		if (ret != 0) {
 			pr_err("Failed to set VDDARM for %dkHz: %d\n",
 			       freqs.new, ret);
-			freqs.new = freqs.old;
-			goto post_notify;
+			goto err;
 		}
 	}
 #endif
@@ -114,13 +113,10 @@ static int s3c64xx_cpufreq_set_target(struct cpufreq_policy *policy,
 	if (ret < 0) {
 		pr_err("Failed to set rate %dkHz: %d\n",
 		       freqs.new, ret);
-		freqs.new = freqs.old;
+		goto err;
 	}
 
-post_notify:
 	cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
-	if (ret)
-		goto err;
 
 #ifdef CONFIG_REGULATOR
 	if (vddarm && freqs.new < freqs.old) {

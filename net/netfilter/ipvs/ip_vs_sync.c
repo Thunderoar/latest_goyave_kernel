@@ -425,16 +425,6 @@ ip_vs_sync_buff_create_v0(struct netns_ipvs *ipvs)
 	return sb;
 }
 
-/* Check if connection is controlled by persistence */
-static inline bool in_persistence(struct ip_vs_conn *cp)
-{
-	for (cp = cp->control; cp; cp = cp->control) {
-		if (cp->flags & IP_VS_CONN_F_TEMPLATE)
-			return true;
-	}
-	return false;
-}
-
 /* Check if conn should be synced.
  * pkts: conn packets, use sysctl_sync_threshold to avoid packet check
  * - (1) sync_refresh_period: reduce sync rate. Additionally, retry
@@ -457,8 +447,6 @@ static int ip_vs_sync_conn_needed(struct netns_ipvs *ipvs,
 	/* Check if we sync in current state */
 	if (unlikely(cp->flags & IP_VS_CONN_F_TEMPLATE))
 		force = 0;
-	else if (unlikely(sysctl_sync_persist_mode(ipvs) && in_persistence(cp)))
-		return 0;
 	else if (likely(cp->protocol == IPPROTO_TCP)) {
 		if (!((1 << cp->state) &
 		      ((1 << IP_VS_TCP_S_ESTABLISHED) |
@@ -473,10 +461,9 @@ static int ip_vs_sync_conn_needed(struct netns_ipvs *ipvs,
 	} else if (unlikely(cp->protocol == IPPROTO_SCTP)) {
 		if (!((1 << cp->state) &
 		      ((1 << IP_VS_SCTP_S_ESTABLISHED) |
-		       (1 << IP_VS_SCTP_S_SHUTDOWN_SENT) |
-		       (1 << IP_VS_SCTP_S_SHUTDOWN_RECEIVED) |
-		       (1 << IP_VS_SCTP_S_SHUTDOWN_ACK_SENT) |
-		       (1 << IP_VS_SCTP_S_CLOSED))))
+		       (1 << IP_VS_SCTP_S_CLOSED) |
+		       (1 << IP_VS_SCTP_S_SHUT_ACK_CLI) |
+		       (1 << IP_VS_SCTP_S_SHUT_ACK_SER))))
 			return 0;
 		force = cp->state != cp->old_state;
 		if (force && cp->state != IP_VS_SCTP_S_ESTABLISHED)
@@ -612,7 +599,7 @@ static void ip_vs_sync_conn_v0(struct net *net, struct ip_vs_conn *cp,
 			pkts = atomic_add_return(1, &cp->in_pkts);
 		else
 			pkts = sysctl_sync_threshold(ipvs);
-		ip_vs_sync_conn(net, cp, pkts);
+		ip_vs_sync_conn(net, cp->control, pkts);
 	}
 }
 
@@ -891,8 +878,6 @@ static void ip_vs_proc_conn(struct net *net, struct ip_vs_conn_param *param,
 			IP_VS_DBG(2, "BACKUP, add new conn. failed\n");
 			return;
 		}
-		if (!(flags & IP_VS_CONN_F_TEMPLATE))
-			kfree(param->pe_data);
 	}
 
 	if (opt)
@@ -1166,7 +1151,6 @@ static inline int ip_vs_proc_sync_conn(struct net *net, __u8 *p, __u8 *msg_end)
 				(opt_flags & IPVS_OPT_F_SEQ_DATA ? &opt : NULL)
 				);
 #endif
-	ip_vs_pe_put(param.pe);
 	return 0;
 	/* Error exit */
 out:

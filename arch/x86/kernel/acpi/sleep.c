@@ -16,7 +16,6 @@
 #include <asm/cacheflush.h>
 #include <asm/realmode.h>
 
-#include <linux/ftrace.h>
 #include "../../realmode/rm/wakeup.h"
 #include "sleep.h"
 
@@ -27,12 +26,12 @@ static char temp_stack[4096];
 #endif
 
 /**
- * x86_acpi_suspend_lowlevel - save kernel state
+ * acpi_suspend_lowlevel - save kernel state
  *
  * Create an identity mapped page table and copy the wakeup routine to
  * low memory.
  */
-int x86_acpi_suspend_lowlevel(void)
+int acpi_suspend_lowlevel(void)
 {
 	struct wakeup_header *header =
 		(struct wakeup_header *) __va(real_mode_header->wakeup_header);
@@ -97,13 +96,7 @@ int x86_acpi_suspend_lowlevel(void)
        saved_magic = 0x123456789abcdef0L;
 #endif /* CONFIG_64BIT */
 
-	/*
-	 * Pause/unpause graph tracing around do_suspend_lowlevel as it has
-	 * inconsistent call/return info after it jumps to the wakeup vector.
-	 */
-	pause_graph_tracing();
 	do_suspend_lowlevel();
-	unpause_graph_tracing();
 	return 0;
 }
 

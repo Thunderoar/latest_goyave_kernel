@@ -27,14 +27,7 @@ ENDPROC(shmobile_invalidate_start)
  * We need _long_ jump to the physical address.
  */
 	.align  12
-ENTRY(shmobile_boot_vector)
-	ldr     r0, 2f
+ENTRY(shmobile_secondary_vector)
 	ldr     pc, 1f
-ENDPROC(shmobile_boot_vector)
-
-	.globl	shmobile_boot_fn
-shmobile_boot_fn:
-1:	.space	4
-	.globl	shmobile_boot_arg
-shmobile_boot_arg:
-2:	.space	4
+1:	.long   shmobile_invalidate_start - PAGE_OFFSET + PLAT_PHYS_OFFSET
+ENDPROC(shmobile_secondary_vector)

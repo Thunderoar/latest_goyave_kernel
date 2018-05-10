@@ -342,6 +342,8 @@ static int timbgpio_remove(struct platform_device *pdev)
 	release_mem_region(iomem->start, resource_size(iomem));
 	kfree(tgpio);
 
+	platform_set_drvdata(pdev, NULL);
+
 	return 0;
 }
 

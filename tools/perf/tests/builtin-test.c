@@ -70,7 +70,7 @@ static struct test {
 		.func = test__attr,
 	},
 	{
-		.desc = "Test matching and linking multiple hists",
+		.desc = "Test matching and linking mutliple hists",
 		.func = test__hists_link,
 	},
 	{

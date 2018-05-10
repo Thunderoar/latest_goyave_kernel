@@ -35,6 +35,7 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 {
 	struct radeon_bo *vram_obj = NULL;
 	struct radeon_bo **gtt_obj = NULL;
+	struct radeon_fence *fence = NULL;
 	uint64_t gtt_addr, vram_addr;
 	unsigned n, size;
 	int i, r, ring;
@@ -80,38 +81,37 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 	}
 	r = radeon_bo_reserve(vram_obj, false);
 	if (unlikely(r != 0))
-		goto out_unref;
+		goto out_cleanup;
 	r = radeon_bo_pin(vram_obj, RADEON_GEM_DOMAIN_VRAM, &vram_addr);
 	if (r) {
 		DRM_ERROR("Failed to pin VRAM object\n");
-		goto out_unres;
+		goto out_cleanup;
 	}
 	for (i = 0; i < n; i++) {
 		void *gtt_map, *vram_map;
 		void **gtt_start, **gtt_end;
 		void **vram_start, **vram_end;
-		struct radeon_fence *fence = NULL;
 
 		r = radeon_bo_create(rdev, size, PAGE_SIZE, true,
 				     RADEON_GEM_DOMAIN_GTT, NULL, gtt_obj + i);
 		if (r) {
 			DRM_ERROR("Failed to create GTT object %d\n", i);
-			goto out_lclean;
+			goto out_cleanup;
 		}
 
 		r = radeon_bo_reserve(gtt_obj[i], false);
 		if (unlikely(r != 0))
-			goto out_lclean_unref;
+			goto out_cleanup;
 		r = radeon_bo_pin(gtt_obj[i], RADEON_GEM_DOMAIN_GTT, &gtt_addr);
 		if (r) {
 			DRM_ERROR("Failed to pin GTT object %d\n", i);
-			goto out_lclean_unres;
+			goto out_cleanup;
 		}
 
 		r = radeon_bo_kmap(gtt_obj[i], &gtt_map);
 		if (r) {
 			DRM_ERROR("Failed to map GTT object %d\n", i);
-			goto out_lclean_unpin;
+			goto out_cleanup;
 		}
 
 		for (gtt_start = gtt_map, gtt_end = gtt_map + size;
@@ -127,13 +127,13 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 			r = radeon_copy_blit(rdev, gtt_addr, vram_addr, size / RADEON_GPU_PAGE_SIZE, &fence);
 		if (r) {
 			DRM_ERROR("Failed GTT->VRAM copy %d\n", i);
-			goto out_lclean_unpin;
+			goto out_cleanup;
 		}
 
 		r = radeon_fence_wait(fence, false);
 		if (r) {
 			DRM_ERROR("Failed to wait for GTT->VRAM fence %d\n", i);
-			goto out_lclean_unpin;
+			goto out_cleanup;
 		}
 
 		radeon_fence_unref(&fence);
@@ -141,7 +141,7 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 		r = radeon_bo_kmap(vram_obj, &vram_map);
 		if (r) {
 			DRM_ERROR("Failed to map VRAM object after copy %d\n", i);
-			goto out_lclean_unpin;
+			goto out_cleanup;
 		}
 
 		for (gtt_start = gtt_map, gtt_end = gtt_map + size,
@@ -160,7 +160,7 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 					  (vram_addr - rdev->mc.vram_start +
 					   (void*)gtt_start - gtt_map));
 				radeon_bo_kunmap(vram_obj);
-				goto out_lclean_unpin;
+				goto out_cleanup;
 			}
 			*vram_start = vram_start;
 		}
@@ -173,13 +173,13 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 			r = radeon_copy_blit(rdev, vram_addr, gtt_addr, size / RADEON_GPU_PAGE_SIZE, &fence);
 		if (r) {
 			DRM_ERROR("Failed VRAM->GTT copy %d\n", i);
-			goto out_lclean_unpin;
+			goto out_cleanup;
 		}
 
 		r = radeon_fence_wait(fence, false);
 		if (r) {
 			DRM_ERROR("Failed to wait for VRAM->GTT fence %d\n", i);
-			goto out_lclean_unpin;
+			goto out_cleanup;
 		}
 
 		radeon_fence_unref(&fence);
@@ -187,7 +187,7 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 		r = radeon_bo_kmap(gtt_obj[i], &gtt_map);
 		if (r) {
 			DRM_ERROR("Failed to map GTT object after copy %d\n", i);
-			goto out_lclean_unpin;
+			goto out_cleanup;
 		}
 
 		for (gtt_start = gtt_map, gtt_end = gtt_map + size,
@@ -206,7 +206,7 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 					  (gtt_addr - rdev->mc.gtt_start +
 					   (void*)vram_start - vram_map));
 				radeon_bo_kunmap(gtt_obj[i]);
-				goto out_lclean_unpin;
+				goto out_cleanup;
 			}
 		}
 
@@ -214,32 +214,31 @@ static void radeon_do_test_moves(struct radeon_device *rdev, int flag)
 
 		DRM_INFO("Tested GTT->VRAM and VRAM->GTT copy for GTT offset 0x%llx\n",
 			 gtt_addr - rdev->mc.gtt_start);
-		continue;
-
-out_lclean_unpin:
-		radeon_bo_unpin(gtt_obj[i]);
-out_lclean_unres:
-		radeon_bo_unreserve(gtt_obj[i]);
-out_lclean_unref:
-		radeon_bo_unref(&gtt_obj[i]);
-out_lclean:
-		for (--i; i >= 0; --i) {
-			radeon_bo_unpin(gtt_obj[i]);
-			radeon_bo_unreserve(gtt_obj[i]);
-			radeon_bo_unref(&gtt_obj[i]);
-		}
-		if (fence)
-			radeon_fence_unref(&fence);
-		break;
 	}
 
-	radeon_bo_unpin(vram_obj);
-out_unres:
-	radeon_bo_unreserve(vram_obj);
-out_unref:
-	radeon_bo_unref(&vram_obj);
 out_cleanup:
-	kfree(gtt_obj);
+	if (vram_obj) {
+		if (radeon_bo_is_reserved(vram_obj)) {
+			radeon_bo_unpin(vram_obj);
+			radeon_bo_unreserve(vram_obj);
+		}
+		radeon_bo_unref(&vram_obj);
+	}
+	if (gtt_obj) {
+		for (i = 0; i < n; i++) {
+			if (gtt_obj[i]) {
+				if (radeon_bo_is_reserved(gtt_obj[i])) {
+					radeon_bo_unpin(gtt_obj[i]);
+					radeon_bo_unreserve(gtt_obj[i]);
+				}
+				radeon_bo_unref(&gtt_obj[i]);
+			}
+		}
+		kfree(gtt_obj);
+	}
+	if (fence) {
+		radeon_fence_unref(&fence);
+	}
 	if (r) {
 		printk(KERN_WARNING "Error while testing BO move.\n");
 	}

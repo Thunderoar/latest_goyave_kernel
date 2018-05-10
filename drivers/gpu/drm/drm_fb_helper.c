@@ -168,9 +168,6 @@ static void drm_fb_helper_save_lut_atomic(struct drm_crtc *crtc, struct drm_fb_h
 	uint16_t *r_base, *g_base, *b_base;
 	int i;
 
-	if (helper->funcs->gamma_get == NULL)
-		return;
-
 	r_base = crtc->gamma_store;
 	g_base = r_base + crtc->gamma_size;
 	b_base = g_base + crtc->gamma_size;
@@ -287,27 +284,13 @@ EXPORT_SYMBOL(drm_fb_helper_debug_leave);
  */
 bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
 {
-	struct drm_device *dev = fb_helper->dev;
-	struct drm_plane *plane;
 	bool error = false;
-	int i;
+	int i, ret;
 
-	drm_warn_on_modeset_not_all_locked(dev);
-
-	list_for_each_entry(plane, &dev->mode_config.plane_list, head)
-		drm_plane_force_disable(plane);
+	drm_warn_on_modeset_not_all_locked(fb_helper->dev);
 
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		struct drm_mode_set *mode_set = &fb_helper->crtc_info[i].mode_set;
-		struct drm_crtc *crtc = mode_set->crtc;
-		int ret;
-
-		if (crtc->funcs->cursor_set) {
-			ret = crtc->funcs->cursor_set(crtc, NULL, 0, 0, 0);
-			if (ret)
-				error = true;
-		}
-
 		ret = drm_mode_set_config_internal(mode_set);
 		if (ret)
 			error = true;
@@ -600,14 +583,6 @@ static int setcolreg(struct drm_crtc *crtc, u16 red, u16 green,
 		return 0;
 	}
 
-	/*
-	 * The driver really shouldn't advertise pseudo/directcolor
-	 * visuals if it can't deal with the palette.
-	 */
-	if (WARN_ON(!fb_helper->funcs->gamma_set ||
-		    !fb_helper->funcs->gamma_get))
-		return -EINVAL;
-
 	pindex = regno;
 
 	if (fb->bits_per_pixel == 16) {
@@ -651,18 +626,11 @@ static int setcolreg(struct drm_crtc *crtc, u16 red, u16 green,
 int drm_fb_helper_setcmap(struct fb_cmap *cmap, struct fb_info *info)
 {
 	struct drm_fb_helper *fb_helper = info->par;
-	struct drm_device *dev = fb_helper->dev;
 	struct drm_crtc_helper_funcs *crtc_funcs;
 	u16 *red, *green, *blue, *transp;
 	struct drm_crtc *crtc;
 	int i, j, rc = 0;
 	int start;
-
-	drm_modeset_lock_all(dev);
-	if (!drm_fb_helper_is_bound(fb_helper)) {
-		drm_modeset_unlock_all(dev);
-		return -EBUSY;
-	}
 
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		crtc = fb_helper->crtc_info[i].mode_set.crtc;
@@ -686,13 +654,10 @@ int drm_fb_helper_setcmap(struct fb_cmap *cmap, struct fb_info *info)
 
 			rc = setcolreg(crtc, hred, hgreen, hblue, start++, info);
 			if (rc)
-				goto out;
+				return rc;
 		}
-		if (crtc_funcs->load_lut)
-			crtc_funcs->load_lut(crtc);
+		crtc_funcs->load_lut(crtc);
 	}
- out:
-	drm_modeset_unlock_all(dev);
 	return rc;
 }
 EXPORT_SYMBOL(drm_fb_helper_setcmap);
@@ -1348,6 +1313,7 @@ static int drm_pick_crtcs(struct drm_fb_helper *fb_helper,
 			  int n, int width, int height)
 {
 	int c, o;
+	struct drm_device *dev = fb_helper->dev;
 	struct drm_connector *connector;
 	struct drm_connector_helper_funcs *connector_funcs;
 	struct drm_encoder *encoder;
@@ -1368,7 +1334,7 @@ static int drm_pick_crtcs(struct drm_fb_helper *fb_helper,
 	if (modes[n] == NULL)
 		return best_score;
 
-	crtcs = kzalloc(fb_helper->connector_count *
+	crtcs = kzalloc(dev->mode_config.num_connector *
 			sizeof(struct drm_fb_helper_crtc *), GFP_KERNEL);
 	if (!crtcs)
 		return best_score;
@@ -1415,7 +1381,7 @@ static int drm_pick_crtcs(struct drm_fb_helper *fb_helper,
 			best_crtc = crtc;
 			best_score = score;
 			memcpy(best_crtcs, crtcs,
-			       fb_helper->connector_count *
+			       dev->mode_config.num_connector *
 			       sizeof(struct drm_fb_helper_crtc *));
 		}
 	}

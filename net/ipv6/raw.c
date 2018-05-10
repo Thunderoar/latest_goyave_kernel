@@ -459,11 +459,14 @@ static int rawv6_recvmsg(struct kiocb *iocb, struct sock *sk,
 	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
 
+	if (addr_len)
+		*addr_len=sizeof(*sin6);
+
 	if (flags & MSG_ERRQUEUE)
-		return ipv6_recv_error(sk, msg, len, addr_len);
+		return ipv6_recv_error(sk, msg, len);
 
 	if (np->rxpmtu && np->rxopt.bits.rxpmtu)
-		return ipv6_recv_rxpmtu(sk, msg, len, addr_len);
+		return ipv6_recv_rxpmtu(sk, msg, len);
 
 	skb = skb_recv_datagram(sk, flags, noblock, &err);
 	if (!skb)
@@ -497,7 +500,6 @@ static int rawv6_recvmsg(struct kiocb *iocb, struct sock *sk,
 		sin6->sin6_flowinfo = 0;
 		sin6->sin6_scope_id = ipv6_iface_scope_id(&sin6->sin6_addr,
 							  IP6CB(skb)->iif);
-		*addr_len = sizeof(*sin6);
 	}
 
 	sock_recv_ts_and_drops(msg, sk, skb);
@@ -578,11 +580,8 @@ static int rawv6_push_pending_frames(struct sock *sk, struct flowi6 *fl6,
 	}
 
 	offset += skb_transport_offset(skb);
-	err = skb_copy_bits(skb, offset, &csum, 2);
-	if (err < 0) {
-		ip6_flush_pending_frames(sk);
-		goto out;
-	}
+	if (skb_copy_bits(skb, offset, &csum, 2))
+		BUG();
 
 	/* in case cksum was not initialized */
 	if (unlikely(csum))
@@ -1133,8 +1132,7 @@ static int rawv6_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		spin_lock_bh(&sk->sk_receive_queue.lock);
 		skb = skb_peek(&sk->sk_receive_queue);
 		if (skb != NULL)
-			amount = skb_tail_pointer(skb) -
-				skb_transport_header(skb);
+			amount = skb->tail - skb->transport_header;
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 		return put_user(amount, (int __user *)arg);
 	}
@@ -1228,16 +1226,45 @@ struct proto rawv6_prot = {
 };
 
 #ifdef CONFIG_PROC_FS
+static void raw6_sock_seq_show(struct seq_file *seq, struct sock *sp, int i)
+{
+	struct ipv6_pinfo *np = inet6_sk(sp);
+	const struct in6_addr *dest, *src;
+	__u16 destp, srcp;
+
+	dest  = &np->daddr;
+	src   = &np->rcv_saddr;
+	destp = 0;
+	srcp  = inet_sk(sp)->inet_num;
+	seq_printf(seq,
+		   "%4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
+		   "%02X %08X:%08X %02X:%08lX %08X %5d %8d %lu %d %pK %d\n",
+		   i,
+		   src->s6_addr32[0], src->s6_addr32[1],
+		   src->s6_addr32[2], src->s6_addr32[3], srcp,
+		   dest->s6_addr32[0], dest->s6_addr32[1],
+		   dest->s6_addr32[2], dest->s6_addr32[3], destp,
+		   sp->sk_state,
+		   sk_wmem_alloc_get(sp),
+		   sk_rmem_alloc_get(sp),
+		   0, 0L, 0,
+		   from_kuid_munged(seq_user_ns(seq), sock_i_uid(sp)),
+		   0,
+		   sock_i_ino(sp),
+		   atomic_read(&sp->sk_refcnt), sp, atomic_read(&sp->sk_drops));
+}
+
 static int raw6_seq_show(struct seq_file *seq, void *v)
 {
-	if (v == SEQ_START_TOKEN) {
-		seq_puts(seq, IPV6_SEQ_DGRAM_HEADER);
-	} else {
-		struct sock *sp = v;
-		__u16 srcp  = inet_sk(sp)->inet_num;
-		ip6_dgram_sock_seq_show(seq, v, srcp, 0,
-					raw_seq_private(seq)->bucket);
-	}
+	if (v == SEQ_START_TOKEN)
+		seq_printf(seq,
+			   "  sl  "
+			   "local_address                         "
+			   "remote_address                        "
+			   "st tx_queue rx_queue tr tm->when retrnsmt"
+			   "   uid  timeout inode ref pointer drops\n");
+	else
+		raw6_sock_seq_show(seq, v, raw_seq_private(seq)->bucket);
 	return 0;
 }
 
@@ -1291,7 +1318,7 @@ void raw6_proc_exit(void)
 #endif	/* CONFIG_PROC_FS */
 
 /* Same as inet6_dgram_ops, sans udp_poll.  */
-const struct proto_ops inet6_sockraw_ops = {
+static const struct proto_ops inet6_sockraw_ops = {
 	.family		   = PF_INET6,
 	.owner		   = THIS_MODULE,
 	.release	   = inet6_release,

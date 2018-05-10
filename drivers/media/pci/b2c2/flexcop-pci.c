@@ -432,7 +432,18 @@ static struct pci_driver flexcop_pci_driver = {
 	.remove   = flexcop_pci_remove,
 };
 
-module_pci_driver(flexcop_pci_driver);
+static int __init flexcop_pci_module_init(void)
+{
+	return pci_register_driver(&flexcop_pci_driver);
+}
+
+static void __exit flexcop_pci_module_exit(void)
+{
+	pci_unregister_driver(&flexcop_pci_driver);
+}
+
+module_init(flexcop_pci_module_init);
+module_exit(flexcop_pci_module_exit);
 
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_NAME);

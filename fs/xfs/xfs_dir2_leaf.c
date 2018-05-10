@@ -1108,7 +1108,6 @@ xfs_dir2_leaf_readbuf(
 	struct xfs_mount	*mp = dp->i_mount;
 	struct xfs_buf		*bp = *bpp;
 	struct xfs_bmbt_irec	*map = mip->map;
-	struct blk_plug		plug;
 	int			error = 0;
 	int			length;
 	int			i;
@@ -1237,7 +1236,6 @@ xfs_dir2_leaf_readbuf(
 	/*
 	 * Do we need more readahead?
 	 */
-	blk_start_plug(&plug);
 	for (mip->ra_index = mip->ra_offset = i = 0;
 	     mip->ra_want > mip->ra_current && i < mip->map_blocks;
 	     i += mp->m_dirblkfsbs) {
@@ -1289,7 +1287,6 @@ xfs_dir2_leaf_readbuf(
 			}
 		}
 	}
-	blk_finish_plug(&plug);
 
 out:
 	*bpp = bp;

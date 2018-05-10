@@ -122,6 +122,7 @@ struct fsl_ssi_private {
 	bool new_binding;
 	bool ssi_on_imx;
 	struct clk *clk;
+	struct platform_device *imx_pcm_pdev;
 	struct snd_dmaengine_dai_dma_data dma_params_tx;
 	struct snd_dmaengine_dai_dma_data dma_params_rx;
 	struct imx_dma_data filter_data_tx;
@@ -808,9 +809,13 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 	}
 
 	if (ssi_private->ssi_on_imx) {
-		ret = imx_pcm_dma_init(pdev);
-		if (ret)
+		ssi_private->imx_pcm_pdev =
+			platform_device_register_simple("imx-pcm-audio",
+							-1, NULL, 0);
+		if (IS_ERR(ssi_private->imx_pcm_pdev)) {
+			ret = PTR_ERR(ssi_private->imx_pcm_pdev);
 			goto error_dev;
+		}
 	}
 
 	/*
@@ -849,7 +854,7 @@ done:
 
 error_dai:
 	if (ssi_private->ssi_on_imx)
-		imx_pcm_dma_exit(pdev);
+		platform_device_unregister(ssi_private->imx_pcm_pdev);
 	snd_soc_unregister_component(&pdev->dev);
 
 error_dev:
@@ -884,7 +889,7 @@ static int fsl_ssi_remove(struct platform_device *pdev)
 	if (!ssi_private->new_binding)
 		platform_device_unregister(ssi_private->pdev);
 	if (ssi_private->ssi_on_imx) {
-		imx_pcm_dma_exit(pdev);
+		platform_device_unregister(ssi_private->imx_pcm_pdev);
 		clk_disable_unprepare(ssi_private->clk);
 		clk_put(ssi_private->clk);
 	}

@@ -805,7 +805,7 @@ pci_power_t pci_choose_state(struct pci_dev *dev, pm_message_t state)
 {
 	pci_power_t ret;
 
-	if (!dev->pm_cap)
+	if (!pci_find_capability(dev, PCI_CAP_ID_PM))
 		return PCI_D0;
 
 	ret = platform_pci_choose_state(dev);
@@ -1119,8 +1119,6 @@ EXPORT_SYMBOL_GPL(pci_load_and_free_saved_state);
 static int do_pci_enable_device(struct pci_dev *dev, int bars)
 {
 	int err;
-	u16 cmd;
-	u8 pin;
 
 	err = pci_set_power_state(dev, PCI_D0);
 	if (err < 0 && err != -EIO)
@@ -1129,17 +1127,6 @@ static int do_pci_enable_device(struct pci_dev *dev, int bars)
 	if (err < 0)
 		return err;
 	pci_fixup_device(pci_fixup_enable, dev);
-
-	if (dev->msi_enabled || dev->msix_enabled)
-		return 0;
-
-	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-	if (pin) {
-		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-		if (cmd & PCI_COMMAND_INTX_DISABLE)
-			pci_write_config_word(dev, PCI_COMMAND,
-					      cmd & ~PCI_COMMAND_INTX_DISABLE);
-	}
 
 	return 0;
 }
@@ -1346,16 +1333,6 @@ int __weak pcibios_add_device (struct pci_dev *dev)
 {
 	return 0;
 }
-
-/**
- * pcibios_release_device - provide arch specific hooks when releasing device dev
- * @dev: the PCI device being released
- *
- * Permits the platform to provide architecture specific functionality when
- * devices are released. This is the default implementation. Architecture
- * implementations can override this.
- */
-void __weak pcibios_release_device(struct pci_dev *dev) {}
 
 /**
  * pcibios_disable_device - disable arch specific PCI resources for device dev
@@ -2444,7 +2421,7 @@ bool pci_acs_path_enabled(struct pci_dev *start,
 /**
  * pci_swizzle_interrupt_pin - swizzle INTx for device behind bridge
  * @dev: the PCI device
- * @pin: the INTx pin (1=INTA, 2=INTB, 3=INTC, 4=INTD)
+ * @pin: the INTx pin (1=INTA, 2=INTB, 3=INTD, 4=INTD)
  *
  * Perform INTx swizzling for a device behind one level of bridge.  This is
  * required by section 9.1 of the PCI-to-PCI bridge specification for devices
@@ -3669,7 +3646,7 @@ int pci_set_vga_state(struct pci_dev *dev, bool decode,
 	u16 cmd;
 	int rc;
 
-	WARN_ON((flags & PCI_VGA_STATE_CHANGE_DECODES) && (command_bits & ~(PCI_COMMAND_IO|PCI_COMMAND_MEMORY)));
+	WARN_ON((flags & PCI_VGA_STATE_CHANGE_DECODES) & (command_bits & ~(PCI_COMMAND_IO|PCI_COMMAND_MEMORY)));
 
 	/* ARCH specific VGA enables */
 	rc = pci_set_vga_state_arch(dev, decode, command_bits, flags);

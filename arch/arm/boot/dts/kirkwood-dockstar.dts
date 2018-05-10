@@ -18,6 +18,11 @@
 
 	ocp@f1000000 {
 		pinctrl: pinctrl@10000 {
+
+			pinctrl-0 = < &pmx_usb_power_enable
+				      &pmx_led_green &pmx_led_orange >;
+			pinctrl-names = "default";
+
 			pmx_usb_power_enable: pmx-usb-power-enable {
 				marvell,pins = "mpp29";
 				marvell,function = "gpio";
@@ -57,8 +62,6 @@
 	};
 	gpio-leds {
 		compatible = "gpio-leds";
-		pinctrl-0 = <&pmx_led_green &pmx_led_orange>;
-		pinctrl-names = "default";
 
 		health {
 			label = "status:green:health";
@@ -74,8 +77,6 @@
 		compatible = "simple-bus";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		pinctrl-0 = <&pmx_usb_power_enable>;
-		pinctrl-names = "default";
 
 		usb_power: regulator@1 {
 			compatible = "regulator-fixed";

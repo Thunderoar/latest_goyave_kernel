@@ -18,8 +18,7 @@ struct gfs2_inode;
 struct gfs2_inum;
 
 extern struct inode *gfs2_dir_search(struct inode *dir,
-				     const struct qstr *filename,
-				     bool fail_on_exist);
+				     const struct qstr *filename);
 extern int gfs2_dir_check(struct inode *dir, const struct qstr *filename,
 			  const struct gfs2_inode *ip);
 extern int gfs2_dir_add(struct inode *inode, const struct qstr *filename,

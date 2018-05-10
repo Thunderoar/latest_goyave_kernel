@@ -133,7 +133,6 @@ static int wl_adapter_attach(struct pcmcia_device *link)
 {
 	struct net_device   *dev;
 	struct wl_private   *lp;
-	int ret;
 	/*--------------------------------------------------------------------*/
 
 	DBG_FUNC("wl_adapter_attach");
@@ -155,12 +154,10 @@ static int wl_adapter_attach(struct pcmcia_device *link)
 	lp = wl_priv(dev);
 	lp->link = link;
 
-	ret = wl_adapter_insert(link);
-	if (ret != 0)
-		wl_device_dealloc(dev);
+	wl_adapter_insert(link);
 
 	DBG_LEAVE(DbgInfo);
-	return ret;
+	return 0;
 } /* wl_adapter_attach */
 /*============================================================================*/
 
@@ -227,7 +224,7 @@ static int wl_adapter_resume(struct pcmcia_device *link)
 	return 0;
 } /* wl_adapter_resume */
 
-int wl_adapter_insert(struct pcmcia_device *link)
+void wl_adapter_insert(struct pcmcia_device *link)
 {
 	struct net_device *dev;
 	int ret;
@@ -259,8 +256,7 @@ int wl_adapter_insert(struct pcmcia_device *link)
 	dev->base_addr  = link->resource[0]->start;
 
 	SET_NETDEV_DEV(dev, &link->dev);
-	ret = register_netdev(dev);
-	if (ret != 0) {
+	if (register_netdev(dev) != 0) {
 		printk("%s: register_netdev() failed\n", MODULE_NAME);
 		goto failed;
 	}
@@ -271,13 +267,13 @@ int wl_adapter_insert(struct pcmcia_device *link)
 		" %pM\n", dev->name, dev->base_addr, dev->irq, dev->dev_addr);
 
 	DBG_LEAVE(DbgInfo);
-	return 0;
+	return;
 
 failed:
 	wl_adapter_release(link);
 
 	DBG_LEAVE(DbgInfo);
-	return ret;
+	return;
 } /* wl_adapter_insert */
 /*============================================================================*/
 

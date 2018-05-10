@@ -797,6 +797,7 @@ static void ip_vs_conn_expire(unsigned long data)
 			ip_vs_control_del(cp);
 
 		if (cp->flags & IP_VS_CONN_F_NFCT) {
+			ip_vs_conn_drop_conntrack(cp);
 			/* Do not access conntracks during subsys cleanup
 			 * because nf_conntrack_find_get can not be used after
 			 * conntrack cleanup for the net.
@@ -974,7 +975,8 @@ static void *ip_vs_conn_array(struct seq_file *seq, loff_t pos)
 				return cp;
 			}
 		}
-		cond_resched_rcu();
+		rcu_read_unlock();
+		rcu_read_lock();
 	}
 
 	return NULL;
@@ -1013,7 +1015,8 @@ static void *ip_vs_conn_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 			iter->l = &ip_vs_conn_tab[idx];
 			return cp;
 		}
-		cond_resched_rcu();
+		rcu_read_unlock();
+		rcu_read_lock();
 	}
 	iter->l = NULL;
 	return NULL;
@@ -1203,12 +1206,16 @@ void ip_vs_random_dropentry(struct net *net)
 	int idx;
 	struct ip_vs_conn *cp, *cp_c;
 
-	rcu_read_lock();
 	/*
 	 * Randomly scan 1/32 of the whole table every second
 	 */
 	for (idx = 0; idx < (ip_vs_conn_tab_size>>5); idx++) {
 		unsigned int hash = net_random() & ip_vs_conn_tab_mask;
+
+		/*
+		 *  Lock is actually needed in this loop.
+		 */
+		rcu_read_lock();
 
 		hlist_for_each_entry_rcu(cp, &ip_vs_conn_tab[hash], c_list) {
 			if (cp->flags & IP_VS_CONN_F_TEMPLATE)
@@ -1230,18 +1237,6 @@ void ip_vs_random_dropentry(struct net *net)
 				default:
 					continue;
 				}
-			} else if (cp->protocol == IPPROTO_SCTP) {
-				switch (cp->state) {
-				case IP_VS_SCTP_S_INIT1:
-				case IP_VS_SCTP_S_INIT:
-					break;
-				case IP_VS_SCTP_S_ESTABLISHED:
-					if (todrop_entry(cp))
-						break;
-					continue;
-				default:
-					continue;
-				}
 			} else {
 				if (!todrop_entry(cp))
 					continue;
@@ -1257,9 +1252,8 @@ void ip_vs_random_dropentry(struct net *net)
 				__ip_vs_conn_put(cp);
 			}
 		}
-		cond_resched_rcu();
+		rcu_read_unlock();
 	}
-	rcu_read_unlock();
 }
 
 
@@ -1273,8 +1267,11 @@ static void ip_vs_conn_flush(struct net *net)
 	struct netns_ipvs *ipvs = net_ipvs(net);
 
 flush_again:
-	rcu_read_lock();
 	for (idx = 0; idx < ip_vs_conn_tab_size; idx++) {
+		/*
+		 *  Lock is actually needed in this loop.
+		 */
+		rcu_read_lock();
 
 		hlist_for_each_entry_rcu(cp, &ip_vs_conn_tab[idx], c_list) {
 			if (!ip_vs_conn_net_eq(cp, net))
@@ -1289,9 +1286,8 @@ flush_again:
 				__ip_vs_conn_put(cp);
 			}
 		}
-		cond_resched_rcu();
+		rcu_read_unlock();
 	}
-	rcu_read_unlock();
 
 	/* the counter may be not NULL, because maybe some conn entries
 	   are run by slow timer handler or unhashed but still referred */

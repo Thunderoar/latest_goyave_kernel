@@ -275,7 +275,7 @@ void dvma_init(void)
 
 }
 
-unsigned long dvma_map_align(unsigned long kaddr, int len, int align)
+inline unsigned long dvma_map_align(unsigned long kaddr, int len, int align)
 {
 
 	unsigned long baddr;

@@ -159,7 +159,7 @@ static struct ibm_pa_feature {
 	{CPU_FTR_NOEXECUTE, 0, 0,	0, 6, 0},
 	{CPU_FTR_NODSISRALIGN, 0, 0,	1, 1, 1},
 	{0, MMU_FTR_CI_LARGE_PAGE, 0,	1, 2, 0},
-	{CPU_FTR_REAL_LE, 0, PPC_FEATURE_TRUE_LE, 5, 0, 0},
+	{CPU_FTR_REAL_LE, PPC_FEATURE_TRUE_LE, 5, 0, 0},
 };
 
 static void __init scan_features(unsigned long node, unsigned char *ftrs,
@@ -559,33 +559,6 @@ void __init early_init_dt_setup_initrd_arch(unsigned long start,
 }
 #endif
 
-static bool __init early_reserve_mem_dt(void)
-{
-	unsigned long i, len, dt_root;
-	const __be32 *prop;
-
-	dt_root = of_get_flat_dt_root();
-
-	prop = of_get_flat_dt_prop(dt_root, "reserved-ranges", &len);
-
-	if (!prop)
-		return false;
-
-	/* Each reserved range is an (address,size) pair, 2 cells each,
-	 * totalling 4 cells per range. */
-	for (i = 0; i < len / (sizeof(*prop) * 4); i++) {
-		u64 base, size;
-
-		base = of_read_number(prop + (i * 4) + 0, 2);
-		size = of_read_number(prop + (i * 4) + 2, 2);
-
-		if (size)
-			memblock_reserve(base, size);
-	}
-
-	return true;
-}
-
 static void __init early_reserve_mem(void)
 {
 	u64 base, size;
@@ -600,14 +573,6 @@ static void __init early_reserve_mem(void)
 	self_base = __pa((unsigned long)initial_boot_params);
 	self_size = initial_boot_params->totalsize;
 	memblock_reserve(self_base, self_size);
-
-	/*
-	 * Try looking for reserved-regions property in the DT first; if
-	 * it's present, it'll contain all of the necessary reservation
-	 * info
-	 */
-	if (early_reserve_mem_dt())
-		return;
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* then reserve the initrd, if any */

@@ -23,7 +23,8 @@ static struct dentry *regmap_debugfs_root;
 /* Calculate the length of a fixed format  */
 static size_t regmap_calc_reg_len(int max_val, char *buf, size_t buf_size)
 {
-	return snprintf(NULL, 0, "%x", max_val);
+	snprintf(buf, buf_size, "%x", max_val);
+	return strlen(buf);
 }
 
 static ssize_t regmap_name_read_file(struct file *file,
@@ -82,10 +83,6 @@ static unsigned int regmap_debugfs_get_dump_start(struct regmap *map,
 	unsigned int i, ret;
 	unsigned int fpos_offset;
 	unsigned int reg_offset;
-
-	/* Suppress the cache if we're using a subrange */
-	if (from)
-		return from;
 
 	/*
 	 * If we don't have a cache build one so we don't have to do a
@@ -148,7 +145,7 @@ static unsigned int regmap_debugfs_get_dump_start(struct regmap *map,
 			reg_offset = fpos_offset / map->debugfs_tot_len;
 			*pos = c->min + (reg_offset * map->debugfs_tot_len);
 			mutex_unlock(&map->cache_lock);
-			return c->base_reg + (reg_offset * map->reg_stride);
+			return c->base_reg + reg_offset;
 		}
 
 		*pos = c->max;
@@ -284,7 +281,7 @@ static ssize_t regmap_map_write_file(struct file *file,
 		return -EINVAL;
 
 	/* Userspace has been fiddling around behind the kernel's back */
-	add_taint(TAINT_USER, LOCKDEP_STILL_OK);
+	add_taint(TAINT_USER, LOCKDEP_NOW_UNRELIABLE);
 
 	ret = regmap_write(map, reg, value);
 	if (ret < 0)
@@ -422,7 +419,7 @@ static ssize_t regmap_access_read_file(struct file *file,
 		/* If we're in the region the user is trying to read */
 		if (p >= *ppos) {
 			/* ...but not beyond it */
-			if (buf_pos + tot_len + 1 >= count)
+			if (buf_pos >= count - 1 - tot_len)
 				break;
 
 			/* Format the register */
@@ -463,20 +460,16 @@ void regmap_debugfs_init(struct regmap *map, const char *name)
 {
 	struct rb_node *next;
 	struct regmap_range_node *range_node;
-	const char *devname = "dummy";
 
 	INIT_LIST_HEAD(&map->debugfs_off_cache);
 	mutex_init(&map->cache_lock);
 
-	if (map->dev)
-		devname = dev_name(map->dev);
-
 	if (name) {
 		map->debugfs_name = kasprintf(GFP_KERNEL, "%s-%s",
-					      devname, name);
+					      dev_name(map->dev), name);
 		name = map->debugfs_name;
 	} else {
-		name = devname;
+		name = dev_name(map->dev);
 	}
 
 	map->debugfs = debugfs_create_dir(name, regmap_debugfs_root);

@@ -21,8 +21,6 @@
  * Jeremy Fitzhardinge <jeremy@xensource.com>, XenSource Inc, 2007
  */
 
-#define pr_fmt(fmt) "xen:" KBUILD_MODNAME ": " fmt
-
 #include <linux/linkage.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -602,7 +600,8 @@ static unsigned int __startup_pirq(unsigned int irq)
 	rc = HYPERVISOR_event_channel_op(EVTCHNOP_bind_pirq, &bind_pirq);
 	if (rc != 0) {
 		if (!probing_irq(irq))
-			pr_info("Failed to obtain physical IRQ %d\n", irq);
+			printk(KERN_INFO "Failed to obtain physical IRQ %d\n",
+			       irq);
 		return 0;
 	}
 	evtchn = bind_pirq.port;
@@ -694,8 +693,8 @@ int xen_bind_pirq_gsi_to_irq(unsigned gsi,
 
 	irq = xen_irq_from_gsi(gsi);
 	if (irq != -1) {
-		pr_info("%s: returning irq %d for gsi %u\n",
-			__func__, irq, gsi);
+		printk(KERN_INFO "xen_map_pirq_gsi: returning irq %d for gsi %u\n",
+		       irq, gsi);
 		goto out;
 	}
 
@@ -813,10 +812,10 @@ int xen_destroy_irq(int irq)
 		 * (free_domain_pirqs).
 		 */
 		if ((rc == -ESRCH && info->u.pirq.domid != DOMID_SELF))
-			pr_info("domain %d does not have %d anymore\n",
+			printk(KERN_INFO "domain %d does not have %d anymore\n",
 				info->u.pirq.domid, info->u.pirq.pirq);
 		else if (rc) {
-			pr_warn("unmap irq failed %d\n", rc);
+			printk(KERN_WARNING "unmap irq failed %d\n", rc);
 			goto out;
 		}
 	}
@@ -1633,8 +1632,8 @@ static void restore_pirqs(void)
 
 		rc = HYPERVISOR_physdev_op(PHYSDEVOP_map_pirq, &map_irq);
 		if (rc) {
-			pr_warn("xen map irq failed gsi=%d irq=%d pirq=%d rc=%d\n",
-				gsi, irq, pirq, rc);
+			printk(KERN_WARNING "xen map irq failed gsi=%d irq=%d pirq=%d rc=%d\n",
+					gsi, irq, pirq, rc);
 			xen_free_irq(irq);
 			continue;
 		}
@@ -1856,11 +1855,13 @@ void xen_callback_vector(void)
 		callback_via = HVM_CALLBACK_VECTOR(HYPERVISOR_CALLBACK_VECTOR);
 		rc = xen_set_callback_via(callback_via);
 		if (rc) {
-			pr_err("Request for Xen HVM callback vector failed\n");
+			printk(KERN_ERR "Request for Xen HVM callback vector"
+					" failed.\n");
 			xen_have_vector_callback = 0;
 			return;
 		}
-		pr_info("Xen HVM callback vector for event delivery is enabled\n");
+		printk(KERN_INFO "Xen HVM callback vector for event delivery is "
+				"enabled\n");
 		/* in the restore case the vector has already been allocated */
 		if (!test_bit(HYPERVISOR_CALLBACK_VECTOR, used_vectors))
 			alloc_intr_gate(HYPERVISOR_CALLBACK_VECTOR,

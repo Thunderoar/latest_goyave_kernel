@@ -227,7 +227,7 @@ static int xgmac_mdio_probe(struct platform_device *pdev)
 		goto err_registration;
 	}
 
-	platform_set_drvdata(pdev, bus);
+	dev_set_drvdata(&pdev->dev, bus);
 
 	return 0;
 
@@ -242,7 +242,7 @@ err_ioremap:
 
 static int xgmac_mdio_remove(struct platform_device *pdev)
 {
-	struct mii_bus *bus = platform_get_drvdata(pdev);
+	struct mii_bus *bus = dev_get_drvdata(&pdev->dev);
 
 	mdiobus_unregister(bus);
 	iounmap(bus->priv);

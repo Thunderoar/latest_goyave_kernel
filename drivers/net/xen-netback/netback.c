@@ -47,13 +47,6 @@
 #include <asm/xen/hypercall.h>
 #include <asm/xen/page.h>
 
-/* Provide an option to disable split event channels at load time as
- * event channels are limited resource. Split event channels are
- * enabled by default.
- */
-bool separate_tx_rx_irq = 1;
-module_param(separate_tx_rx_irq, bool, 0644);
-
 /*
  * This is the maximum slots a skb can have. If a guest sends a skb
  * which exceeds this limit it is considered malicious.
@@ -354,8 +347,8 @@ static bool start_new_rx_buffer(int offset, unsigned long size, int head)
 	 * into multiple copies tend to give large frags their
 	 * own buffers as before.
 	 */
-	BUG_ON(size > MAX_BUFFER_OFFSET);
-	if ((offset + size > MAX_BUFFER_OFFSET) && offset && !head)
+	if ((offset + size > MAX_BUFFER_OFFSET) &&
+	    (size <= MAX_BUFFER_OFFSET) && offset && !head)
 		return true;
 
 	return false;
@@ -461,17 +454,17 @@ static struct netbk_rx_meta *get_next_rx_buffer(struct xenvif *vif,
 						struct netrx_pending_operations *npo)
 {
 	struct netbk_rx_meta *meta;
-	struct xen_netif_rx_request req;
+	struct xen_netif_rx_request *req;
 
-	RING_COPY_REQUEST(&vif->rx, vif->rx.req_cons++, &req);
+	req = RING_GET_REQUEST(&vif->rx, vif->rx.req_cons++);
 
 	meta = npo->meta + npo->meta_prod++;
 	meta->gso_size = 0;
 	meta->size = 0;
-	meta->id = req.id;
+	meta->id = req->id;
 
 	npo->copy_off = 0;
-	npo->copy_gref = req.gref;
+	npo->copy_gref = req->gref;
 
 	return meta;
 }
@@ -589,7 +582,7 @@ static int netbk_gop_skb(struct sk_buff *skb,
 	struct xenvif *vif = netdev_priv(skb->dev);
 	int nr_frags = skb_shinfo(skb)->nr_frags;
 	int i;
-	struct xen_netif_rx_request req;
+	struct xen_netif_rx_request *req;
 	struct netbk_rx_meta *meta;
 	unsigned char *data;
 	int head = 1;
@@ -599,14 +592,14 @@ static int netbk_gop_skb(struct sk_buff *skb,
 
 	/* Set up a GSO prefix descriptor, if necessary */
 	if (skb_shinfo(skb)->gso_size && vif->gso_prefix) {
-		RING_COPY_REQUEST(&vif->rx, vif->rx.req_cons++, &req);
+		req = RING_GET_REQUEST(&vif->rx, vif->rx.req_cons++);
 		meta = npo->meta + npo->meta_prod++;
 		meta->gso_size = skb_shinfo(skb)->gso_size;
 		meta->size = 0;
-		meta->id = req.id;
+		meta->id = req->id;
 	}
 
-	RING_COPY_REQUEST(&vif->rx, vif->rx.req_cons++, &req);
+	req = RING_GET_REQUEST(&vif->rx, vif->rx.req_cons++);
 	meta = npo->meta + npo->meta_prod++;
 
 	if (!vif->gso_prefix)
@@ -615,9 +608,9 @@ static int netbk_gop_skb(struct sk_buff *skb,
 		meta->gso_size = 0;
 
 	meta->size = 0;
-	meta->id = req.id;
+	meta->id = req->id;
 	npo->copy_off = 0;
-	npo->copy_gref = req.gref;
+	npo->copy_gref = req->gref;
 
 	data = skb->data;
 	while (data < skb_tail_pointer(skb)) {
@@ -812,8 +805,6 @@ static void xen_netbk_rx_action(struct xen_netbk *netbk)
 					 sco->meta_slots_used);
 
 		RING_PUSH_RESPONSES_AND_CHECK_NOTIFY(&vif->rx, ret);
-		if (ret && list_empty(&vif->notify_list))
-			list_add_tail(&vif->notify_list, &notify);
 
 		xenvif_notify_tx_completion(vif);
 
@@ -823,11 +814,10 @@ static void xen_netbk_rx_action(struct xen_netbk *netbk)
 			xenvif_put(vif);
 		npo.meta_cons += sco->meta_slots_used;
 		dev_kfree_skb(skb);
-		xenvif_put_rings(vif);
 	}
 
 	list_for_each_entry_safe(vif, tmp, &notify, notify_list) {
-		notify_remote_via_irq(vif->rx_irq);
+		notify_remote_via_irq(vif->irq);
 		list_del_init(&vif->notify_list);
 		xenvif_put(vif);
 	}
@@ -937,7 +927,9 @@ static void tx_add_credit(struct xenvif *vif)
 	 * Allow a burst big enough to transmit a jumbo packet of up to 128kB.
 	 * Otherwise the interface can seize up due to insufficient credit.
 	 */
-	max_burst = max(131072UL, vif->credit_bytes);
+	max_burst = RING_GET_REQUEST(&vif->tx, vif->tx.req_cons)->size;
+	max_burst = min(max_burst, 131072UL);
+	max_burst = max(max_burst, vif->credit_bytes);
 
 	/* Take care that adding a new chunk of credit doesn't wrap to zero. */
 	max_credit = vif->remaining_credit + vif->credit_bytes;
@@ -963,7 +955,7 @@ static void netbk_tx_err(struct xenvif *vif,
 		make_tx_response(vif, txp, XEN_NETIF_RSP_ERROR);
 		if (cons == end)
 			break;
-		RING_COPY_REQUEST(&vif->tx, cons++, txp);
+		txp = RING_GET_REQUEST(&vif->tx, cons++);
 	} while (1);
 	vif->tx.req_cons = cons;
 	xen_netbk_check_rx_xenvif(vif);
@@ -1030,7 +1022,8 @@ static int netbk_count_requests(struct xenvif *vif,
 		if (drop_err)
 			txp = &dropped_tx;
 
-		RING_COPY_REQUEST(&vif->tx, cons + slots, txp);
+		memcpy(txp, RING_GET_REQUEST(&vif->tx, cons + slots),
+		       sizeof(*txp));
 
 		/* If the guest submitted a frame >= 64 KiB then
 		 * first->size overflowed and following slots will
@@ -1318,7 +1311,8 @@ static int xen_netbk_get_extras(struct xenvif *vif,
 			return -EBADR;
 		}
 
-		RING_COPY_REQUEST(&vif->tx, cons, &extra);
+		memcpy(&extra, RING_GET_REQUEST(&vif->tx, cons),
+		       sizeof(extra));
 		if (unlikely(!extra.type ||
 			     extra.type >= XEN_NETIF_EXTRA_TYPE_MAX)) {
 			vif->tx.req_cons = ++cons;
@@ -1429,8 +1423,9 @@ out:
 
 static bool tx_credit_exceeded(struct xenvif *vif, unsigned size)
 {
-	u64 now = get_jiffies_64();
-	u64 next_credit = vif->credit_window_start +
+	unsigned long now = jiffies;
+	unsigned long next_credit =
+		vif->credit_timeout.expires +
 		msecs_to_jiffies(vif->credit_usec / 1000);
 
 	/* Timer could already be pending in rare cases. */
@@ -1438,8 +1433,8 @@ static bool tx_credit_exceeded(struct xenvif *vif, unsigned size)
 		return true;
 
 	/* Passed the point where we can replenish credit? */
-	if (time_after_eq64(now, next_credit)) {
-		vif->credit_window_start = now;
+	if (time_after_eq(now, next_credit)) {
+		vif->credit_timeout.expires = now;
 		tx_add_credit(vif);
 	}
 
@@ -1451,7 +1446,6 @@ static bool tx_credit_exceeded(struct xenvif *vif, unsigned size)
 			tx_credit_callback;
 		mod_timer(&vif->credit_timeout,
 			  next_credit);
-		vif->credit_window_start = next_credit;
 
 		return true;
 	}
@@ -1508,7 +1502,7 @@ static unsigned xen_netbk_tx_build_gops(struct xen_netbk *netbk)
 
 		idx = vif->tx.req_cons;
 		rmb(); /* Ensure that we see the request before we copy it. */
-		RING_COPY_REQUEST(&vif->tx, idx, &txreq);
+		memcpy(&txreq, RING_GET_REQUEST(&vif->tx, idx), sizeof(txreq));
 
 		/* Credit-based scheduling. */
 		if (txreq.size > vif->remaining_credit &&
@@ -1803,7 +1797,7 @@ static void make_tx_response(struct xenvif *vif,
 	vif->tx.rsp_prod_pvt = ++i;
 	RING_PUSH_RESPONSES_AND_CHECK_NOTIFY(&vif->tx, notify);
 	if (notify)
-		notify_remote_via_irq(vif->tx_irq);
+		notify_remote_via_irq(vif->irq);
 }
 
 static struct xen_netif_rx_response *make_rx_response(struct xenvif *vif,
@@ -1870,9 +1864,6 @@ static int xen_netbk_kthread(void *data)
 
 void xen_netbk_unmap_frontend_rings(struct xenvif *vif)
 {
-	atomic_dec(&vif->ring_refcnt);
-	wait_event(vif->waiting_to_unmap, atomic_read(&vif->ring_refcnt) == 0);
-
 	if (vif->tx.sring)
 		xenbus_unmap_ring_vfree(xenvif_to_xenbus_device(vif),
 					vif->tx.sring);
@@ -1890,8 +1881,6 @@ int xen_netbk_map_frontend_rings(struct xenvif *vif,
 	struct xen_netif_rx_sring *rxs;
 
 	int err = -ENOMEM;
-
-	atomic_set(&vif->ring_refcnt, 1);
 
 	err = xenbus_map_ring_valloc(xenvif_to_xenbus_device(vif),
 				     tx_ring_ref, &addr);
@@ -1985,6 +1974,10 @@ static int __init netback_init(void)
 failed_init:
 	while (--group >= 0) {
 		struct xen_netbk *netbk = &xen_netbk[group];
+		for (i = 0; i < MAX_PENDING_REQS; i++) {
+			if (netbk->mmap_pages[i])
+				__free_page(netbk->mmap_pages[i]);
+		}
 		del_timer(&netbk->net_timer);
 		kthread_stop(netbk->task);
 	}
@@ -1994,26 +1987,6 @@ failed_init:
 }
 
 module_init(netback_init);
-
-static void __exit netback_fini(void)
-{
-	int i, j;
-
-	xenvif_xenbus_fini();
-
-	for (i = 0; i < xen_netbk_group_nr; i++) {
-		struct xen_netbk *netbk = &xen_netbk[i];
-		del_timer_sync(&netbk->net_timer);
-		kthread_stop(netbk->task);
-		for (j = 0; j < MAX_PENDING_REQS; j++) {
-			if (netbk->mmap_pages[j])
-				__free_page(netbk->mmap_pages[j]);
-		}
-	}
-
-	vfree(xen_netbk);
-}
-module_exit(netback_fini);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_ALIAS("xen-backend:vif");

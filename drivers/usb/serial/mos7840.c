@@ -309,12 +309,15 @@ static int mos7840_set_uart_reg(struct usb_serial_port *port, __u16 reg,
 	/* For the UART control registers, the application number need
 	   to be Or'ed */
 	if (port->serial->num_ports == 4) {
-		val |= ((__u16)port->port_number + 1) << 8;
+		val |= (((__u16) port->number -
+				(__u16) (port->serial->minor)) + 1) << 8;
 	} else {
-		if (port->port_number == 0) {
-			val |= ((__u16)port->port_number + 1) << 8;
+		if (((__u16) port->number - (__u16) (port->serial->minor)) == 0) {
+			val |= (((__u16) port->number -
+			      (__u16) (port->serial->minor)) + 1) << 8;
 		} else {
-			val |= ((__u16)port->port_number + 2) << 8;
+			val |= (((__u16) port->number -
+			      (__u16) (port->serial->minor)) + 2) << 8;
 		}
 	}
 	dev_dbg(&port->dev, "%s application number is %x\n", __func__, val);
@@ -343,12 +346,16 @@ static int mos7840_get_uart_reg(struct usb_serial_port *port, __u16 reg,
 
 	/* Wval  is same as application number */
 	if (port->serial->num_ports == 4) {
-		Wval = ((__u16)port->port_number + 1) << 8;
+		Wval =
+		    (((__u16) port->number - (__u16) (port->serial->minor)) +
+		     1) << 8;
 	} else {
-		if (port->port_number == 0) {
-			Wval = ((__u16)port->port_number + 1) << 8;
+		if (((__u16) port->number - (__u16) (port->serial->minor)) == 0) {
+			Wval = (((__u16) port->number -
+			      (__u16) (port->serial->minor)) + 1) << 8;
 		} else {
-			Wval = ((__u16)port->port_number + 2) << 8;
+			Wval = (((__u16) port->number -
+			      (__u16) (port->serial->minor)) + 2) << 8;
 		}
 	}
 	dev_dbg(&port->dev, "%s application number is %x\n", __func__, Wval);
@@ -650,7 +657,9 @@ static void mos7840_interrupt_callback(struct urb *urb)
 
 	for (i = 0; i < serial->num_ports; i++) {
 		mos7840_port = mos7840_get_port_private(serial->port[i]);
-		wval = ((__u16)serial->port[i]->port_number + 1) << 8;
+		wval =
+		    (((__u16) serial->port[i]->number -
+		      (__u16) (serial->minor)) + 1) << 8;
 		if (mos7840_port->open) {
 			if (sp[i] & 0x01) {
 				dev_dbg(&urb->dev->dev, "SP%d No Interrupt !!!\n", i);
@@ -1032,7 +1041,6 @@ static int mos7840_open(struct tty_struct *tty, struct usb_serial_port *port)
 	 * (can't set it up in mos7840_startup as the structures *
 	 * were not set up at that time.)                        */
 	if (port0->open_ports == 1) {
-		/* FIXME: Buffer never NULL, so URB is not submitted. */
 		if (serial->port[0]->interrupt_in_buffer == NULL) {
 			/* set up interrupt urb */
 			usb_fill_int_urb(serial->port[0]->interrupt_in_urb,
@@ -1065,8 +1073,8 @@ static int mos7840_open(struct tty_struct *tty, struct usb_serial_port *port)
 	 * (can't set it up in mos7840_startup as the  *
 	 * structures were not set up at that time.)   */
 
-	dev_dbg(&port->dev, "port number is %d\n", port->port_number);
-	dev_dbg(&port->dev, "minor number is %d\n", port->minor);
+	dev_dbg(&port->dev, "port number is %d\n", port->number);
+	dev_dbg(&port->dev, "serial number is %d\n", port->serial->minor);
 	dev_dbg(&port->dev, "Bulkin endpoint is %d\n", port->bulk_in_endpointAddress);
 	dev_dbg(&port->dev, "BulkOut endpoint is %d\n", port->bulk_out_endpointAddress);
 	dev_dbg(&port->dev, "Interrupt endpoint is %d\n", port->interrupt_in_endpointAddress);
@@ -1074,7 +1082,9 @@ static int mos7840_open(struct tty_struct *tty, struct usb_serial_port *port)
 	mos7840_port->read_urb = port->read_urb;
 
 	/* set up our bulk in urb */
-	if ((serial->num_ports == 2) && (((__u16)port->port_number % 2) != 0)) {
+	if ((serial->num_ports == 2)
+		&& ((((__u16)port->number -
+			(__u16)(port->serial->minor)) % 2) != 0)) {
 		usb_fill_bulk_urb(mos7840_port->read_urb,
 			serial->dev,
 			usb_rcvbulkpipe(serial->dev,
@@ -1206,7 +1216,7 @@ static void mos7840_close(struct usb_serial_port *port)
 	mos7840_port->read_urb_busy = false;
 
 	port0->open_ports--;
-	dev_dbg(&port->dev, "%s in close%d\n", __func__, port0->open_ports);
+	dev_dbg(&port->dev, "%s in close%d:in port%d\n", __func__, port0->open_ports, port->number);
 	if (port0->open_ports == 0) {
 		if (serial->port[0]->interrupt_in_urb) {
 			dev_dbg(&port->dev, "Shutdown interrupt_in_urb\n");
@@ -1428,8 +1438,8 @@ static int mos7840_write(struct tty_struct *tty, struct usb_serial_port *port,
 	}
 
 	if (urb->transfer_buffer == NULL) {
-		urb->transfer_buffer = kmalloc(URB_TRANSFER_BUFFER_SIZE,
-					       GFP_ATOMIC);
+		urb->transfer_buffer =
+		    kmalloc(URB_TRANSFER_BUFFER_SIZE, GFP_KERNEL);
 
 		if (urb->transfer_buffer == NULL) {
 			dev_err_console(port, "%s no more kernel memory...\n",
@@ -1442,7 +1452,9 @@ static int mos7840_write(struct tty_struct *tty, struct usb_serial_port *port,
 	memcpy(urb->transfer_buffer, current_position, transfer_size);
 
 	/* fill urb with data and submit  */
-	if ((serial->num_ports == 2) && (((__u16)port->port_number % 2) != 0)) {
+	if ((serial->num_ports == 2)
+		&& ((((__u16)port->number -
+			(__u16)(port->serial->minor)) % 2) != 0)) {
 		usb_fill_bulk_urb(urb,
 			serial->dev,
 			usb_sndbulkpipe(serial->dev,
@@ -1581,11 +1593,7 @@ static int mos7840_tiocmget(struct tty_struct *tty)
 		return -ENODEV;
 
 	status = mos7840_get_uart_reg(port, MODEM_STATUS_REGISTER, &msr);
-	if (status != 1)
-		return -EIO;
 	status = mos7840_get_uart_reg(port, MODEM_CONTROL_REGISTER, &mcr);
-	if (status != 1)
-		return -EIO;
 	result = ((mcr & MCR_DTR) ? TIOCM_DTR : 0)
 	    | ((mcr & MCR_RTS) ? TIOCM_RTS : 0)
 	    | ((mcr & MCR_LOOPBACK) ? TIOCM_LOOP : 0)
@@ -1736,9 +1744,10 @@ static int mos7840_send_cmd_write_baud_rate(struct moschip_port *mos7840_port,
 	if (mos7840_serial_paranoia_check(port->serial, __func__))
 		return -1;
 
-	number = mos7840_port->port->port_number;
+	number = mos7840_port->port->number - mos7840_port->port->serial->minor;
 
-	dev_dbg(&port->dev, "%s - baud = %d\n", __func__, baudRate);
+	dev_dbg(&port->dev, "%s - port = %d, baud = %d\n", __func__,
+		mos7840_port->port->number, baudRate);
 	/* reset clk_uart_sel in spregOffset */
 	if (baudRate > 115200) {
 #ifdef HW_flow_control
@@ -1862,25 +1871,25 @@ static void mos7840_change_port_settings(struct tty_struct *tty,
 	iflag = tty->termios.c_iflag;
 
 	/* Change the number of bits */
-	switch (cflag & CSIZE) {
-	case CS5:
-		lData = LCR_BITS_5;
-		break;
+	if (cflag & CSIZE) {
+		switch (cflag & CSIZE) {
+		case CS5:
+			lData = LCR_BITS_5;
+			break;
 
-	case CS6:
-		lData = LCR_BITS_6;
-		break;
+		case CS6:
+			lData = LCR_BITS_6;
+			break;
 
-	case CS7:
-		lData = LCR_BITS_7;
-		break;
-
-	default:
-	case CS8:
-		lData = LCR_BITS_8;
-		break;
+		case CS7:
+			lData = LCR_BITS_7;
+			break;
+		default:
+		case CS8:
+			lData = LCR_BITS_8;
+			break;
+		}
 	}
-
 	/* Change the Parity bit */
 	if (cflag & PARENB) {
 		if (cflag & PARODD) {
@@ -2019,6 +2028,7 @@ static void mos7840_set_termios(struct tty_struct *tty,
 		tty->termios.c_cflag, RELEVANT_IFLAG(tty->termios.c_iflag));
 	dev_dbg(&port->dev, "%s - old clfag %08x old iflag %08x\n", __func__,
 		old_termios->c_cflag, RELEVANT_IFLAG(old_termios->c_iflag));
+	dev_dbg(&port->dev, "%s - port %d\n", __func__, port->number);
 
 	/* change the port settings to the new ones specified */
 
@@ -2085,8 +2095,8 @@ static int mos7840_get_serial_info(struct moschip_port *mos7840_port,
 	memset(&tmp, 0, sizeof(tmp));
 
 	tmp.type = PORT_16550A;
-	tmp.line = mos7840_port->port->minor;
-	tmp.port = mos7840_port->port->port_number;
+	tmp.line = mos7840_port->port->serial->minor;
+	tmp.port = mos7840_port->port->number;
 	tmp.irq = 0;
 	tmp.flags = ASYNC_SKIP_TEST | ASYNC_AUTO_IRQ;
 	tmp.xmit_fifo_size = NUM_URBS * URB_TRANSFER_BUFFER_SIZE;
@@ -2241,18 +2251,6 @@ static int mos7840_calc_num_ports(struct usb_serial *serial)
 	return mos7840_num_ports;
 }
 
-static int mos7840_attach(struct usb_serial *serial)
-{
-	if (serial->num_bulk_in < serial->num_ports ||
-			serial->num_bulk_out < serial->num_ports ||
-			serial->num_interrupt_in < 1) {
-		dev_err(&serial->interface->dev, "missing endpoints\n");
-		return -ENODEV;
-	}
-
-	return 0;
-}
-
 static int mos7840_port_probe(struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
@@ -2265,7 +2263,7 @@ static int mos7840_port_probe(struct usb_serial_port *port)
 	/* we set up the pointers to the endpoints in the mos7840_open *
 	 * function, as the structures aren't created yet.             */
 
-	pnum = port->port_number;
+	pnum = port->number - serial->minor;
 
 	dev_dbg(&port->dev, "mos7840_startup: configuring port %d\n", pnum);
 	mos7840_port = kzalloc(sizeof(struct moschip_port), GFP_KERNEL);
@@ -2286,8 +2284,10 @@ static int mos7840_port_probe(struct usb_serial_port *port)
 	 * usb-serial.c:get_free_serial() and cannot therefore be used
 	 * to index device instances */
 	mos7840_port->port_num = pnum + 1;
-	dev_dbg(&port->dev, "port->minor = %d\n", port->minor);
+	dev_dbg(&port->dev, "port->number = %d\n", port->number);
+	dev_dbg(&port->dev, "port->serial->minor = %d\n", port->serial->minor);
 	dev_dbg(&port->dev, "mos7840_port->port_num = %d\n", mos7840_port->port_num);
+	dev_dbg(&port->dev, "serial->minor = %d\n", serial->minor);
 
 	if (mos7840_port->port_num == 1) {
 		mos7840_port->SpRegOffset = 0x0;
@@ -2533,7 +2533,6 @@ static struct usb_serial_driver moschip7840_4port_device = {
 	.tiocmset = mos7840_tiocmset,
 	.tiocmiwait = usb_serial_generic_tiocmiwait,
 	.get_icount = usb_serial_generic_get_icount,
-	.attach = mos7840_attach,
 	.port_probe = mos7840_port_probe,
 	.port_remove = mos7840_port_remove,
 	.read_bulk_callback = mos7840_bulk_in_callback,

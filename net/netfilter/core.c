@@ -304,26 +304,17 @@ static struct pernet_operations netfilter_net_ops = {
 	.exit = netfilter_net_exit,
 };
 
-int __init netfilter_init(void)
+void __init netfilter_init(void)
 {
-	int i, h, ret;
-
+	int i, h;
 	for (i = 0; i < ARRAY_SIZE(nf_hooks); i++) {
 		for (h = 0; h < NF_MAX_HOOKS; h++)
 			INIT_LIST_HEAD(&nf_hooks[i][h]);
 	}
 
-	ret = register_pernet_subsys(&netfilter_net_ops);
-	if (ret < 0)
-		goto err;
+	if (register_pernet_subsys(&netfilter_net_ops) < 0)
+		panic("cannot create netfilter proc entry");
 
-	ret = netfilter_log_init();
-	if (ret < 0)
-		goto err_pernet;
-
-	return 0;
-err_pernet:
-	unregister_pernet_subsys(&netfilter_net_ops);
-err:
-	return ret;
+	if (netfilter_log_init() < 0)
+		panic("cannot initialize nf_log");
 }

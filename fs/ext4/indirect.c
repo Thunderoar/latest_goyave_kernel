@@ -390,13 +390,7 @@ static int ext4_alloc_branch(handle_t *handle, struct inode *inode,
 	return 0;
 failed:
 	for (; i >= 0; i--) {
-		/*
-		 * We want to ext4_forget() only freshly allocated indirect
-		 * blocks.  Buffer for new_blocks[i-1] is at branch[i].bh and
-		 * buffer at branch[0].bh is indirect block / inode already
-		 * existing before ext4_alloc_branch() was called.
-		 */
-		if (i > 0 && i != indirect_blks && branch[i].bh)
+		if (i != indirect_blks && branch[i].bh)
 			ext4_forget(handle, 1, inode, branch[i].bh,
 				    branch[i].bh->b_blocknr);
 		ext4_free_blocks(handle, inode, NULL, new_blocks[i],
@@ -577,7 +571,7 @@ int ext4_ind_map_blocks(handle_t *handle, struct inode *inode,
 				       EXT4_FEATURE_RO_COMPAT_BIGALLOC)) {
 		EXT4_ERROR_INODE(inode, "Can't allocate blocks for "
 				 "non-extent mapped inodes with bigalloc");
-		return -EUCLEAN;
+		return -ENOSPC;
 	}
 
 	goal = ext4_find_goal(inode, map->m_lblk, partial);
@@ -681,6 +675,11 @@ ssize_t ext4_ind_direct_IO(int rw, struct kiocb *iocb,
 
 retry:
 	if (rw == READ && ext4_should_dioread_nolock(inode)) {
+		if (unlikely(atomic_read(&EXT4_I(inode)->i_unwritten))) {
+			mutex_lock(&inode->i_mutex);
+			ext4_flush_unwritten_io(inode);
+			mutex_unlock(&inode->i_mutex);
+		}
 		/*
 		 * Nolock dioread optimization may be dynamically disabled
 		 * via ext4_inode_block_unlocked_dio(). Check inode's state
@@ -780,18 +779,27 @@ int ext4_ind_calc_metadata_amount(struct inode *inode, sector_t lblock)
 	return (blk_bits / EXT4_ADDR_PER_BLOCK_BITS(inode->i_sb)) + 1;
 }
 
-/*
- * Calculate number of indirect blocks touched by mapping @nrblocks logically
- * contiguous blocks
- */
-int ext4_ind_trans_blocks(struct inode *inode, int nrblocks)
+int ext4_ind_trans_blocks(struct inode *inode, int nrblocks, int chunk)
 {
+	int indirects;
+
+	/* if nrblocks are contiguous */
+	if (chunk) {
+		/*
+		 * With N contiguous data blocks, we need at most
+		 * N/EXT4_ADDR_PER_BLOCK(inode->i_sb) + 1 indirect blocks,
+		 * 2 dindirect blocks, and 1 tindirect block
+		 */
+		return DIV_ROUND_UP(nrblocks,
+				    EXT4_ADDR_PER_BLOCK(inode->i_sb)) + 4;
+	}
 	/*
-	 * With N contiguous data blocks, we need at most
-	 * N/EXT4_ADDR_PER_BLOCK(inode->i_sb) + 1 indirect blocks,
-	 * 2 dindirect blocks, and 1 tindirect block
+	 * if nrblocks are not contiguous, worse case, each block touch
+	 * a indirect block, and each indirect block touch a double indirect
+	 * block, plus a triple indirect block
 	 */
-	return DIV_ROUND_UP(nrblocks, EXT4_ADDR_PER_BLOCK(inode->i_sb)) + 4;
+	indirects = nrblocks * 2 + 1;
+	return indirects;
 }
 
 /*
@@ -932,13 +940,11 @@ static int ext4_clear_blocks(handle_t *handle, struct inode *inode,
 			     __le32 *last)
 {
 	__le32 *p;
-	int	flags = EXT4_FREE_BLOCKS_VALIDATED;
+	int	flags = EXT4_FREE_BLOCKS_FORGET | EXT4_FREE_BLOCKS_VALIDATED;
 	int	err;
 
 	if (S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode))
-		flags |= EXT4_FREE_BLOCKS_FORGET | EXT4_FREE_BLOCKS_METADATA;
-	else if (ext4_should_journal_data(inode))
-		flags |= EXT4_FREE_BLOCKS_FORGET;
+		flags |= EXT4_FREE_BLOCKS_METADATA;
 
 	if (!ext4_data_block_valid(EXT4_SB(inode->i_sb), block_to_free,
 				   count)) {
@@ -1319,24 +1325,16 @@ static int free_hole_blocks(handle_t *handle, struct inode *inode,
 		blk = *i_data;
 		if (level > 0) {
 			ext4_lblk_t first2;
-			ext4_lblk_t count2;
-
 			bh = sb_bread(inode->i_sb, le32_to_cpu(blk));
 			if (!bh) {
 				EXT4_ERROR_INODE_BLOCK(inode, le32_to_cpu(blk),
 						       "Read failure");
 				return -EIO;
 			}
-			if (first > offset) {
-				first2 = first - offset;
-				count2 = count;
-			} else {
-				first2 = 0;
-				count2 = count - (offset - first);
-			}
+			first2 = (first > offset) ? first - offset : 0;
 			ret = free_hole_blocks(handle, inode, bh,
 					       (__le32 *)bh->b_data, level - 1,
-					       first2, count2,
+					       first2, count - offset,
 					       inode->i_sb->s_blocksize >> 2);
 			if (ret) {
 				brelse(bh);

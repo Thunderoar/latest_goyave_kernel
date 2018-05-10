@@ -1039,10 +1039,6 @@ static pg_data_t __ref *hotadd_new_pgdat(int nid, u64 start)
 			return NULL;
 
 		arch_refresh_nodedata(nid, pgdat);
-	} else {
-		/* Reset the nr_zones and classzone_idx to 0 before reuse */
-		pgdat->nr_zones = 0;
-		pgdat->classzone_idx = 0;
 	}
 
 	/* we can use NODE_DATA(nid) from here */
@@ -1205,40 +1201,29 @@ int is_mem_section_removable(unsigned long start_pfn, unsigned long nr_pages)
 }
 
 /*
- * Confirm all pages in a range [start, end) belong to the same zone.
+ * Confirm all pages in a range [start, end) is belongs to the same zone.
  */
 static int test_pages_in_a_zone(unsigned long start_pfn, unsigned long end_pfn)
 {
-	unsigned long pfn, sec_end_pfn;
+	unsigned long pfn;
 	struct zone *zone = NULL;
 	struct page *page;
 	int i;
-	for (pfn = start_pfn, sec_end_pfn = SECTION_ALIGN_UP(start_pfn + 1);
+	for (pfn = start_pfn;
 	     pfn < end_pfn;
-	     pfn = sec_end_pfn, sec_end_pfn += PAGES_PER_SECTION) {
-		/* Make sure the memory section is present first */
-		if (!present_section_nr(pfn_to_section_nr(pfn)))
+	     pfn += MAX_ORDER_NR_PAGES) {
+		i = 0;
+		/* This is just a CONFIG_HOLES_IN_ZONE check.*/
+		while ((i < MAX_ORDER_NR_PAGES) && !pfn_valid_within(pfn + i))
+			i++;
+		if (i == MAX_ORDER_NR_PAGES)
 			continue;
-		for (; pfn < sec_end_pfn && pfn < end_pfn;
-		     pfn += MAX_ORDER_NR_PAGES) {
-			i = 0;
-			/* This is just a CONFIG_HOLES_IN_ZONE check.*/
-			while ((i < MAX_ORDER_NR_PAGES) &&
-				!pfn_valid_within(pfn + i))
-				i++;
-			if (i == MAX_ORDER_NR_PAGES)
-				continue;
-			page = pfn_to_page(pfn + i);
-			if (zone && page_zone(page) != zone)
-				return 0;
-			zone = page_zone(page);
-		}
+		page = pfn_to_page(pfn + i);
+		if (zone && page_zone(page) != zone)
+			return 0;
+		zone = page_zone(page);
 	}
-
-	if (zone)
-		return 1;
-	else
-		return 0;
+	return 1;
 }
 
 /*
@@ -1636,7 +1621,6 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages)
 {
 	return __offline_pages(start_pfn, start_pfn + nr_pages, 120 * HZ);
 }
-#endif /* CONFIG_MEMORY_HOTREMOVE */
 
 /**
  * walk_memory_range - walks through all mem sections in [start_pfn, end_pfn)
@@ -1650,7 +1634,7 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages)
  *
  * Returns the return value of func.
  */
-int walk_memory_range(unsigned long start_pfn, unsigned long end_pfn,
+static int walk_memory_range(unsigned long start_pfn, unsigned long end_pfn,
 		void *arg, int (*func)(struct memory_block *, void *))
 {
 	struct memory_block *mem = NULL;
@@ -1687,7 +1671,24 @@ int walk_memory_range(unsigned long start_pfn, unsigned long end_pfn,
 	return 0;
 }
 
-#ifdef CONFIG_MEMORY_HOTREMOVE
+/**
+ * offline_memory_block_cb - callback function for offlining memory block
+ * @mem: the memory block to be offlined
+ * @arg: buffer to hold error msg
+ *
+ * Always return 0, and put the error msg in arg if any.
+ */
+static int offline_memory_block_cb(struct memory_block *mem, void *arg)
+{
+	int *ret = arg;
+	int error = offline_memory_block(mem);
+
+	if (error != 0 && *ret == 0)
+		*ret = error;
+
+	return 0;
+}
+
 static int is_memblock_offlined_cb(struct memory_block *mem, void *arg)
 {
 	int ret = !is_memblock_offlined(mem);
@@ -1798,30 +1799,69 @@ void try_offline_node(int nid)
 		 * wait_table may be allocated from boot memory,
 		 * here only free if it's allocated by vmalloc.
 		 */
-		if (is_vmalloc_addr(zone->wait_table)) {
+		if (is_vmalloc_addr(zone->wait_table))
 			vfree(zone->wait_table);
-			zone->wait_table = NULL;
-		}
 	}
+
+	/*
+	 * Since there is no way to guarentee the address of pgdat/zone is not
+	 * on stack of any kernel threads or used by other kernel objects
+	 * without reference counting or other symchronizing method, do not
+	 * reset node_data and free pgdat here. Just reset it to 0 and reuse
+	 * the memory when the node is online again.
+	 */
+	memset(pgdat, 0, sizeof(*pgdat));
 }
 EXPORT_SYMBOL(try_offline_node);
 
-void __ref remove_memory(int nid, u64 start, u64 size)
+int __ref remove_memory(int nid, u64 start, u64 size)
 {
-	int ret;
+	unsigned long start_pfn, end_pfn;
+	int ret = 0;
+	int retry = 1;
+
+	start_pfn = PFN_DOWN(start);
+	end_pfn = PFN_UP(start + size - 1);
+
+	/*
+	 * When CONFIG_MEMCG is on, one memory block may be used by other
+	 * blocks to store page cgroup when onlining pages. But we don't know
+	 * in what order pages are onlined. So we iterate twice to offline
+	 * memory:
+	 * 1st iterate: offline every non primary memory block.
+	 * 2nd iterate: offline primary (i.e. first added) memory block.
+	 */
+repeat:
+	walk_memory_range(start_pfn, end_pfn, &ret,
+			  offline_memory_block_cb);
+	if (ret) {
+		if (!retry)
+			return ret;
+
+		retry = 0;
+		ret = 0;
+		goto repeat;
+	}
 
 	lock_memory_hotplug();
 
 	/*
-	 * All memory blocks must be offlined before removing memory.  Check
-	 * whether all memory blocks in question are offline and trigger a BUG()
-	 * if this is not the case.
+	 * we have offlined all memory blocks like this:
+	 *   1. lock memory hotplug
+	 *   2. offline a memory block
+	 *   3. unlock memory hotplug
+	 *
+	 * repeat step1-3 to offline the memory block. All memory blocks
+	 * must be offlined before removing memory. But we don't hold the
+	 * lock in the whole operation. So we should check whether all
+	 * memory blocks are offlined.
 	 */
-	ret = walk_memory_range(PFN_DOWN(start), PFN_UP(start + size - 1), NULL,
+
+	ret = walk_memory_range(start_pfn, end_pfn, NULL,
 				is_memblock_offlined_cb);
 	if (ret) {
 		unlock_memory_hotplug();
-		BUG();
+		return ret;
 	}
 
 	/* remove memmap entry */
@@ -1832,6 +1872,17 @@ void __ref remove_memory(int nid, u64 start, u64 size)
 	try_offline_node(nid);
 
 	unlock_memory_hotplug();
+
+	return 0;
 }
-EXPORT_SYMBOL_GPL(remove_memory);
+#else
+int offline_pages(unsigned long start_pfn, unsigned long nr_pages)
+{
+	return -EINVAL;
+}
+int remove_memory(int nid, u64 start, u64 size)
+{
+	return -EINVAL;
+}
 #endif /* CONFIG_MEMORY_HOTREMOVE */
+EXPORT_SYMBOL_GPL(remove_memory);

@@ -14,6 +14,11 @@
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
 */
 
 #undef DEBUG
@@ -531,23 +536,6 @@ static bool comedi_is_subdevice_idle(struct comedi_subdevice *s)
 	return (runflags & (SRF_ERROR | SRF_RUNNING)) ? false : true;
 }
 
-/**
- * comedi_alloc_spriv() - Allocate memory for the subdevice private data.
- * @s: comedi_subdevice struct
- * @size: size of the memory to allocate
- *
- * This also sets the subdevice runflags to allow the core to automatically
- * free the private data during the detach.
- */
-void *comedi_alloc_spriv(struct comedi_subdevice *s, size_t size)
-{
-	s->private = kzalloc(size, GFP_KERNEL);
-	if (s->private)
-		comedi_set_subdevice_runflags(s, ~0, SRF_FREE_SPRIV);
-	return s->private;
-}
-EXPORT_SYMBOL_GPL(comedi_alloc_spriv);
-
 /*
    This function restores a subdevice to an idle state.
  */
@@ -677,7 +665,7 @@ static int do_bufconfig_ioctl(struct comedi_device *dev,
 	if (copy_from_user(&bc, arg, sizeof(bc)))
 		return -EFAULT;
 
-	if (bc.subdevice >= dev->n_subdevices)
+	if (bc.subdevice >= dev->n_subdevices || bc.subdevice < 0)
 		return -EINVAL;
 
 	s = &dev->subdevices[bc.subdevice];
@@ -930,7 +918,7 @@ static int do_bufinfo_ioctl(struct comedi_device *dev,
 	if (copy_from_user(&bi, arg, sizeof(bi)))
 		return -EFAULT;
 
-	if (bi.subdevice >= dev->n_subdevices)
+	if (bi.subdevice >= dev->n_subdevices || bi.subdevice < 0)
 		return -EINVAL;
 
 	s = &dev->subdevices[bi.subdevice];
@@ -2569,13 +2557,15 @@ static int __init comedi_init(void)
 
 	comedi_class->dev_attrs = comedi_dev_attrs;
 
+	/* XXX requires /proc interface */
+	comedi_proc_init();
+
 	/* create devices files for legacy/manual use */
 	for (i = 0; i < comedi_num_legacy_minors; i++) {
 		struct comedi_device *dev;
 		dev = comedi_alloc_board_minor(NULL);
 		if (IS_ERR(dev)) {
 			comedi_cleanup_board_minors();
-			class_destroy(comedi_class);
 			cdev_del(&comedi_cdev);
 			unregister_chrdev_region(MKDEV(COMEDI_MAJOR, 0),
 						 COMEDI_NUM_MINORS);
@@ -2585,9 +2575,6 @@ static int __init comedi_init(void)
 			mutex_unlock(&dev->mutex);
 		}
 	}
-
-	/* XXX requires /proc interface */
-	comedi_proc_init();
 
 	return 0;
 }

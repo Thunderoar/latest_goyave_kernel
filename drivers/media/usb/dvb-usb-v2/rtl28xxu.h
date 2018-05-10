@@ -97,12 +97,6 @@ struct rtl28xxu_reg_val {
 	u8 val;
 };
 
-struct rtl28xxu_reg_val_mask {
-	u16 reg;
-	u8 val;
-	u8 mask;
-};
-
 /*
  * memory map
  *

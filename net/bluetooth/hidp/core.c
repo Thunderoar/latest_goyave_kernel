@@ -76,19 +76,25 @@ static void hidp_copy_session(struct hidp_session *session, struct hidp_conninfo
 	ci->flags = session->flags;
 	ci->state = BT_CONNECTED;
 
+	ci->vendor  = 0x0000;
+	ci->product = 0x0000;
+	ci->version = 0x0000;
+
 	if (session->input) {
 		ci->vendor  = session->input->id.vendor;
 		ci->product = session->input->id.product;
 		ci->version = session->input->id.version;
 		if (session->input->name)
-			strlcpy(ci->name, session->input->name, 128);
+			strncpy(ci->name, session->input->name, 128);
 		else
-			strlcpy(ci->name, "HID Boot Device", 128);
-	} else if (session->hid) {
+			strncpy(ci->name, "HID Boot Device", 128);
+	}
+
+	if (session->hid) {
 		ci->vendor  = session->hid->vendor;
 		ci->product = session->hid->product;
 		ci->version = session->hid->version;
-		strlcpy(ci->name, session->hid->name, 128);
+		strncpy(ci->name, session->hid->name, 128);
 	}
 }
 
@@ -389,20 +395,6 @@ err:
 static void hidp_idle_timeout(unsigned long arg)
 {
 	struct hidp_session *session = (struct hidp_session *) arg;
-
-	/* The HIDP user-space API only contains calls to add and remove
-	 * devices. There is no way to forward events of any kind. Therefore,
-	 * we have to forcefully disconnect a device on idle-timeouts. This is
-	 * unfortunate and weird API design, but it is spec-compliant and
-	 * required for backwards-compatibility. Hence, on idle-timeout, we
-	 * signal driver-detach events, so poll() will be woken up with an
-	 * error-condition on both sockets.
-	 */
-
-	session->intr_sock->sk->sk_err = EUNATCH;
-	session->ctrl_sock->sk->sk_err = EUNATCH;
-	wake_up_interruptible(sk_sleep(session->intr_sock->sk));
-	wake_up_interruptible(sk_sleep(session->ctrl_sock->sk));
 
 	hidp_session_terminate(session);
 }
@@ -864,29 +856,6 @@ static void hidp_session_dev_del(struct hidp_session *session)
 }
 
 /*
- * Asynchronous device registration
- * HID device drivers might want to perform I/O during initialization to
- * detect device types. Therefore, call device registration in a separate
- * worker so the HIDP thread can schedule I/O operations.
- * Note that this must be called after the worker thread was initialized
- * successfully. This will then add the devices and increase session state
- * on success, otherwise it will terminate the session thread.
- */
-static void hidp_session_dev_work(struct work_struct *work)
-{
-	struct hidp_session *session = container_of(work,
-						    struct hidp_session,
-						    dev_init);
-	int ret;
-
-	ret = hidp_session_dev_add(session);
-	if (!ret)
-		atomic_inc(&session->state);
-	else
-		hidp_session_terminate(session);
-}
-
-/*
  * Create new session object
  * Allocate session object, initialize static fields, copy input data into the
  * object and take a reference to all sub-objects.
@@ -933,7 +902,6 @@ static int hidp_session_new(struct hidp_session **out, const bdaddr_t *bdaddr,
 	session->idle_to = req->idle_to;
 
 	/* device management */
-	INIT_WORK(&session->dev_init, hidp_session_dev_work);
 	setup_timer(&session->timer, hidp_idle_timeout,
 		    (unsigned long)session);
 
@@ -1072,8 +1040,8 @@ static void hidp_session_terminate(struct hidp_session *session)
  * Probe HIDP session
  * This is called from the l2cap_conn core when our l2cap_user object is bound
  * to the hci-connection. We get the session via the \user object and can now
- * start the session thread, link it into the global session list and
- * schedule HID/input device registration.
+ * start the session thread, register the HID/input devices and link it into
+ * the global session list.
  * The global session-list owns its own reference to the session object so you
  * can drop your own reference after registering the l2cap_user object.
  */
@@ -1095,30 +1063,21 @@ static int hidp_session_probe(struct l2cap_conn *conn,
 		goto out_unlock;
 	}
 
-	if (session->input) {
-		ret = hidp_session_dev_add(session);
-		if (ret)
-			goto out_unlock;
-	}
-
 	ret = hidp_session_start_sync(session);
 	if (ret)
-		goto out_del;
+		goto out_unlock;
 
-	/* HID device registration is async to allow I/O during probe */
-	if (session->input)
-		atomic_inc(&session->state);
-	else
-		schedule_work(&session->dev_init);
+	ret = hidp_session_dev_add(session);
+	if (ret)
+		goto out_stop;
 
 	hidp_session_get(session);
 	list_add(&session->list, &hidp_session_list);
 	ret = 0;
 	goto out_unlock;
 
-out_del:
-	if (session->input)
-		hidp_session_dev_del(session);
+out_stop:
+	hidp_session_terminate(session);
 out_unlock:
 	up_write(&hidp_session_sem);
 	return ret;
@@ -1148,12 +1107,7 @@ static void hidp_session_remove(struct l2cap_conn *conn,
 	down_write(&hidp_session_sem);
 
 	hidp_session_terminate(session);
-
-	cancel_work_sync(&session->dev_init);
-	if (session->input ||
-	    atomic_read(&session->state) > HIDP_SESSION_PREPARING)
-		hidp_session_dev_del(session);
-
+	hidp_session_dev_del(session);
 	list_del(&session->list);
 
 	up_write(&hidp_session_sem);

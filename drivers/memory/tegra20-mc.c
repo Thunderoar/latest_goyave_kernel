@@ -193,11 +193,8 @@ static irqreturn_t tegra20_mc_isr(int irq, void *data)
 	mask &= stat;
 	if (!mask)
 		return IRQ_NONE;
-	while ((bit = ffs(mask)) != 0) {
+	while ((bit = ffs(mask)) != 0)
 		tegra20_mc_decode(mc, bit - 1);
-		mask &= ~BIT(bit - 1);
-	}
-
 	mc_writel(mc, stat, MC_INTSTATUS);
 	return IRQ_HANDLED;
 }

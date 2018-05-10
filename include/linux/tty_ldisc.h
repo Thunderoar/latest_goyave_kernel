@@ -207,9 +207,9 @@ struct tty_ldisc_ops {
 			       char *fp, int count);
 	void	(*write_wakeup)(struct tty_struct *);
 	void	(*dcd_change)(struct tty_struct *, unsigned int);
+	void	(*fasync)(struct tty_struct *tty, int on);
 	int	(*receive_buf2)(struct tty_struct *, const unsigned char *cp,
 				char *fp, int count);
-	void	(*fasync)(struct tty_struct *tty, int on);
 
 	struct  module *owner;
 

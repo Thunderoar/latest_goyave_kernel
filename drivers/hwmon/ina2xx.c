@@ -34,7 +34,6 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/jiffies.h>
-#include <linux/of.h>
 
 #include <linux/platform_data/ina2xx.h>
 
@@ -148,8 +147,7 @@ static int ina2xx_get_value(struct ina2xx_data *data, u8 reg)
 
 	switch (reg) {
 	case INA2XX_SHUNT_VOLTAGE:
-		/* signed register */
-		val = DIV_ROUND_CLOSEST((s16)data->regs[reg],
+		val = DIV_ROUND_CLOSEST(data->regs[reg],
 					data->config->shunt_div);
 		break;
 	case INA2XX_BUS_VOLTAGE:
@@ -161,8 +159,8 @@ static int ina2xx_get_value(struct ina2xx_data *data, u8 reg)
 		val = data->regs[reg] * data->config->power_lsb;
 		break;
 	case INA2XX_CURRENT:
-		/* signed register, LSB=1mA (selected), in mA */
-		val = (s16)data->regs[reg];
+		/* LSB=1mA (selected). Is in mA */
+		val = data->regs[reg];
 		break;
 	default:
 		/* programmer goofed */
@@ -223,7 +221,6 @@ static int ina2xx_probe(struct i2c_client *client,
 	struct ina2xx_data *data;
 	struct ina2xx_platform_data *pdata;
 	int ret;
-	u32 val;
 	long shunt = 10000; /* default shunt value 10mOhms */
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA))
@@ -237,9 +234,6 @@ static int ina2xx_probe(struct i2c_client *client,
 		pdata =
 		  (struct ina2xx_platform_data *)client->dev.platform_data;
 		shunt = pdata->shunt_uohms;
-	} else if (!of_property_read_u32(client->dev.of_node,
-				"shunt-resistor", &val)) {
-			shunt = val;
 	}
 
 	if (shunt <= 0)

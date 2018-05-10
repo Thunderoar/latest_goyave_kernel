@@ -191,14 +191,8 @@ static inline void flush_hugetlb_page(struct vm_area_struct *vma,
 				      unsigned long vmaddr)
 {
 }
-
-#define hugepd_shift(x) 0
-static inline pte_t *hugepte_offset(hugepd_t *hpdp, unsigned long addr,
-				    unsigned pdshift)
-{
-	return 0;
-}
 #endif /* CONFIG_HUGETLB_PAGE */
+
 
 /*
  * FSL Book3E platforms require special gpage handling - the gpages

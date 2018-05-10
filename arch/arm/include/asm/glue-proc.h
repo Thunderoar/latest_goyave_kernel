@@ -230,12 +230,12 @@
 # endif
 #endif
 
-#ifdef CONFIG_CPU_V7M
+#ifdef CONFIG_CPU_PJ4B
 # ifdef CPU_NAME
 #  undef  MULTI_CPU
 #  define MULTI_CPU
 # else
-#  define CPU_NAME cpu_v7m
+#  define CPU_NAME cpu_pj4b
 # endif
 #endif
 

@@ -391,12 +391,6 @@ mwifiex_is_network_compatible(struct mwifiex_private *priv,
 		return 0;
 	}
 
-	if (bss_desc->chan_sw_ie_present) {
-		dev_err(adapter->dev,
-			"Don't connect to AP with WLAN_EID_CHANNEL_SWITCH\n");
-		return -1;
-	}
-
 	if (mwifiex_is_bss_wapi(priv, bss_desc)) {
 		dev_dbg(adapter->dev, "info: return success for WAPI AP\n");
 		return 0;
@@ -575,9 +569,6 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 		return -1;
 	}
 
-	/* Check csa channel expiry before preparing scan list */
-	mwifiex_11h_get_csa_closed_channel(priv);
-
 	chan_tlv_out->header.type = cpu_to_le16(TLV_TYPE_CHANLIST);
 
 	/* Set the temp channel struct pointer to the start of the desired
@@ -606,11 +597,6 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 		 */
 		while (tlv_idx < max_chan_per_scan &&
 		       tmp_chan_list->chan_number && !done_early) {
-
-			if (tmp_chan_list->chan_number == priv->csa_chan) {
-				tmp_chan_list++;
-				continue;
-			}
 
 			dev_dbg(priv->adapter->dev,
 				"info: Scan: Chan(%3d), Radio(%d),"
@@ -1183,19 +1169,6 @@ int mwifiex_update_bss_desc_with_ie(struct mwifiex_adapter *adapter,
 			bss_entry->erp_flags = *(current_ptr + 2);
 			break;
 
-		case WLAN_EID_PWR_CONSTRAINT:
-			bss_entry->local_constraint = *(current_ptr + 2);
-			bss_entry->sensed_11h = true;
-			break;
-
-		case WLAN_EID_CHANNEL_SWITCH:
-			bss_entry->chan_sw_ie_present = true;
-		case WLAN_EID_PWR_CAPABILITY:
-		case WLAN_EID_TPC_REPORT:
-		case WLAN_EID_QUIET:
-			bss_entry->sensed_11h = true;
-		    break;
-
 		case WLAN_EID_EXT_SUPP_RATES:
 			/*
 			 * Only process extended supported rate
@@ -1602,9 +1575,6 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 		goto check_next_scan;
 	}
 
-	/* Check csa channel expiry before parsing scan response */
-	mwifiex_11h_get_csa_closed_channel(priv);
-
 	bytes_left = le16_to_cpu(scan_rsp->bss_descript_size);
 	dev_dbg(adapter->dev, "info: SCAN_RESP: bss_descript_size %d\n",
 		bytes_left);
@@ -1652,7 +1622,7 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 		const u8 *ie_buf;
 		size_t ie_len;
 		u16 channel = 0;
-		__le64 fw_tsf = 0;
+		u64 fw_tsf = 0;
 		u16 beacon_size = 0;
 		u32 curr_bcn_bytes;
 		u32 freq;
@@ -1757,13 +1727,6 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 			struct ieee80211_channel *chan;
 			u8 band;
 
-			/* Skip entry if on csa closed channel */
-			if (channel == priv->csa_chan) {
-				dev_dbg(adapter->dev,
-					"Dropping entry on csa closed channel\n");
-				continue;
-			}
-
 			band = BAND_G;
 			if (chan_band_tlv) {
 				chan_band =
@@ -1786,7 +1749,7 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 					      ie_buf, ie_len, rssi, GFP_KERNEL);
 				bss_priv = (struct mwifiex_bss_priv *)bss->priv;
 				bss_priv->band = band;
-				bss_priv->fw_tsf = le64_to_cpu(fw_tsf);
+				bss_priv->fw_tsf = fw_tsf;
 				if (priv->media_connected &&
 				    !memcmp(bssid,
 					    priv->curr_bss_params.bss_descriptor
@@ -1821,17 +1784,22 @@ check_next_scan:
 		if (priv->report_scan_result)
 			priv->report_scan_result = false;
 
-		if (priv->scan_request) {
-			dev_dbg(adapter->dev, "info: notifying scan done\n");
-			cfg80211_scan_done(priv->scan_request, 0);
-			priv->scan_request = NULL;
-		} else {
-			priv->scan_aborting = false;
-			dev_dbg(adapter->dev, "info: scan already aborted\n");
+		if (priv->user_scan_cfg) {
+			if (priv->scan_request) {
+				dev_dbg(priv->adapter->dev,
+					"info: notifying scan done\n");
+				cfg80211_scan_done(priv->scan_request, 0);
+				priv->scan_request = NULL;
+			} else {
+				dev_dbg(priv->adapter->dev,
+					"info: scan already aborted\n");
+			}
+
+			kfree(priv->user_scan_cfg);
+			priv->user_scan_cfg = NULL;
 		}
 	} else {
-		if ((priv->scan_aborting && !priv->scan_request) ||
-		    priv->scan_block) {
+		if (priv->user_scan_cfg && !priv->scan_request) {
 			spin_unlock_irqrestore(&adapter->scan_pending_q_lock,
 					       flags);
 			adapter->scan_delay_cnt = MWIFIEX_MAX_SCAN_DELAY_CNT;
@@ -2072,12 +2040,12 @@ mwifiex_save_curr_bcn(struct mwifiex_private *priv)
 			 curr_bss->ht_info_offset);
 
 	if (curr_bss->bcn_vht_cap)
-		curr_bss->bcn_vht_cap = (void *)(curr_bss->beacon_buf +
-						 curr_bss->vht_cap_offset);
+		curr_bss->bcn_ht_cap = (void *)(curr_bss->beacon_buf +
+						curr_bss->vht_cap_offset);
 
 	if (curr_bss->bcn_vht_oper)
-		curr_bss->bcn_vht_oper = (void *)(curr_bss->beacon_buf +
-						  curr_bss->vht_info_offset);
+		curr_bss->bcn_ht_oper = (void *)(curr_bss->beacon_buf +
+						 curr_bss->vht_info_offset);
 
 	if (curr_bss->bcn_bss_co_2040)
 		curr_bss->bcn_bss_co_2040 =

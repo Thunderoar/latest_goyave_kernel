@@ -1287,7 +1287,7 @@ static const struct of_device_id pmc_match[] __initconst = {
 	{},
 };
 
-static void __init tegra20_clock_init(struct device_node *np)
+void __init tegra20_clock_init(struct device_node *np)
 {
 	int i;
 	struct device_node *node;
@@ -1339,4 +1339,3 @@ static void __init tegra20_clock_init(struct device_node *np)
 
 	tegra_cpu_car_ops = &tegra20_cpu_car_ops;
 }
-CLK_OF_DECLARE(tegra20, "nvidia,tegra20-car", tegra20_clock_init);

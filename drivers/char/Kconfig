@@ -28,6 +28,18 @@ config DEVKMEM
 	  kind of kernel debugging operations.
 	  When in doubt, say "N".
 
+config STALDRV
+	bool "Stallion multiport serial support"
+	depends on SERIAL_NONSTANDARD
+	help
+	  Stallion cards give you many serial ports.  You would need something
+	  like this to connect more than two modems to your Linux box, for
+	  instance in order to become a dial-in server.  If you say Y here,
+	  you will be asked for your specific card model in the next
+	  questions.  Make sure to read <file:Documentation/serial/stallion.txt>
+	  in this case.  If you have never heard about all this, it's safe to
+	  say N.
+
 config SGI_SNSC
 	bool "SGI Altix system controller communication support"
 	depends on (IA64_SGI_SN2 || IA64_GENERIC)
@@ -599,12 +611,10 @@ config TELCLOCK
 	  controlling the behavior of this hardware.
 
 config DEVPORT
-	bool "/dev/port character device"
+	bool
+	depends on !M68K
 	depends on ISA || PCI
 	default y
-	help
-	  Say Y here if you want to support the /dev/port device. The /dev/port
-	  device is similar to /dev/mem, but for I/O ports.
 
 config DCC_TTY
 	tristate "DCC tty driver"
@@ -637,19 +647,6 @@ config MUX_SPI_HAL
         help
           This module supports to connect AP with CP use SPI bus.
 
-config FRANDOM
-	tristate "Frandom RNG driver"
-	help
-	  Frandom is a Linux kernel random number generator, which is 
-	  10-50 times faster than what you get from Linux' built-in 
-	  /dev/urandom. And it uses very little (/dev/frandom) or 
-	  none (/dev/erandom) of the kernel's entropy pool, so it is
-	  very useful for applications that require a handy source for
-	  lots of random data.
-
-	  http://www.billauer.co.il/frandom.html
-
-	  If unsure here, select N.
 
 endmenu
 

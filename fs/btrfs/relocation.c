@@ -967,11 +967,8 @@ again:
 					need_check = false;
 					list_add_tail(&edge->list[UPPER],
 						      &list);
-				} else {
-					if (upper->checked)
-						need_check = true;
+				} else
 					INIT_LIST_HEAD(&edge->list[UPPER]);
-				}
 			} else {
 				upper = rb_entry(rb_node, struct backref_node,
 						 rb_node);
@@ -1358,7 +1355,8 @@ static struct btrfs_root *create_reloc_root(struct btrfs_trans_handle *trans,
 	BUG_ON(ret);
 	kfree(root_item);
 
-	reloc_root = btrfs_read_fs_root(root->fs_info->tree_root, &root_key);
+	reloc_root = btrfs_read_fs_root_no_radix(root->fs_info->tree_root,
+						 &root_key);
 	BUG_ON(IS_ERR(reloc_root));
 	reloc_root->last_trans = trans->transid;
 	return reloc_root;
@@ -4162,12 +4160,12 @@ int btrfs_relocate_block_group(struct btrfs_root *extent_root, u64 group_start)
 	       (unsigned long long)rc->block_group->key.objectid,
 	       (unsigned long long)rc->block_group->flags);
 
-	ret = btrfs_start_all_delalloc_inodes(fs_info, 0);
+	ret = btrfs_start_delalloc_inodes(fs_info->tree_root, 0);
 	if (ret < 0) {
 		err = ret;
 		goto out;
 	}
-	btrfs_wait_all_ordered_extents(fs_info, 0);
+	btrfs_wait_ordered_extents(fs_info->tree_root, 0);
 
 	while (1) {
 		mutex_lock(&fs_info->cleaner_mutex);
@@ -4279,7 +4277,7 @@ int btrfs_recover_relocation(struct btrfs_root *root)
 		    key.type != BTRFS_ROOT_ITEM_KEY)
 			break;
 
-		reloc_root = btrfs_read_fs_root(root, &key);
+		reloc_root = btrfs_read_fs_root_no_radix(root, &key);
 		if (IS_ERR(reloc_root)) {
 			err = PTR_ERR(reloc_root);
 			goto out;

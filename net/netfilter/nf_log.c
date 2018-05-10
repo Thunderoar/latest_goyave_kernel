@@ -245,7 +245,7 @@ static const struct file_operations nflog_file_ops = {
 static char nf_log_sysctl_fnames[NFPROTO_NUMPROTO-NFPROTO_UNSPEC][3];
 static struct ctl_table nf_log_sysctl_table[NFPROTO_NUMPROTO+1];
 
-static int nf_log_proc_dostring(struct ctl_table *table, int write,
+static int nf_log_proc_dostring(ctl_table *table, int write,
 			 void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	const struct nf_logger *logger;
@@ -253,7 +253,7 @@ static int nf_log_proc_dostring(struct ctl_table *table, int write,
 	size_t size = *lenp;
 	int r = 0;
 	int tindex = (unsigned long)table->extra1;
-	struct net *net = table->extra2;
+	struct net *net = current->nsproxy->net_ns;
 
 	if (write) {
 		if (size > sizeof(buf))
@@ -306,6 +306,7 @@ static int netfilter_log_sysctl_init(struct net *net)
 				 3, "%d", i);
 			nf_log_sysctl_table[i].procname	=
 				nf_log_sysctl_fnames[i];
+			nf_log_sysctl_table[i].data = NULL;
 			nf_log_sysctl_table[i].maxlen =
 				NFLOGGER_NAME_LEN * sizeof(char);
 			nf_log_sysctl_table[i].mode = 0644;
@@ -315,9 +316,6 @@ static int netfilter_log_sysctl_init(struct net *net)
 				(void *)(unsigned long) i;
 		}
 	}
-
-	for (i = NFPROTO_UNSPEC; i < NFPROTO_NUMPROTO; i++)
-		table[i].extra2 = net;
 
 	net->nf.nf_log_dir_header = register_net_sysctl(net,
 						"net/netfilter/nf_log",
@@ -370,7 +368,11 @@ static int __net_init nf_log_net_init(struct net *net)
 	return 0;
 
 out_sysctl:
-	remove_proc_entry("nf_log", net->nf.proc_netfilter);
+#ifdef CONFIG_PROC_FS
+	/* For init_net: errors will trigger panic, don't unroll on error. */
+	if (!net_eq(net, &init_net))
+		remove_proc_entry("nf_log", net->nf.proc_netfilter);
+#endif
 	return ret;
 }
 

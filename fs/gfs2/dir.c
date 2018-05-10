@@ -763,7 +763,7 @@ static int get_first_leaf(struct gfs2_inode *dip, u32 index,
 	int error;
 
 	error = get_leaf_nr(dip, index, &leaf_no);
-	if (!IS_ERR_VALUE(error))
+	if (!error)
 		error = get_leaf(dip, leaf_no, bh_out);
 
 	return error;
@@ -974,7 +974,7 @@ static int dir_split_leaf(struct inode *inode, const struct qstr *name)
 
 	index = name->hash >> (32 - dip->i_depth);
 	error = get_leaf_nr(dip, index, &leaf_no);
-	if (IS_ERR_VALUE(error))
+	if (error)
 		return error;
 
 	/*  Get the old leaf block  */
@@ -1125,14 +1125,13 @@ static int dir_double_exhash(struct gfs2_inode *dip)
 	if (IS_ERR(hc))
 		return PTR_ERR(hc);
 
-	hc2 = kmalloc(hsize_bytes * 2, GFP_NOFS | __GFP_NOWARN);
+	h = hc2 = kmalloc(hsize_bytes * 2, GFP_NOFS | __GFP_NOWARN);
 	if (hc2 == NULL)
 		hc2 = __vmalloc(hsize_bytes * 2, GFP_NOFS, PAGE_KERNEL);
 
 	if (!hc2)
 		return -ENOMEM;
 
-	h = hc2;
 	error = gfs2_meta_inode_buffer(dip, &dibh);
 	if (error)
 		goto out_kfree;
@@ -1556,9 +1555,9 @@ out:
 
 /**
  * gfs2_dir_search - Search a directory
- * @dip: The GFS2 dir inode
- * @name: The name we are looking up
- * @fail_on_exist: Fail if the name exists rather than looking it up
+ * @dip: The GFS2 inode
+ * @filename:
+ * @inode:
  *
  * This routine searches a directory for a file or another directory.
  * Assumes a glock is held on dip.
@@ -1566,25 +1565,22 @@ out:
  * Returns: errno
  */
 
-struct inode *gfs2_dir_search(struct inode *dir, const struct qstr *name,
-			      bool fail_on_exist)
+struct inode *gfs2_dir_search(struct inode *dir, const struct qstr *name)
 {
 	struct buffer_head *bh;
 	struct gfs2_dirent *dent;
-	u64 addr, formal_ino;
-	u16 dtype;
+	struct inode *inode;
 
 	dent = gfs2_dirent_search(dir, name, gfs2_dirent_find, &bh);
 	if (dent) {
 		if (IS_ERR(dent))
 			return ERR_CAST(dent);
-		dtype = be16_to_cpu(dent->de_type);
-		addr = be64_to_cpu(dent->de_inum.no_addr);
-		formal_ino = be64_to_cpu(dent->de_inum.no_formal_ino);
+		inode = gfs2_inode_lookup(dir->i_sb, 
+				be16_to_cpu(dent->de_type),
+				be64_to_cpu(dent->de_inum.no_addr),
+				be64_to_cpu(dent->de_inum.no_formal_ino), 0);
 		brelse(bh);
-		if (fail_on_exist)
-			return ERR_PTR(-EEXIST);
-		return gfs2_inode_lookup(dir->i_sb, dtype, addr, formal_ino, 0);
+		return inode;
 	}
 	return ERR_PTR(-ENOENT);
 }

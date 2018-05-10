@@ -66,7 +66,7 @@ ath5k_tx(struct ieee80211_hw *hw, struct ieee80211_tx_control *control,
 		return;
 	}
 
-	ath5k_tx_queue(hw, skb, &ah->txqs[qnum], control);
+	ath5k_tx_queue(hw, skb, &ah->txqs[qnum]);
 }
 
 
@@ -511,7 +511,8 @@ ath5k_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 			break;
 		return -EOPNOTSUPP;
 	default:
-		return -EOPNOTSUPP;
+		WARN_ON(1);
+		return -EINVAL;
 	}
 
 	mutex_lock(&ah->lock);

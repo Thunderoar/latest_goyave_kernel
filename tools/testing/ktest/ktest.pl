@@ -1796,7 +1796,7 @@ sub monitor {
 		# We already booted into the kernel we are testing,
 		# but now we booted into another kernel?
 		# Consider this a triple fault.
-		doprint "Already booted in Linux kernel $version, but now\n";
+		doprint "Aleady booted in Linux kernel $version, but now\n";
 		doprint "we booted into Linux kernel $1.\n";
 		doprint "Assuming that this is a triple fault.\n";
 		doprint "To disable this: set DETECT_TRIPLE_FAULT to 0\n";
@@ -2375,7 +2375,7 @@ sub do_run_test {
     }
 
     waitpid $child_pid, 0;
-    $child_exit = $? >> 8;
+    $child_exit = $?;
 
     if (!$bug && $in_bisect) {
 	if (defined($bisect_ret_good)) {

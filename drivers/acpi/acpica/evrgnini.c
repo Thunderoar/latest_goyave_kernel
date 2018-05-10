@@ -596,9 +596,7 @@ acpi_ev_initialize_region(union acpi_operand_object *region_obj,
 				break;
 
 			default:
-
 				/* Ignore other objects */
-
 				break;
 			}
 

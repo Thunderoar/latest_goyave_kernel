@@ -84,7 +84,7 @@ struct drm_gem_object *nouveau_gem_prime_import_sg_table(struct drm_device *dev,
 int nouveau_gem_prime_pin(struct drm_gem_object *obj)
 {
 	struct nouveau_bo *nvbo = nouveau_gem_object(obj);
-	int ret;
+	int ret = 0;
 
 	/* pin buffer into GTT */
 	ret = nouveau_bo_pin(nvbo, TTM_PL_FLAG_TT);
@@ -92,11 +92,4 @@ int nouveau_gem_prime_pin(struct drm_gem_object *obj)
 		return -EINVAL;
 
 	return 0;
-}
-
-void nouveau_gem_prime_unpin(struct drm_gem_object *obj)
-{
-	struct nouveau_bo *nvbo = nouveau_gem_object(obj);
-
-	nouveau_bo_unpin(nvbo);
 }

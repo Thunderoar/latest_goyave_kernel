@@ -384,8 +384,9 @@ static void scs_card_free(struct snd_card *card)
 	kfree(scs->buffer);
 }
 
-static int scs_probe(struct fw_unit *unit, const struct ieee1394_device_id *id)
+static int scs_probe(struct device *unit_dev)
 {
+	struct fw_unit *unit = fw_unit(unit_dev);
 	struct fw_device *fw_dev = fw_parent_device(unit);
 	struct snd_card *card;
 	struct scs *scs;
@@ -394,7 +395,7 @@ static int scs_probe(struct fw_unit *unit, const struct ieee1394_device_id *id)
 	err = snd_card_create(-16, NULL, THIS_MODULE, sizeof(*scs), &card);
 	if (err < 0)
 		return err;
-	snd_card_set_dev(card, &unit->device);
+	snd_card_set_dev(card, unit_dev);
 
 	scs = card->private_data;
 	scs->card = card;
@@ -404,10 +405,8 @@ static int scs_probe(struct fw_unit *unit, const struct ieee1394_device_id *id)
 	scs->output_idle = true;
 
 	scs->buffer = kmalloc(HSS1394_MAX_PACKET_SIZE, GFP_KERNEL);
-	if (!scs->buffer) {
-		err = -ENOMEM;
+	if (!scs->buffer)
 		goto err_card;
-	}
 
 	scs->hss_handler.length = HSS1394_MAX_PACKET_SIZE;
 	scs->hss_handler.address_callback = handle_hss;
@@ -441,7 +440,7 @@ static int scs_probe(struct fw_unit *unit, const struct ieee1394_device_id *id)
 	if (err < 0)
 		goto err_card;
 
-	dev_set_drvdata(&unit->device, scs);
+	dev_set_drvdata(unit_dev, scs);
 
 	return 0;
 
@@ -452,20 +451,9 @@ err_card:
 	return err;
 }
 
-static void scs_update(struct fw_unit *unit)
+static int scs_remove(struct device *dev)
 {
-	struct scs *scs = dev_get_drvdata(&unit->device);
-	__be64 data;
-
-	data = cpu_to_be64(((u64)HSS1394_TAG_CHANGE_ADDRESS << 56) |
-			   scs->hss_handler.offset);
-	snd_fw_transaction(scs->unit, TCODE_WRITE_BLOCK_REQUEST,
-			   HSS1394_ADDRESS, &data, 8);
-}
-
-static void scs_remove(struct fw_unit *unit)
-{
-	struct scs *scs = dev_get_drvdata(&unit->device);
+	struct scs *scs = dev_get_drvdata(dev);
 
 	snd_card_disconnect(scs->card);
 
@@ -477,6 +465,19 @@ static void scs_remove(struct fw_unit *unit)
 	tasklet_kill(&scs->tasklet);
 
 	snd_card_free_when_closed(scs->card);
+
+	return 0;
+}
+
+static void scs_update(struct fw_unit *unit)
+{
+	struct scs *scs = dev_get_drvdata(&unit->device);
+	__be64 data;
+
+	data = cpu_to_be64(((u64)HSS1394_TAG_CHANGE_ADDRESS << 56) |
+			   scs->hss_handler.offset);
+	snd_fw_transaction(scs->unit, TCODE_WRITE_BLOCK_REQUEST,
+			   HSS1394_ADDRESS, &data, 8);
 }
 
 static const struct ieee1394_device_id scs_id_table[] = {
@@ -505,10 +506,10 @@ static struct fw_driver scs_driver = {
 		.owner  = THIS_MODULE,
 		.name   = KBUILD_MODNAME,
 		.bus    = &fw_bus_type,
+		.probe  = scs_probe,
+		.remove = scs_remove,
 	},
-	.probe    = scs_probe,
 	.update   = scs_update,
-	.remove   = scs_remove,
 	.id_table = scs_id_table,
 };
 

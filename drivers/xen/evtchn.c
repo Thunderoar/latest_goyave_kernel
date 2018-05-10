@@ -31,8 +31,6 @@
  * IN THE SOFTWARE.
  */
 
-#define pr_fmt(fmt) "xen:" KBUILD_MODNAME ": " fmt
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -532,11 +530,11 @@ static int __init evtchn_init(void)
 	/* Create '/dev/xen/evtchn'. */
 	err = misc_register(&evtchn_miscdev);
 	if (err != 0) {
-		pr_err("Could not register /dev/xen/evtchn\n");
+		printk(KERN_ERR "Could not register /dev/xen/evtchn\n");
 		return err;
 	}
 
-	pr_info("Event-channel device installed\n");
+	printk(KERN_INFO "Event-channel device installed.\n");
 
 	return 0;
 }

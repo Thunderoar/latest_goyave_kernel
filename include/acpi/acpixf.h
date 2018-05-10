@@ -46,7 +46,7 @@
 
 /* Current ACPICA subsystem version in YYYYMMDD format */
 
-#define ACPI_CA_VERSION                 0x20130517
+#define ACPI_CA_VERSION                 0x20130328
 
 #include <acpi/acconfig.h>
 #include <acpi/actypes.h>
@@ -80,7 +80,6 @@ extern bool acpi_gbl_enable_aml_debug_object;
 extern u8 acpi_gbl_copy_dsdt_locally;
 extern u8 acpi_gbl_truncate_io_addresses;
 extern u8 acpi_gbl_disable_auto_repair;
-extern u8 acpi_gbl_disable_ssdt_table_load;
 
 /*
  * Hardware-reduced prototypes. All interfaces that use these macros will
@@ -178,7 +177,7 @@ acpi_status acpi_load_tables(void);
  */
 acpi_status acpi_reallocate_root_table(void);
 
-acpi_status acpi_find_root_pointer(acpi_physical_address *rsdp_address);
+acpi_status acpi_find_root_pointer(acpi_size *rsdp_address);
 
 acpi_status acpi_unload_table_id(acpi_owner_id id);
 

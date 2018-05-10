@@ -16,7 +16,6 @@
 #include <linux/gfs2_ondisk.h>
 #include <linux/bio.h>
 #include <linux/fs.h>
-#include <linux/list_sort.h>
 
 #include "gfs2.h"
 #include "incore.h"
@@ -402,20 +401,6 @@ static void gfs2_check_magic(struct buffer_head *bh)
 	kunmap_atomic(kaddr);
 }
 
-static int blocknr_cmp(void *priv, struct list_head *a, struct list_head *b)
-{
-	struct gfs2_bufdata *bda, *bdb;
-
-	bda = list_entry(a, struct gfs2_bufdata, bd_list);
-	bdb = list_entry(b, struct gfs2_bufdata, bd_list);
-
-	if (bda->bd_bh->b_blocknr < bdb->bd_bh->b_blocknr)
-		return -1;
-	if (bda->bd_bh->b_blocknr > bdb->bd_bh->b_blocknr)
-		return 1;
-	return 0;
-}
-
 static void gfs2_before_commit(struct gfs2_sbd *sdp, unsigned int limit,
 				unsigned int total, struct list_head *blist,
 				bool is_databuf)
@@ -428,7 +413,6 @@ static void gfs2_before_commit(struct gfs2_sbd *sdp, unsigned int limit,
 	__be64 *ptr;
 
 	gfs2_log_lock(sdp);
-	list_sort(NULL, blist, blocknr_cmp);
 	bd1 = bd2 = list_prepare_entry(bd1, blist, bd_list);
 	while(total) {
 		num = total;
@@ -606,7 +590,6 @@ static void revoke_lo_before_commit(struct gfs2_sbd *sdp)
 	struct page *page;
 	unsigned int length;
 
-	gfs2_write_revokes(sdp);
 	if (!sdp->sd_log_num_revoke)
 		return;
 
@@ -853,6 +836,10 @@ const struct gfs2_log_operations gfs2_revoke_lops = {
 	.lo_name = "revoke",
 };
 
+const struct gfs2_log_operations gfs2_rg_lops = {
+	.lo_name = "rg",
+};
+
 const struct gfs2_log_operations gfs2_databuf_lops = {
 	.lo_before_commit = databuf_lo_before_commit,
 	.lo_after_commit = databuf_lo_after_commit,
@@ -864,6 +851,7 @@ const struct gfs2_log_operations gfs2_databuf_lops = {
 const struct gfs2_log_operations *gfs2_log_ops[] = {
 	&gfs2_databuf_lops,
 	&gfs2_buf_lops,
+	&gfs2_rg_lops,
 	&gfs2_revoke_lops,
 	NULL,
 };

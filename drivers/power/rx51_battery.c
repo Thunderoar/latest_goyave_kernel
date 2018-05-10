@@ -216,8 +216,10 @@ static int rx51_battery_probe(struct platform_device *pdev)
 	di->bat.get_property = rx51_battery_get_property;
 
 	ret = power_supply_register(di->dev, &di->bat);
-	if (ret)
+	if (ret) {
+		platform_set_drvdata(pdev, NULL);
 		return ret;
+	}
 
 	return 0;
 }
@@ -227,6 +229,7 @@ static int rx51_battery_remove(struct platform_device *pdev)
 	struct rx51_device_info *di = platform_get_drvdata(pdev);
 
 	power_supply_unregister(&di->bat);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

@@ -345,6 +345,7 @@ static int snd_jazz16_remove(struct device *devptr, unsigned int dev)
 {
 	struct snd_card *card = dev_get_drvdata(devptr);
 
+	dev_set_drvdata(devptr, NULL);
 	snd_card_free(card);
 	return 0;
 }

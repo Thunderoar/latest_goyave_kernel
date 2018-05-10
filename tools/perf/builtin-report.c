@@ -52,7 +52,6 @@ struct perf_report {
 	symbol_filter_t		annotate_init;
 	const char		*cpu_list;
 	const char		*symbol_filter_str;
-	float			min_percent;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
 };
 
@@ -60,11 +59,6 @@ static int perf_report_config(const char *var, const char *value, void *cb)
 {
 	if (!strcmp(var, "report.group")) {
 		symbol_conf.event_group = perf_config_bool(var, value);
-		return 0;
-	}
-	if (!strcmp(var, "report.percent-limit")) {
-		struct perf_report *rep = cb;
-		rep->min_percent = strtof(value, NULL);
 		return 0;
 	}
 
@@ -193,9 +187,6 @@ static int perf_report__add_branch_hist_entry(struct perf_tool *tool,
 	for (i = 0; i < sample->branch_stack->nr; i++) {
 		if (rep->hide_unresolved && !(bi[i].from.sym && bi[i].to.sym))
 			continue;
-
-		err = -ENOMEM;
-
 		/*
 		 * The report shows the percentage of total branches captured
 		 * and not events sampled. Thus we use a pseudo period of 1.
@@ -204,6 +195,7 @@ static int perf_report__add_branch_hist_entry(struct perf_tool *tool,
 				&bi[i], 1, 1);
 		if (he) {
 			struct annotation *notes;
+			err = -ENOMEM;
 			bx = he->branch_info;
 			if (bx->from.sym && use_browser == 1 && sort__has_sym) {
 				notes = symbol__annotation(bx->from.sym);
@@ -234,12 +226,11 @@ static int perf_report__add_branch_hist_entry(struct perf_tool *tool,
 			}
 			evsel->hists.stats.total_period += 1;
 			hists__inc_nr_events(&evsel->hists, PERF_RECORD_SAMPLE);
+			err = 0;
 		} else
-			goto out;
+			return -ENOMEM;
 	}
-	err = 0;
 out:
-	free(bi);
 	return err;
 }
 
@@ -303,7 +294,6 @@ static int process_sample_event(struct perf_tool *tool,
 {
 	struct perf_report *rep = container_of(tool, struct perf_report, tool);
 	struct addr_location al;
-	int ret;
 
 	if (perf_event__preprocess_sample(event, machine, &al, sample,
 					  rep->annotate_init) < 0) {
@@ -318,25 +308,28 @@ static int process_sample_event(struct perf_tool *tool,
 	if (rep->cpu_list && !test_bit(sample->cpu, rep->cpu_bitmap))
 		return 0;
 
-	if (sort__mode == SORT_MODE__BRANCH) {
-		ret = perf_report__add_branch_hist_entry(tool, &al, sample,
-							 evsel, machine);
-		if (ret < 0)
+	if (sort__branch_mode == 1) {
+		if (perf_report__add_branch_hist_entry(tool, &al, sample,
+						       evsel, machine)) {
 			pr_debug("problem adding lbr entry, skipping event\n");
+			return -1;
+		}
 	} else if (rep->mem_mode == 1) {
-		ret = perf_report__add_mem_hist_entry(tool, &al, sample,
-						      evsel, machine, event);
-		if (ret < 0)
+		if (perf_report__add_mem_hist_entry(tool, &al, sample,
+						    evsel, machine, event)) {
 			pr_debug("problem adding mem entry, skipping event\n");
+			return -1;
+		}
 	} else {
 		if (al.map != NULL)
 			al.map->dso->hit = 1;
 
-		ret = perf_evsel__add_hist_entry(evsel, &al, sample, machine);
-		if (ret < 0)
+		if (perf_evsel__add_hist_entry(evsel, &al, sample, machine)) {
 			pr_debug("problem incrementing symbol period, skipping event\n");
+			return -1;
+		}
 	}
-	return ret;
+	return 0;
 }
 
 static int process_read_event(struct perf_tool *tool,
@@ -391,7 +384,7 @@ static int perf_report__setup_sample_type(struct perf_report *rep)
 			}
 	}
 
-	if (sort__mode == SORT_MODE__BRANCH) {
+	if (sort__branch_mode == 1) {
 		if (!self->fd_pipe &&
 		    !(sample_type & PERF_SAMPLE_BRANCH_STACK)) {
 			ui__error("Selected -b but no branch data. "
@@ -462,7 +455,7 @@ static int perf_evlist__tty_browse_hists(struct perf_evlist *evlist,
 			continue;
 
 		hists__fprintf_nr_sample_events(rep, hists, evname, stdout);
-		hists__fprintf(hists, true, 0, 0, rep->min_percent, stdout);
+		hists__fprintf(hists, true, 0, 0, stdout);
 		fprintf(stdout, "\n\n");
 	}
 
@@ -581,8 +574,8 @@ static int __cmd_report(struct perf_report *rep)
 	if (use_browser > 0) {
 		if (use_browser == 1) {
 			ret = perf_evlist__tui_browse_hists(session->evlist,
-							help, NULL,
-							rep->min_percent,
+							help,
+							NULL,
 							&session->header.env);
 			/*
 			 * Usually "ret" is the last pressed key, and we only
@@ -593,7 +586,7 @@ static int __cmd_report(struct perf_report *rep)
 
 		} else if (use_browser == 2) {
 			perf_evlist__gtk_browse_hists(session->evlist, help,
-						      NULL, rep->min_percent);
+						      NULL);
 		}
 	} else
 		perf_evlist__tty_browse_hists(session->evlist, rep, help);
@@ -698,19 +691,7 @@ static int
 parse_branch_mode(const struct option *opt __maybe_unused,
 		  const char *str __maybe_unused, int unset)
 {
-	int *branch_mode = opt->value;
-
-	*branch_mode = !unset;
-	return 0;
-}
-
-static int
-parse_percent_limit(const struct option *opt, const char *str,
-		    int unset __maybe_unused)
-{
-	struct perf_report *rep = opt->value;
-
-	rep->min_percent = strtof(str, NULL);
+	sort__branch_mode = !unset;
 	return 0;
 }
 
@@ -719,7 +700,6 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	struct perf_session *session;
 	struct stat st;
 	bool has_br_stack = false;
-	int branch_mode = -1;
 	int ret = -1;
 	char callchain_default_opt[] = "fractal,0.5,callee";
 	const char * const report_usage[] = {
@@ -816,19 +796,17 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		    "Show a column with the sum of periods"),
 	OPT_BOOLEAN(0, "group", &symbol_conf.event_group,
 		    "Show event group information together"),
-	OPT_CALLBACK_NOOPT('b', "branch-stack", &branch_mode, "",
+	OPT_CALLBACK_NOOPT('b', "branch-stack", &sort__branch_mode, "",
 		    "use branch records for histogram filling", parse_branch_mode),
 	OPT_STRING(0, "objdump", &objdump_path, "path",
 		   "objdump binary to use for disassembly and annotations"),
 	OPT_BOOLEAN(0, "demangle", &symbol_conf.demangle,
 		    "Disable symbol demangling"),
 	OPT_BOOLEAN(0, "mem-mode", &report.mem_mode, "mem access profile"),
-	OPT_CALLBACK(0, "percent-limit", &report, "percent",
-		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_END()
 	};
 
-	perf_config(perf_report_config, &report);
+	perf_config(perf_report_config, NULL);
 
 	argc = parse_options(argc, argv, options, report_usage, 0);
 
@@ -868,11 +846,11 @@ repeat:
 	has_br_stack = perf_header__has_feat(&session->header,
 					     HEADER_BRANCH_STACK);
 
-	if (branch_mode == -1 && has_br_stack)
-		sort__mode = SORT_MODE__BRANCH;
+	if (sort__branch_mode == -1 && has_br_stack)
+		sort__branch_mode = 1;
 
-	/* sort__mode could be NORMAL if --no-branch-stack */
-	if (sort__mode == SORT_MODE__BRANCH) {
+	/* sort__branch_mode could be 0 if --no-branch-stack */
+	if (sort__branch_mode == 1) {
 		/*
 		 * if no sort_order is provided, then specify
 		 * branch-mode specific order
@@ -883,12 +861,10 @@ repeat:
 
 	}
 	if (report.mem_mode) {
-		if (sort__mode == SORT_MODE__BRANCH) {
+		if (sort__branch_mode == 1) {
 			fprintf(stderr, "branch and mem mode incompatible\n");
 			goto error;
 		}
-		sort__mode = SORT_MODE__MEMORY;
-
 		/*
 		 * if no sort_order is provided, then specify
 		 * branch-mode specific order
@@ -953,7 +929,25 @@ repeat:
 		report.symbol_filter_str = argv[0];
 	}
 
-	sort__setup_elide(stdout);
+	sort_entry__setup_elide(&sort_comm, symbol_conf.comm_list, "comm", stdout);
+
+	if (sort__branch_mode == 1) {
+		sort_entry__setup_elide(&sort_dso_from, symbol_conf.dso_from_list, "dso_from", stdout);
+		sort_entry__setup_elide(&sort_dso_to, symbol_conf.dso_to_list, "dso_to", stdout);
+		sort_entry__setup_elide(&sort_sym_from, symbol_conf.sym_from_list, "sym_from", stdout);
+		sort_entry__setup_elide(&sort_sym_to, symbol_conf.sym_to_list, "sym_to", stdout);
+	} else {
+		if (report.mem_mode) {
+			sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "symbol_daddr", stdout);
+			sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "dso_daddr", stdout);
+			sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "mem", stdout);
+			sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "local_weight", stdout);
+			sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "tlb", stdout);
+			sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "snoop", stdout);
+		}
+		sort_entry__setup_elide(&sort_dso, symbol_conf.dso_list, "dso", stdout);
+		sort_entry__setup_elide(&sort_sym, symbol_conf.sym_list, "symbol", stdout);
+	}
 
 	ret = __cmd_report(&report);
 	if (ret == K_SWITCH_INPUT_DATA) {

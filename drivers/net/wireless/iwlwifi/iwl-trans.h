@@ -183,12 +183,13 @@ struct iwl_rx_packet {
  * @CMD_ASYNC: Return right away and don't want for the response
  * @CMD_WANT_SKB: valid only with CMD_SYNC. The caller needs the buffer of the
  *	response. The caller needs to call iwl_free_resp when done.
+ * @CMD_ON_DEMAND: This command is sent by the test mode pipe.
  */
 enum CMD_MODE {
 	CMD_SYNC		= 0,
 	CMD_ASYNC		= BIT(0),
 	CMD_WANT_SKB		= BIT(1),
-	CMD_SEND_IN_RFKILL	= BIT(2),
+	CMD_ON_DEMAND		= BIT(2),
 };
 
 #define DEF_CMD_PAYLOAD_SIZE 320
@@ -426,9 +427,8 @@ struct iwl_trans_ops {
 	void (*fw_alive)(struct iwl_trans *trans, u32 scd_addr);
 	void (*stop_device)(struct iwl_trans *trans);
 
-	void (*d3_suspend)(struct iwl_trans *trans, bool test);
-	int (*d3_resume)(struct iwl_trans *trans, enum iwl_d3_status *status,
-			 bool test);
+	void (*d3_suspend)(struct iwl_trans *trans);
+	int (*d3_resume)(struct iwl_trans *trans, enum iwl_d3_status *status);
 
 	int (*send_cmd)(struct iwl_trans *trans, struct iwl_host_cmd *cmd);
 
@@ -455,7 +455,7 @@ struct iwl_trans_ops {
 	int (*read_mem)(struct iwl_trans *trans, u32 addr,
 			void *buf, int dwords);
 	int (*write_mem)(struct iwl_trans *trans, u32 addr,
-			 const void *buf, int dwords);
+			 void *buf, int dwords);
 	void (*configure)(struct iwl_trans *trans,
 			  const struct iwl_trans_config *trans_cfg);
 	void (*set_pmi)(struct iwl_trans *trans, bool state);
@@ -489,7 +489,6 @@ enum iwl_trans_state {
  *	Set during transport allocation.
  * @hw_id_str: a string with info about HW ID. Set during transport allocation.
  * @pm_support: set to true in start_hw if link pm is supported
- * @ltr_enabled: set to true if the LTR is enabled
  * @dev_cmd_pool: pool for Tx cmd allocation - for internal use only.
  *	The user should use iwl_trans_{alloc,free}_tx_cmd.
  * @dev_cmd_headroom: room needed for the transport's private use before the
@@ -514,7 +513,6 @@ struct iwl_trans {
 	u8 rx_mpdu_cmd, rx_mpdu_cmd_hdr_size;
 
 	bool pm_support;
-	bool ltr_enabled;
 
 	/* The following fields are internal only */
 	struct kmem_cache *dev_cmd_pool;
@@ -589,18 +587,17 @@ static inline void iwl_trans_stop_device(struct iwl_trans *trans)
 	trans->state = IWL_TRANS_NO_FW;
 }
 
-static inline void iwl_trans_d3_suspend(struct iwl_trans *trans, bool test)
+static inline void iwl_trans_d3_suspend(struct iwl_trans *trans)
 {
 	might_sleep();
-	trans->ops->d3_suspend(trans, test);
+	trans->ops->d3_suspend(trans);
 }
 
 static inline int iwl_trans_d3_resume(struct iwl_trans *trans,
-				      enum iwl_d3_status *status,
-				      bool test)
+				      enum iwl_d3_status *status)
 {
 	might_sleep();
-	return trans->ops->d3_resume(trans, status, test);
+	return trans->ops->d3_resume(trans, status);
 }
 
 static inline int iwl_trans_send_cmd(struct iwl_trans *trans,
@@ -608,10 +605,8 @@ static inline int iwl_trans_send_cmd(struct iwl_trans *trans,
 {
 	int ret;
 
-	if (trans->state != IWL_TRANS_FW_ALIVE) {
-		IWL_ERR(trans, "%s bad state = %d", __func__, trans->state);
-		return -EIO;
-	}
+	WARN_ONCE(trans->state != IWL_TRANS_FW_ALIVE,
+		  "%s bad state = %d", __func__, trans->state);
 
 	if (!(cmd->flags & CMD_ASYNC))
 		lock_map_acquire_read(&trans->sync_cmd_lockdep_map);
@@ -766,7 +761,7 @@ static inline u32 iwl_trans_read_mem32(struct iwl_trans *trans, u32 addr)
 }
 
 static inline int iwl_trans_write_mem(struct iwl_trans *trans, u32 addr,
-				      const void *buf, int dwords)
+				      void *buf, int dwords)
 {
 	return trans->ops->write_mem(trans, addr, buf, dwords);
 }

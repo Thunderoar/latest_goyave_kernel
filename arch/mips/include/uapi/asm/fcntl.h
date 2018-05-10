@@ -8,7 +8,6 @@
 #ifndef _ASM_FCNTL_H
 #define _ASM_FCNTL_H
 
-#include <asm/sgidefs.h>
 
 #define O_APPEND	0x0008
 #define O_DSYNC		0x0010	/* used to be O_SYNC, see below */
@@ -56,8 +55,7 @@
  * contain all the same fields as struct flock.
  */
 
-#if _MIPS_SIM != _MIPS_SIM_ABI64
-
+#ifdef CONFIG_32BIT
 #include <linux/types.h>
 
 struct flock {
@@ -72,7 +70,7 @@ struct flock {
 
 #define HAVE_ARCH_STRUCT_FLOCK
 
-#endif /* _MIPS_SIM == _MIPS_SIM_ABI32 */
+#endif /* CONFIG_32BIT */
 
 #include <asm-generic/fcntl.h>
 

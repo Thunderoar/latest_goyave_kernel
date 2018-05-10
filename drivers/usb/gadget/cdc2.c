@@ -15,7 +15,6 @@
 
 #include "u_ether.h"
 #include "u_serial.h"
-#include "u_ecm.h"
 
 
 #define DRIVER_DESC		"CDC Composite Gadget"
@@ -33,6 +32,7 @@
 #define CDC_VENDOR_NUM		0x0525	/* NetChip */
 #define CDC_PRODUCT_NUM		0xa4aa	/* CDC Composite: ECM + ACM */
 
+/*-------------------------------------------------------------------------*/
 USB_GADGET_COMPOSITE_OPTIONS();
 
 /*
@@ -108,9 +108,6 @@ static struct eth_dev *the_dev;
 static struct usb_function *f_acm;
 static struct usb_function_instance *fi_serial;
 
-static struct usb_function *f_ecm;
-static struct usb_function_instance *fi_ecm;
-
 /*
  * We _always_ have both CDC ECM and CDC ACM functions.
  */
@@ -128,10 +125,8 @@ static int __init cdc_do_config(struct usb_configuration *c)
 		return status;
 
 	fi_serial = usb_get_function_instance("acm");
-	if (IS_ERR(fi_serial)) {
-		status = PTR_ERR(fi_serial);
-		goto err_get_acm;
-	}
+	if (IS_ERR(fi_serial))
+		return PTR_ERR(fi_serial);
 
 	f_acm = usb_get_function(fi_serial);
 	if (IS_ERR(f_acm)) {
@@ -141,21 +136,12 @@ static int __init cdc_do_config(struct usb_configuration *c)
 
 	status = usb_add_function(c, f_acm);
 	if (status)
-		goto err_add_acm;
-
+		goto err_conf;
 	return 0;
-
-err_add_acm:
+err_conf:
 	usb_put_function(f_acm);
 err_func_acm:
 	usb_put_function_instance(fi_serial);
-err_get_acm:
-	usb_remove_function(c, f_ecm);
-err_add_ecm:
-	usb_put_function(f_ecm);
-err_get_ecm:
-	usb_put_function_instance(fi_ecm);
-err_func_ecm:
 	return status;
 }
 
@@ -171,7 +157,6 @@ static struct usb_configuration cdc_config_driver = {
 static int __init cdc_bind(struct usb_composite_dev *cdev)
 {
 	struct usb_gadget	*gadget = cdev->gadget;
-	struct f_ecm_opts	*ecm_opts;
 	int			status;
 
 	if (!can_support_ecm(cdev->gadget)) {
@@ -207,9 +192,7 @@ static int __init cdc_bind(struct usb_composite_dev *cdev)
 	return 0;
 
 fail1:
-	usb_put_function_instance(fi_serial);
-fail:
-	usb_put_function_instance(fi_ecm);
+	gether_cleanup(the_dev);
 	return status;
 }
 
@@ -217,10 +200,7 @@ static int __exit cdc_unbind(struct usb_composite_dev *cdev)
 {
 	usb_put_function(f_acm);
 	usb_put_function_instance(fi_serial);
-	if (!IS_ERR_OR_NULL(f_ecm))
-		usb_put_function(f_ecm);
-	if (!IS_ERR_OR_NULL(fi_ecm))
-		usb_put_function_instance(fi_ecm);
+	gether_cleanup(the_dev);
 	return 0;
 }
 

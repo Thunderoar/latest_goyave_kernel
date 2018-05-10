@@ -79,12 +79,9 @@ enum iwl_power_level {
 	IWL_POWER_NUM
 };
 
-enum iwl_disable_11n {
-	IWL_DISABLE_HT_ALL	 = BIT(0),
-	IWL_DISABLE_HT_TXAGG	 = BIT(1),
-	IWL_DISABLE_HT_RXAGG	 = BIT(2),
-	IWL_ENABLE_HT_TXAGG	 = BIT(3),
-};
+#define IWL_DISABLE_HT_ALL	BIT(0)
+#define IWL_DISABLE_HT_TXAGG	BIT(1)
+#define IWL_DISABLE_HT_RXAGG	BIT(2)
 
 /**
  * struct iwl_mod_params
@@ -93,9 +90,10 @@ enum iwl_disable_11n {
  *
  * @sw_crypto: using hardware encryption, default = 0
  * @disable_11n: disable 11n capabilities, default = 0,
- *	use IWL_[DIS,EN]ABLE_HT_* constants
+ *	use IWL_DISABLE_HT_* constants
  * @amsdu_size_8K: enable 8K amsdu size, default = 0
  * @restart_fw: restart firmware, default = 1
+ * @plcp_check: enable plcp health check, default = true
  * @wd_disable: enable stuck queue check, default = 0
  * @bt_coex_active: enable bt coex, default = true
  * @led_mode: system default, default = 0
@@ -103,22 +101,24 @@ enum iwl_disable_11n {
  * @power_level: power level, default = 1
  * @debug_level: levels are IWL_DL_*
  * @ant_coupling: antenna coupling in dB, default = 0
+ * @bt_ch_announce: BT channel inhibition, default = enable
+ * @auto_agg: enable agg. without check, default = true
  */
 struct iwl_mod_params {
 	int sw_crypto;
 	unsigned int disable_11n;
 	int amsdu_size_8K;
 	bool restart_fw;
+	bool plcp_check;
 	int  wd_disable;
 	bool bt_coex_active;
 	int led_mode;
 	bool power_save;
 	int power_level;
-#ifdef CONFIG_IWLWIFI_DEBUG
 	u32 debug_level;
-#endif
 	int ant_coupling;
-	char *nvm_file;
+	bool bt_ch_announce;
+	bool auto_agg;
 };
 
 #endif /* #__iwl_modparams_h__ */

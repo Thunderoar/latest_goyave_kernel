@@ -244,12 +244,10 @@ acpi_ns_dump_one_object(acpi_handle obj_handle,
 			case ACPI_TYPE_BUFFER:
 			case ACPI_TYPE_STRING:
 			case ACPI_TYPE_METHOD:
-
 				acpi_os_printf("<No attached object>");
 				break;
 
 			default:
-
 				break;
 			}
 
@@ -260,11 +258,12 @@ acpi_ns_dump_one_object(acpi_handle obj_handle,
 		switch (type) {
 		case ACPI_TYPE_PROCESSOR:
 
-			acpi_os_printf("ID %02X Len %02X Addr %8.8X%8.8X\n",
+			acpi_os_printf("ID %02X Len %02X Addr %p\n",
 				       obj_desc->processor.proc_id,
 				       obj_desc->processor.length,
-				       ACPI_FORMAT_UINT64(obj_desc->processor.
-							  address));
+				       ACPI_CAST_PTR(void,
+						     obj_desc->processor.
+						     address));
 			break;
 
 		case ACPI_TYPE_DEVICE:
@@ -335,9 +334,8 @@ acpi_ns_dump_one_object(acpi_handle obj_handle,
 							       space_id));
 			if (obj_desc->region.flags & AOPOBJ_DATA_VALID) {
 				acpi_os_printf(" Addr %8.8X%8.8X Len %.4X\n",
-					       ACPI_FORMAT_UINT64(obj_desc->
-								  region.
-								  address),
+					       ACPI_FORMAT_NATIVE_UINT
+					       (obj_desc->region.address),
 					       obj_desc->region.length);
 			} else {
 				acpi_os_printf
@@ -435,7 +433,6 @@ acpi_ns_dump_one_object(acpi_handle obj_handle,
 			break;
 
 		default:
-
 			break;
 		}
 		break;
@@ -570,39 +567,32 @@ acpi_ns_dump_one_object(acpi_handle obj_handle,
 			goto cleanup;
 
 		case ACPI_TYPE_BUFFER_FIELD:
-
 			obj_desc =
 			    (union acpi_operand_object *)obj_desc->buffer_field.
 			    buffer_obj;
 			break;
 
 		case ACPI_TYPE_PACKAGE:
-
 			obj_desc = (void *)obj_desc->package.elements;
 			break;
 
 		case ACPI_TYPE_METHOD:
-
 			obj_desc = (void *)obj_desc->method.aml_start;
 			break;
 
 		case ACPI_TYPE_LOCAL_REGION_FIELD:
-
 			obj_desc = (void *)obj_desc->field.region_obj;
 			break;
 
 		case ACPI_TYPE_LOCAL_BANK_FIELD:
-
 			obj_desc = (void *)obj_desc->bank_field.region_obj;
 			break;
 
 		case ACPI_TYPE_LOCAL_INDEX_FIELD:
-
 			obj_desc = (void *)obj_desc->index_field.index_obj;
 			break;
 
 		default:
-
 			goto cleanup;
 		}
 

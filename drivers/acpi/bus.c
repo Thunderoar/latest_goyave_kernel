@@ -33,7 +33,6 @@
 #include <linux/proc_fs.h>
 #include <linux/acpi.h>
 #include <linux/slab.h>
-#include <linux/regulator/machine.h>
 #ifdef CONFIG_X86
 #include <asm/mpspec.h>
 #endif
@@ -57,12 +56,6 @@ EXPORT_SYMBOL(acpi_root_dir);
 
 
 #ifdef CONFIG_X86
-#ifdef CONFIG_ACPI_CUSTOM_DSDT
-static inline int set_copy_dsdt(const struct dmi_system_id *id)
-{
-	return 0;
-}
-#else
 static int set_copy_dsdt(const struct dmi_system_id *id)
 {
 	printk(KERN_NOTICE "%s detected - "
@@ -70,7 +63,6 @@ static int set_copy_dsdt(const struct dmi_system_id *id)
 	acpi_gbl_copy_dsdt_locally = 1;
 	return 0;
 }
-#endif
 
 static struct dmi_system_id dsdt_dmi_table[] __initdata = {
 	/*
@@ -99,7 +91,8 @@ static struct dmi_system_id dsdt_dmi_table[] __initdata = {
 
 int acpi_bus_get_device(acpi_handle handle, struct acpi_device **device)
 {
-	acpi_status status;
+	acpi_status status = AE_OK;
+
 
 	if (!device)
 		return -EINVAL;
@@ -169,7 +162,7 @@ EXPORT_SYMBOL(acpi_bus_private_data_handler);
 
 int acpi_bus_get_private_data(acpi_handle handle, void **data)
 {
-	acpi_status status;
+	acpi_status status = AE_OK;
 
 	if (!*data)
 		return -EINVAL;
@@ -368,7 +361,7 @@ extern int event_is_open;
 int acpi_bus_generate_proc_event4(const char *device_class, const char *bus_id, u8 type, int data)
 {
 	struct acpi_bus_event *event;
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	/* drop event on the floor if no one's listening */
 	if (!event_is_open)
@@ -407,7 +400,7 @@ EXPORT_SYMBOL(acpi_bus_generate_proc_event);
 
 int acpi_bus_receive_event(struct acpi_bus_event *event)
 {
-	unsigned long flags;
+	unsigned long flags = 0;
 	struct acpi_bus_event *entry = NULL;
 
 	DECLARE_WAITQUEUE(wait, current);
@@ -600,7 +593,7 @@ static void acpi_bus_notify(acpi_handle handle, u32 type, void *data)
 
 static int __init acpi_bus_init_irq(void)
 {
-	acpi_status status;
+	acpi_status status = AE_OK;
 	union acpi_object arg = { ACPI_TYPE_INTEGER };
 	struct acpi_object_list arg_list = { 1, &arg };
 	char *message = NULL;
@@ -647,7 +640,7 @@ u8 acpi_gbl_permanent_mmap;
 
 void __init acpi_early_init(void)
 {
-	acpi_status status;
+	acpi_status status = AE_OK;
 
 	if (acpi_disabled)
 		return;
@@ -712,14 +705,6 @@ void __init acpi_early_init(void)
 		goto error0;
 	}
 
-	/*
-	 * If the system is using ACPI then we can be reasonably
-	 * confident that any regulators are managed by the firmware
-	 * so tell the regulator core it has everything it needs to
-	 * know.
-	 */
-	regulator_has_full_constraints();
-
 	return;
 
       error0:
@@ -729,8 +714,8 @@ void __init acpi_early_init(void)
 
 static int __init acpi_bus_init(void)
 {
-	int result;
-	acpi_status status;
+	int result = 0;
+	acpi_status status = AE_OK;
 	extern acpi_status acpi_os_initialize1(void);
 
 	acpi_os_initialize1();

@@ -5,8 +5,7 @@
 menuconfig TIDSPBRIDGE
 	tristate "DSP Bridge driver"
 	depends on ARCH_OMAP3 && !ARCH_MULTIPLATFORM
-	select MAILBOX
-	select OMAP2PLUS_MBOX
+	select OMAP_MBOX_FWK
 	help
 	  DSP/BIOS Bridge is designed for platforms that contain a GPP and
 	  one or more attached DSPs.  The GPP is considered the master or

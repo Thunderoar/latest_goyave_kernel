@@ -403,8 +403,7 @@ int x86_pmu_hw_config(struct perf_event *event)
 		 * check that PEBS LBR correction does not conflict with
 		 * whatever the user is asking with attr->branch_sample_type
 		 */
-		if (event->attr.precise_ip > 1 &&
-		    x86_pmu.intel_cap.pebs_format < 2) {
+		if (event->attr.precise_ip > 1) {
 			u64 *br_type = &event->attr.branch_sample_type;
 
 			if (has_branch_stack(event)) {
@@ -569,7 +568,7 @@ struct sched_state {
 struct perf_sched {
 	int			max_weight;
 	int			max_events;
-	struct perf_event	**events;
+	struct event_constraint	**constraints;
 	struct sched_state	state;
 	int			saved_states;
 	struct sched_state	saved[SCHED_STATES_MAX];
@@ -578,7 +577,7 @@ struct perf_sched {
 /*
  * Initialize interator that runs through all events and counters.
  */
-static void perf_sched_init(struct perf_sched *sched, struct perf_event **events,
+static void perf_sched_init(struct perf_sched *sched, struct event_constraint **c,
 			    int num, int wmin, int wmax)
 {
 	int idx;
@@ -586,10 +585,10 @@ static void perf_sched_init(struct perf_sched *sched, struct perf_event **events
 	memset(sched, 0, sizeof(*sched));
 	sched->max_events	= num;
 	sched->max_weight	= wmax;
-	sched->events		= events;
+	sched->constraints	= c;
 
 	for (idx = 0; idx < num; idx++) {
-		if (events[idx]->hw.constraint->weight == wmin)
+		if (c[idx]->weight == wmin)
 			break;
 	}
 
@@ -636,7 +635,8 @@ static bool __perf_sched_find_counter(struct perf_sched *sched)
 	if (sched->state.event >= sched->max_events)
 		return false;
 
-	c = sched->events[sched->state.event]->hw.constraint;
+	c = sched->constraints[sched->state.event];
+
 	/* Prefer fixed purpose counters */
 	if (c->idxmsk64 & (~0ULL << INTEL_PMC_IDX_FIXED)) {
 		idx = INTEL_PMC_IDX_FIXED;
@@ -694,7 +694,7 @@ static bool perf_sched_next_event(struct perf_sched *sched)
 			if (sched->state.weight > sched->max_weight)
 				return false;
 		}
-		c = sched->events[sched->state.event]->hw.constraint;
+		c = sched->constraints[sched->state.event];
 	} while (c->weight != sched->state.weight);
 
 	sched->state.counter = 0;	/* start with first counter */
@@ -705,12 +705,12 @@ static bool perf_sched_next_event(struct perf_sched *sched)
 /*
  * Assign a counter for each event.
  */
-int perf_assign_events(struct perf_event **events, int n,
+int perf_assign_events(struct event_constraint **constraints, int n,
 			int wmin, int wmax, int *assign)
 {
 	struct perf_sched sched;
 
-	perf_sched_init(&sched, events, n, wmin, wmax);
+	perf_sched_init(&sched, constraints, n, wmin, wmax);
 
 	do {
 		if (!perf_sched_find_counter(&sched))
@@ -724,19 +724,16 @@ int perf_assign_events(struct perf_event **events, int n,
 
 int x86_schedule_events(struct cpu_hw_events *cpuc, int n, int *assign)
 {
-	struct event_constraint *c;
+	struct event_constraint *c, *constraints[X86_PMC_IDX_MAX];
 	unsigned long used_mask[BITS_TO_LONGS(X86_PMC_IDX_MAX)];
-	struct perf_event *e;
 	int i, wmin, wmax, num = 0;
 	struct hw_perf_event *hwc;
 
 	bitmap_zero(used_mask, X86_PMC_IDX_MAX);
 
 	for (i = 0, wmin = X86_PMC_IDX_MAX, wmax = 0; i < n; i++) {
-		hwc = &cpuc->event_list[i]->hw;
 		c = x86_pmu.get_event_constraints(cpuc, cpuc->event_list[i]);
-		hwc->constraint = c;
-
+		constraints[i] = c;
 		wmin = min(wmin, c->weight);
 		wmax = max(wmax, c->weight);
 	}
@@ -746,7 +743,7 @@ int x86_schedule_events(struct cpu_hw_events *cpuc, int n, int *assign)
 	 */
 	for (i = 0; i < n; i++) {
 		hwc = &cpuc->event_list[i]->hw;
-		c = hwc->constraint;
+		c = constraints[i];
 
 		/* never assigned */
 		if (hwc->idx == -1)
@@ -767,35 +764,16 @@ int x86_schedule_events(struct cpu_hw_events *cpuc, int n, int *assign)
 
 	/* slow path */
 	if (i != n)
-		num = perf_assign_events(cpuc->event_list, n, wmin,
-					 wmax, assign);
+		num = perf_assign_events(constraints, n, wmin, wmax, assign);
 
-	/*
-	 * Mark the event as committed, so we do not put_constraint()
-	 * in case new events are added and fail scheduling.
-	 */
-	if (!num && assign) {
-		for (i = 0; i < n; i++) {
-			e = cpuc->event_list[i];
-			e->hw.flags |= PERF_X86_EVENT_COMMITTED;
-		}
-	}
 	/*
 	 * scheduling failed or is just a simulation,
 	 * free resources if necessary
 	 */
 	if (!assign || num) {
 		for (i = 0; i < n; i++) {
-			e = cpuc->event_list[i];
-			/*
-			 * do not put_constraint() on comitted events,
-			 * because they are good to go
-			 */
-			if ((e->hw.flags & PERF_X86_EVENT_COMMITTED))
-				continue;
-
 			if (x86_pmu.put_event_constraints)
-				x86_pmu.put_event_constraints(cpuc, e);
+				x86_pmu.put_event_constraints(cpuc, cpuc->event_list[i]);
 		}
 	}
 	return num ? -EINVAL : 0;
@@ -1175,11 +1153,6 @@ static void x86_pmu_del(struct perf_event *event, int flags)
 	int i;
 
 	/*
-	 * event is descheduled
-	 */
-	event->hw.flags &= ~PERF_X86_EVENT_COMMITTED;
-
-	/*
 	 * If we're called during a txn, we don't need to do anything.
 	 * The events never got scheduled and ->cancel_txn will truncate
 	 * the event_list.
@@ -1191,9 +1164,6 @@ static void x86_pmu_del(struct perf_event *event, int flags)
 
 	for (i = 0; i < cpuc->n_events; i++) {
 		if (event == cpuc->event_list[i]) {
-
-			if (i >= cpuc->n_events - cpuc->n_added)
-				--cpuc->n_added;
 
 			if (x86_pmu.put_event_constraints)
 				x86_pmu.put_event_constraints(cpuc, event);
@@ -1279,20 +1249,10 @@ void perf_events_lapic_init(void)
 static int __kprobes
 perf_event_nmi_handler(unsigned int cmd, struct pt_regs *regs)
 {
-	int ret;
-	u64 start_clock;
-	u64 finish_clock;
-
 	if (!atomic_read(&active_events))
 		return NMI_DONE;
 
-	start_clock = local_clock();
-	ret = x86_pmu.handle_irq(regs);
-	finish_clock = local_clock();
-
-	perf_sample_event_took(finish_clock - start_clock);
-
-	return ret;
+	return x86_pmu.handle_irq(regs);
 }
 
 struct event_constraint emptyconstraint;

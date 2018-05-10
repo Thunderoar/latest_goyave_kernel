@@ -186,11 +186,12 @@ static u8 *edid_load(struct drm_connector *connector, char *name,
 		goto relfw_out;
 	}
 
-	edid = kmemdup(fwdata, fwsize, GFP_KERNEL);
+	edid = kmalloc(fwsize, GFP_KERNEL);
 	if (edid == NULL) {
 		err = -ENOMEM;
 		goto relfw_out;
 	}
+	memcpy(edid, fwdata, fwsize);
 
 	if (!drm_edid_block_valid(edid, 0, print_bad_edid)) {
 		connector->bad_edid_counter++;

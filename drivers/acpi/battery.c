@@ -34,7 +34,6 @@
 #include <linux/dmi.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
-#include <linux/delay.h>
 #include <asm/unaligned.h>
 
 #ifdef CONFIG_ACPI_PROCFS_POWER
@@ -69,7 +68,6 @@ MODULE_AUTHOR("Alexey Starikovskiy <astarikovskiy@suse.de>");
 MODULE_DESCRIPTION("ACPI Battery Driver");
 MODULE_LICENSE("GPL");
 
-static int battery_bix_broken_package;
 static unsigned int cache_time = 1000;
 module_param(cache_time, uint, 0644);
 MODULE_PARM_DESC(cache_time, "cache time in milliseconds");
@@ -429,7 +427,7 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 {
 	int result = -EFAULT;
 	acpi_status status = 0;
-	char *name = test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags) ?
+	char *name = test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags)?
 			"_BIX" : "_BIF";
 
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
@@ -445,12 +443,7 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 		ACPI_EXCEPTION((AE_INFO, status, "Evaluating %s", name));
 		return -ENODEV;
 	}
-
-	if (battery_bix_broken_package)
-		result = extract_package(battery, buffer.pointer,
-				extended_info_offsets + 1,
-				ARRAY_SIZE(extended_info_offsets) - 1);
-	else if (test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags))
+	if (test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags))
 		result = extract_package(battery, buffer.pointer,
 				extended_info_offsets,
 				ARRAY_SIZE(extended_info_offsets));
@@ -670,11 +663,11 @@ static void find_battery(const struct dmi_header *dm, void *private)
 static void acpi_battery_quirks(struct acpi_battery *battery)
 {
 	if (test_bit(ACPI_BATTERY_QUIRK_PERCENTAGE_CAPACITY, &battery->flags))
-		return;
+		return ;
 
-	if (battery->full_charge_capacity == 100 &&
-		battery->rate_now == ACPI_BATTERY_VALUE_UNKNOWN &&
-		battery->capacity_now >= 0 && battery->capacity_now <= 100) {
+        if (battery->full_charge_capacity == 100 &&
+            battery->rate_now == ACPI_BATTERY_VALUE_UNKNOWN &&
+            battery->capacity_now >=0 && battery->capacity_now <= 100) {
 		set_bit(ACPI_BATTERY_QUIRK_PERCENTAGE_CAPACITY, &battery->flags);
 		battery->full_charge_capacity = battery->design_capacity;
 		battery->capacity_now = (battery->capacity_now *
@@ -682,7 +675,7 @@ static void acpi_battery_quirks(struct acpi_battery *battery)
 	}
 
 	if (test_bit(ACPI_BATTERY_QUIRK_THINKPAD_MAH, &battery->flags))
-		return;
+		return ;
 
 	if (battery->power_unit && dmi_name_in_vendors("LENOVO")) {
 		const char *s;
@@ -770,7 +763,7 @@ static int acpi_battery_print_info(struct seq_file *seq, int result)
 		goto end;
 
 	seq_printf(seq, "present:                 %s\n",
-		   acpi_battery_present(battery) ? "yes" : "no");
+		   acpi_battery_present(battery)?"yes":"no");
 	if (!acpi_battery_present(battery))
 		goto end;
 	if (battery->design_capacity == ACPI_BATTERY_VALUE_UNKNOWN)
@@ -826,12 +819,12 @@ static int acpi_battery_print_state(struct seq_file *seq, int result)
 		goto end;
 
 	seq_printf(seq, "present:                 %s\n",
-		   acpi_battery_present(battery) ? "yes" : "no");
+		   acpi_battery_present(battery)?"yes":"no");
 	if (!acpi_battery_present(battery))
 		goto end;
 
 	seq_printf(seq, "capacity state:          %s\n",
-			(battery->state & 0x04) ? "critical" : "ok");
+			(battery->state & 0x04)?"critical":"ok");
 	if ((battery->state & 0x01) && (battery->state & 0x02))
 		seq_printf(seq,
 			   "charging state:          charging/discharging\n");
@@ -1071,39 +1064,6 @@ static int battery_notify(struct notifier_block *nb,
 	return 0;
 }
 
-static struct dmi_system_id bat_dmi_table[] = {
-	{
-		.ident = "NEC LZ750/LS",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "NEC"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "PC-LZ750LS"),
-		},
-	},
-	{},
-};
-
-/*
- * Some machines'(E,G Lenovo Z480) ECs are not stable
- * during boot up and this causes battery driver fails to be
- * probed due to failure of getting battery information
- * from EC sometimes. After several retries, the operation
- * may work. So add retry code here and 20ms sleep between
- * every retries.
- */
-static int acpi_battery_update_retry(struct acpi_battery *battery)
-{
-	int retry, ret;
-
-	for (retry = 5; retry; retry--) {
-		ret = acpi_battery_update(battery);
-		if (!ret)
-			break;
-
-		msleep(20);
-	}
-	return ret;
-}
-
 static int acpi_battery_add(struct acpi_device *device)
 {
 	int result = 0;
@@ -1123,11 +1083,9 @@ static int acpi_battery_add(struct acpi_device *device)
 	if (ACPI_SUCCESS(acpi_get_handle(battery->device->handle,
 			"_BIX", &handle)))
 		set_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags);
-
-	result = acpi_battery_update_retry(battery);
+	result = acpi_battery_update(battery);
 	if (result)
 		goto fail;
-
 #ifdef CONFIG_ACPI_PROCFS_POWER
 	result = acpi_battery_add_fs(device);
 #endif
@@ -1216,8 +1174,6 @@ static void __init acpi_battery_init_async(void *unused, async_cookie_t cookie)
 	if (!acpi_battery_dir)
 		return;
 #endif
-	if (dmi_check_system(bat_dmi_table))
-		battery_bix_broken_package = 1;
 	if (acpi_bus_register_driver(&acpi_battery_driver) < 0) {
 #ifdef CONFIG_ACPI_PROCFS_POWER
 		acpi_unlock_battery_dir(acpi_battery_dir);

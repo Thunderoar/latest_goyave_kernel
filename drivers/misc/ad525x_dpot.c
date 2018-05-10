@@ -216,7 +216,7 @@ static s32 dpot_read_i2c(struct dpot_data *dpot, u8 reg)
 			 */
 			value = swab16(value);
 
-			if (dpot->uid == DPOT_UID(AD5274_ID))
+			if (dpot->uid == DPOT_UID(AD5271_ID))
 				value = value >> 2;
 		return value;
 	default:
@@ -470,7 +470,7 @@ static ssize_t sysfs_set_reg(struct device *dev,
 		!test_bit(DPOT_RDAC_MASK & reg, data->otp_en_mask))
 		return -EPERM;
 
-	err = kstrtoul(buf, 10, &value);
+	err = strict_strtoul(buf, 10, &value);
 	if (err)
 		return err;
 

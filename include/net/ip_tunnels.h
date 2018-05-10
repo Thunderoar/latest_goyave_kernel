@@ -42,7 +42,6 @@ struct ip_tunnel {
 	struct ip_tunnel __rcu	*next;
 	struct hlist_node hash_node;
 	struct net_device	*dev;
-	struct net		*net;	/* netns for packet i/o */
 
 	int		err_count;	/* Number of arrived ICMP errors */
 	unsigned long	err_time;	/* Time when the last ICMP error
@@ -93,8 +92,6 @@ struct ip_tunnel_net {
 	struct net_device *fb_tunnel_dev;
 };
 
-#ifdef CONFIG_INET
-
 int ip_tunnel_init(struct net_device *dev);
 void ip_tunnel_uninit(struct net_device *dev);
 void  ip_tunnel_dellink(struct net_device *dev, struct list_head *head);
@@ -104,7 +101,7 @@ int ip_tunnel_init_net(struct net *net, int ip_tnl_net_id,
 void ip_tunnel_delete_net(struct ip_tunnel_net *itn);
 
 void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
-		    const struct iphdr *tnl_params, const u8 protocol);
+		    const struct iphdr *tnl_params);
 int ip_tunnel_ioctl(struct net_device *dev, struct ip_tunnel_parm *p, int cmd);
 int ip_tunnel_change_mtu(struct net_device *dev, int new_mtu);
 
@@ -116,7 +113,7 @@ struct ip_tunnel *ip_tunnel_lookup(struct ip_tunnel_net *itn,
 				   __be32 key);
 
 int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
-		  const struct tnl_ptk_info *tpi, int hdr_len, bool log_ecn_error);
+		  const struct tnl_ptk_info *tpi, bool log_ecn_error);
 int ip_tunnel_changelink(struct net_device *dev, struct nlattr *tb[],
 			 struct ip_tunnel_parm *p);
 int ip_tunnel_newlink(struct net_device *dev, struct nlattr *tb[],
@@ -163,7 +160,4 @@ static inline void iptunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev->stats.tx_aborted_errors++;
 	}
 }
-
-#endif /* CONFIG_INET */
-
 #endif /* __NET_IP_TUNNELS_H */

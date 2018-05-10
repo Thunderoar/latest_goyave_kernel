@@ -71,7 +71,6 @@ xfs-y				+= xfs_alloc.o \
 				   xfs_dir2_sf.o \
 				   xfs_ialloc.o \
 				   xfs_ialloc_btree.o \
-				   xfs_icreate_item.o \
 				   xfs_inode.o \
 				   xfs_log_recover.o \
 				   xfs_mount.o \

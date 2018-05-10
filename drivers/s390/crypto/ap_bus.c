@@ -44,7 +44,6 @@
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
 #include <asm/facility.h>
-#include <linux/crypto.h>
 
 #include "ap_bus.h"
 
@@ -59,7 +58,7 @@ static inline void ap_schedule_poll_timer(void);
 static int __ap_poll_device(struct ap_device *ap_dev, unsigned long *flags);
 static int ap_device_remove(struct device *dev);
 static int ap_device_probe(struct device *dev);
-static void ap_interrupt_handler(struct airq_struct *airq);
+static void ap_interrupt_handler(void *unused1, void *unused2);
 static void ap_reset(struct ap_device *ap_dev);
 static void ap_config_timeout(unsigned long ptr);
 static int ap_select_domain(void);
@@ -107,6 +106,7 @@ static DECLARE_WAIT_QUEUE_HEAD(ap_poll_wait);
 static struct task_struct *ap_poll_kthread = NULL;
 static DEFINE_MUTEX(ap_poll_thread_mutex);
 static DEFINE_SPINLOCK(ap_poll_timer_lock);
+static void *ap_interrupt_indicator;
 static struct hrtimer ap_poll_timer;
 /* In LPAR poll with 4kHz frequency. Poll every 250000 nanoseconds.
  * If z/VM change to 1500000 nanoseconds to adjust to z/VM polling.*/
@@ -120,21 +120,13 @@ static int ap_suspend_flag;
 static int user_set_domain = 0;
 static struct bus_type ap_bus_type;
 
-/* Adapter interrupt definitions */
-static int ap_airq_flag;
-
-static struct airq_struct ap_airq = {
-	.handler = ap_interrupt_handler,
-	.isc = AP_ISC,
-};
-
 /**
  * ap_using_interrupts() - Returns non-zero if interrupt support is
  * available.
  */
 static inline int ap_using_interrupts(void)
 {
-	return ap_airq_flag;
+	return ap_interrupt_indicator != NULL;
 }
 
 /**
@@ -596,7 +588,7 @@ static int ap_init_queue(ap_qid_t qid)
 		}
 	}
 	if (rc == 0 && ap_using_interrupts()) {
-		rc = ap_queue_enable_interruption(qid, ap_airq.lsi_ptr);
+		rc = ap_queue_enable_interruption(qid, ap_interrupt_indicator);
 		/* If interruption mode is supported by the machine,
 		* but an AP can not be enabled for interruption then
 		* the AP will be discarded.    */
@@ -829,22 +821,13 @@ static int ap_bus_suspend(struct device *dev, pm_message_t state)
 
 static int ap_bus_resume(struct device *dev)
 {
+	int rc = 0;
 	struct ap_device *ap_dev = to_ap_dev(dev);
-	int rc;
 
 	if (ap_suspend_flag) {
 		ap_suspend_flag = 0;
-		if (ap_interrupts_available()) {
-			if (!ap_using_interrupts()) {
-				rc = register_adapter_interrupt(&ap_airq);
-				ap_airq_flag = (rc == 0);
-			}
-		} else {
-			if (ap_using_interrupts()) {
-				unregister_adapter_interrupt(&ap_airq);
-				ap_airq_flag = 0;
-			}
-		}
+		if (!ap_interrupts_available())
+			ap_interrupt_indicator = NULL;
 		ap_query_configuration();
 		if (!user_set_domain) {
 			ap_domain_index = -1;
@@ -865,10 +848,7 @@ static int ap_bus_resume(struct device *dev)
 			tasklet_schedule(&ap_tasklet);
 		if (ap_thread_flag)
 			rc = ap_poll_thread_start();
-		else
-			rc = 0;
-	} else
-		rc = 0;
+	}
 	if (AP_QID_QUEUE(ap_dev->qid) != ap_domain_index) {
 		spin_lock_bh(&ap_dev->lock);
 		ap_dev->qid = AP_MKQID(AP_QID_DEVICE(ap_dev->qid),
@@ -1286,7 +1266,7 @@ out:
 	return rc;
 }
 
-static void ap_interrupt_handler(struct airq_struct *airq)
+static void ap_interrupt_handler(void *unused1, void *unused2)
 {
 	inc_irq_stat(IRQIO_APB);
 	tasklet_schedule(&ap_tasklet);
@@ -1742,7 +1722,7 @@ static void ap_poll_all(unsigned long dummy)
 	 * important that no requests on any AP get lost.
 	 */
 	if (ap_using_interrupts())
-		xchg(ap_airq.lsi_ptr, 0);
+		xchg((u8 *)ap_interrupt_indicator, 0);
 	do {
 		flags = 0;
 		spin_lock(&ap_device_list_lock);
@@ -1815,7 +1795,7 @@ static int ap_poll_thread_start(void)
 	mutex_lock(&ap_poll_thread_mutex);
 	if (!ap_poll_kthread) {
 		ap_poll_kthread = kthread_run(ap_poll_thread, NULL, "appoll");
-		rc = PTR_RET(ap_poll_kthread);
+		rc = IS_ERR(ap_poll_kthread) ? PTR_ERR(ap_poll_kthread) : 0;
 		if (rc)
 			ap_poll_kthread = NULL;
 	}
@@ -1901,8 +1881,13 @@ int __init ap_module_init(void)
 		return -ENODEV;
 	}
 	if (ap_interrupts_available()) {
-		rc = register_adapter_interrupt(&ap_airq);
-		ap_airq_flag = (rc == 0);
+		isc_register(AP_ISC);
+		ap_interrupt_indicator = s390_register_adapter_interrupt(
+			&ap_interrupt_handler, NULL, AP_ISC);
+		if (IS_ERR(ap_interrupt_indicator)) {
+			ap_interrupt_indicator = NULL;
+			isc_unregister(AP_ISC);
+		}
 	}
 
 	register_reset_call(&ap_reset_call);
@@ -1919,7 +1904,7 @@ int __init ap_module_init(void)
 
 	/* Create /sys/devices/ap. */
 	ap_root_device = root_device_register("ap");
-	rc = PTR_RET(ap_root_device);
+	rc = IS_ERR(ap_root_device) ? PTR_ERR(ap_root_device) : 0;
 	if (rc)
 		goto out_bus;
 
@@ -1970,8 +1955,10 @@ out_bus:
 	bus_unregister(&ap_bus_type);
 out:
 	unregister_reset_call(&ap_reset_call);
-	if (ap_using_interrupts())
-		unregister_adapter_interrupt(&ap_airq);
+	if (ap_using_interrupts()) {
+		s390_unregister_adapter_interrupt(ap_interrupt_indicator, AP_ISC);
+		isc_unregister(AP_ISC);
+	}
 	return rc;
 }
 
@@ -2007,8 +1994,10 @@ void ap_module_exit(void)
 		bus_remove_file(&ap_bus_type, ap_bus_attrs[i]);
 	bus_unregister(&ap_bus_type);
 	unregister_reset_call(&ap_reset_call);
-	if (ap_using_interrupts())
-		unregister_adapter_interrupt(&ap_airq);
+	if (ap_using_interrupts()) {
+		s390_unregister_adapter_interrupt(ap_interrupt_indicator, AP_ISC);
+		isc_unregister(AP_ISC);
+	}
 }
 
 module_init(ap_module_init);

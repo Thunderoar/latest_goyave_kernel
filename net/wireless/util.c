@@ -33,35 +33,6 @@ ieee80211_get_response_rate(struct ieee80211_supported_band *sband,
 }
 EXPORT_SYMBOL(ieee80211_get_response_rate);
 
-u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband,
-			      enum nl80211_bss_scan_width scan_width)
-{
-	struct ieee80211_rate *bitrates;
-	u32 mandatory_rates = 0;
-	enum ieee80211_rate_flags mandatory_flag;
-	int i;
-
-	if (WARN_ON(!sband))
-		return 1;
-
-	if (sband->band == NL80211_BAND_2GHZ) {
-		if (scan_width == NL80211_BSS_CHAN_WIDTH_5 ||
-		    scan_width == NL80211_BSS_CHAN_WIDTH_10)
-			mandatory_flag = IEEE80211_RATE_MANDATORY_G;
-		else
-			mandatory_flag = IEEE80211_RATE_MANDATORY_B;
-	} else {
-		mandatory_flag = IEEE80211_RATE_MANDATORY_A;
-	}
-
-	bitrates = sband->bitrates;
-	for (i = 0; i < sband->n_bitrates; i++)
-		if (bitrates[i].flags & mandatory_flag)
-			mandatory_rates |= BIT(i);
-	return mandatory_rates;
-}
-EXPORT_SYMBOL(ieee80211_mandatory_rates);
-
 int ieee80211_channel_to_frequency(int chan, enum ieee80211_band band)
 {
 	/* see 802.11 17.3.8.3.2 and Annex J
@@ -1197,9 +1168,6 @@ bool ieee80211_operating_class_to_band(u8 operating_class,
 	case 83:
 	case 84:
 		*band = IEEE80211_BAND_2GHZ;
-		return true;
-	case 180:
-		*band = IEEE80211_BAND_60GHZ;
 		return true;
 	}
 

@@ -1016,12 +1016,13 @@ static int atl1c_setup_ring_resources(struct atl1c_adapter *adapter)
 		sizeof(struct atl1c_recv_ret_status) * rx_desc_count +
 		8 * 4;
 
-	ring_header->desc = dma_zalloc_coherent(&pdev->dev, ring_header->size,
-						&ring_header->dma, GFP_KERNEL);
+	ring_header->desc = pci_alloc_consistent(pdev, ring_header->size,
+				&ring_header->dma);
 	if (unlikely(!ring_header->desc)) {
-		dev_err(&pdev->dev, "could not get memory for DMA buffer\n");
+		dev_err(&pdev->dev, "pci_alloc_consistend failed\n");
 		goto err_nomem;
 	}
+	memset(ring_header->desc, 0, ring_header->size);
 	/* init TPD ring */
 
 	tpd_ring[0].dma = roundup(ring_header->dma, 8);
@@ -2792,4 +2793,27 @@ static struct pci_driver atl1c_driver = {
 	.driver.pm = &atl1c_pm_ops,
 };
 
-module_pci_driver(atl1c_driver);
+/**
+ * atl1c_init_module - Driver Registration Routine
+ *
+ * atl1c_init_module is the first routine called when the driver is
+ * loaded. All it does is register with the PCI subsystem.
+ */
+static int __init atl1c_init_module(void)
+{
+	return pci_register_driver(&atl1c_driver);
+}
+
+/**
+ * atl1c_exit_module - Driver Exit Cleanup Routine
+ *
+ * atl1c_exit_module is called just before the driver is removed
+ * from memory.
+ */
+static void __exit atl1c_exit_module(void)
+{
+	pci_unregister_driver(&atl1c_driver);
+}
+
+module_init(atl1c_init_module);
+module_exit(atl1c_exit_module);

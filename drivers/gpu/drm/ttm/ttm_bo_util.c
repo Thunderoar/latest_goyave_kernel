@@ -342,25 +342,19 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 	if (ret)
 		goto out;
 
-	/*
-	 * Single TTM move. NOP.
-	 */
 	if (old_iomap == NULL && new_iomap == NULL)
 		goto out2;
-
-	/*
-	 * Move nonexistent data. NOP.
-	 */
 	if (old_iomap == NULL && ttm == NULL)
 		goto out2;
 
-	/*
-	 * TTM might be null for moves within the same region.
-	 */
-	if (ttm && ttm->state == tt_unpopulated) {
+	if (ttm->state == tt_unpopulated) {
 		ret = ttm->bdev->driver->ttm_tt_populate(ttm);
-		if (ret)
+		if (ret) {
+			/* if we fail here don't nuke the mm node
+			 * as the bo still owns it */
+			old_copy.mm_node = NULL;
 			goto out1;
+		}
 	}
 
 	add = 0;
@@ -386,8 +380,11 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 						   prot);
 		} else
 			ret = ttm_copy_io_page(new_iomap, old_iomap, page);
-		if (ret)
+		if (ret) {
+			/* failing here, means keep old copy as-is */
+			old_copy.mm_node = NULL;
 			goto out1;
+		}
 	}
 	mb();
 out2:
@@ -405,12 +402,7 @@ out1:
 	ttm_mem_reg_iounmap(bdev, old_mem, new_iomap);
 out:
 	ttm_mem_reg_iounmap(bdev, &old_copy, old_iomap);
-
-	/*
-	 * On error, keep the mm node!
-	 */
-	if (!ret)
-		ttm_bo_mem_put(bo, &old_copy);
+	ttm_bo_mem_put(bo, &old_copy);
 	return ret;
 }
 EXPORT_SYMBOL(ttm_bo_move_memcpy);
@@ -441,7 +433,6 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	struct ttm_buffer_object *fbo;
 	struct ttm_bo_device *bdev = bo->bdev;
 	struct ttm_bo_driver *driver = bdev->driver;
-	int ret;
 
 	fbo = kmalloc(sizeof(*fbo), GFP_KERNEL);
 	if (!fbo)
@@ -454,6 +445,7 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	 * TODO: Explicit member copy would probably be better here.
 	 */
 
+	init_waitqueue_head(&fbo->event_queue);
 	INIT_LIST_HEAD(&fbo->ddestroy);
 	INIT_LIST_HEAD(&fbo->lru);
 	INIT_LIST_HEAD(&fbo->swap);
@@ -471,10 +463,6 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	kref_init(&fbo->kref);
 	fbo->destroy = &ttm_transfered_destroy;
 	fbo->acc_size = 0;
-	fbo->resv = &fbo->ttm_resv;
-	reservation_object_init(fbo->resv);
-	ret = ww_mutex_trylock(&fbo->resv->lock);
-	WARN_ON(!ret);
 
 	*new_obj = fbo;
 	return 0;

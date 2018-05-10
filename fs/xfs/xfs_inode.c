@@ -1028,11 +1028,6 @@ xfs_dinode_calc_crc(
 
 /*
  * Read the disk inode attributes into the in-core inode structure.
- *
- * If we are initialising a new inode and we are not utilising the
- * XFS_MOUNT_IKEEP inode cluster mode, we can simple build the new inode core
- * with a random generation number. If we are keeping inodes around, we need to
- * read the inode cluster to get the existing generation number off disk.
  */
 int
 xfs_iread(
@@ -1051,22 +1046,6 @@ xfs_iread(
 	error = xfs_imap(mp, tp, ip->i_ino, &ip->i_imap, iget_flags);
 	if (error)
 		return error;
-
-	/* shortcut IO on inode allocation if possible */
-	if ((iget_flags & XFS_IGET_CREATE) &&
-	    !(mp->m_flags & XFS_MOUNT_IKEEP)) {
-		/* initialise the on-disk inode core */
-		memset(&ip->i_d, 0, sizeof(ip->i_d));
-		ip->i_d.di_magic = XFS_DINODE_MAGIC;
-		ip->i_d.di_gen = prandom_u32();
-		if (xfs_sb_version_hascrc(&mp->m_sb)) {
-			ip->i_d.di_version = 3;
-			ip->i_d.di_ino = ip->i_ino;
-			uuid_copy(&ip->i_d.di_uuid, &mp->m_sb.sb_uuid);
-		} else
-			ip->i_d.di_version = 2;
-		return 0;
-	}
 
 	/*
 	 * Get pointers to the on-disk inode and the buffer containing it.
@@ -1154,16 +1133,17 @@ xfs_iread(
 	xfs_buf_set_ref(bp, XFS_INO_REF);
 
 	/*
-	 * Use xfs_trans_brelse() to release the buffer containing the on-disk
-	 * inode, because it was acquired with xfs_trans_read_buf() in
-	 * xfs_imap_to_bp() above.  If tp is NULL, this is just a normal
+	 * Use xfs_trans_brelse() to release the buffer containing the
+	 * on-disk inode, because it was acquired with xfs_trans_read_buf()
+	 * in xfs_imap_to_bp() above.  If tp is NULL, this is just a normal
 	 * brelse().  If we're within a transaction, then xfs_trans_brelse()
 	 * will only release the buffer if it is not dirty within the
 	 * transaction.  It will be OK to release the buffer in this case,
-	 * because inodes on disk are never destroyed and we will be locking the
-	 * new in-core inode before putting it in the cache where other
-	 * processes can find it.  Thus we don't have to worry about the inode
-	 * being changed just because we released the buffer.
+	 * because inodes on disk are never destroyed and we will be
+	 * locking the new in-core inode before putting it in the hash
+	 * table where other processes can find it.  Thus we don't have
+	 * to worry about the inode being changed just because we released
+	 * the buffer.
 	 */
  out_brelse:
 	xfs_trans_brelse(tp, bp);
@@ -1675,7 +1655,6 @@ xfs_iunlink(
 	agi->agi_unlinked[bucket_index] = cpu_to_be32(agino);
 	offset = offsetof(xfs_agi_t, agi_unlinked) +
 		(sizeof(xfs_agino_t) * bucket_index);
-	xfs_trans_buf_set_type(tp, agibp, XFS_BLFT_AGI_BUF);
 	xfs_trans_log_buf(tp, agibp, offset,
 			  (offset + sizeof(xfs_agino_t) - 1));
 	return 0;
@@ -1767,7 +1746,6 @@ xfs_iunlink_remove(
 		agi->agi_unlinked[bucket_index] = cpu_to_be32(next_agino);
 		offset = offsetof(xfs_agi_t, agi_unlinked) +
 			(sizeof(xfs_agino_t) * bucket_index);
-		xfs_trans_buf_set_type(tp, agibp, XFS_BLFT_AGI_BUF);
 		xfs_trans_log_buf(tp, agibp, offset,
 				  (offset + sizeof(xfs_agino_t) - 1));
 	} else {
@@ -2050,6 +2028,8 @@ xfs_ifree(
 	int			error;
 	int			delete;
 	xfs_ino_t		first_ino;
+	xfs_dinode_t    	*dip;
+	xfs_buf_t       	*ibp;
 
 	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));
 	ASSERT(ip->i_d.di_nlink == 0);
@@ -2062,13 +2042,14 @@ xfs_ifree(
 	 * Pull the on-disk inode from the AGI unlinked list.
 	 */
 	error = xfs_iunlink_remove(tp, ip);
-	if (error)
+	if (error != 0) {
 		return error;
+	}
 
 	error = xfs_difree(tp, ip->i_ino, flist, &delete, &first_ino);
-	if (error)
+	if (error != 0) {
 		return error;
-
+	}
 	ip->i_d.di_mode = 0;		/* mark incore inode as free */
 	ip->i_d.di_flags = 0;
 	ip->i_d.di_dmevmask = 0;
@@ -2080,10 +2061,31 @@ xfs_ifree(
 	 * by reincarnations of this inode.
 	 */
 	ip->i_d.di_gen++;
+
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 
-	if (delete)
+	error = xfs_imap_to_bp(ip->i_mount, tp, &ip->i_imap, &dip, &ibp,
+			       0, 0);
+	if (error)
+		return error;
+
+        /*
+	* Clear the on-disk di_mode. This is to prevent xfs_bulkstat
+	* from picking up this inode when it is reclaimed (its incore state
+	* initialzed but not flushed to disk yet). The in-core di_mode is
+	* already cleared  and a corresponding transaction logged.
+	* The hack here just synchronizes the in-core to on-disk
+	* di_mode value in advance before the actual inode sync to disk.
+	* This is OK because the inode is already unlinked and would never
+	* change its di_mode again for this inode generation.
+	* This is a temporary hack that would require a proper fix
+	* in the future.
+	*/
+	dip->di_mode = 0;
+
+	if (delete) {
 		error = xfs_ifree_cluster(ip, tp, first_ino);
+	}
 
 	return error;
 }
@@ -2600,14 +2602,13 @@ xfs_iflush_cluster(
 		 * We need to check under the i_flags_lock for a valid inode
 		 * here. Skip it if it is not valid or the wrong inode.
 		 */
-		spin_lock(&iq->i_flags_lock);
-		if (!iq->i_ino ||
-		    __xfs_iflags_test(iq, XFS_ISTALE) ||
+		spin_lock(&ip->i_flags_lock);
+		if (!ip->i_ino ||
 		    (XFS_INO_TO_AGINO(mp, iq->i_ino) & mask) != first_index) {
-			spin_unlock(&iq->i_flags_lock);
+			spin_unlock(&ip->i_flags_lock);
 			continue;
 		}
-		spin_unlock(&iq->i_flags_lock);
+		spin_unlock(&ip->i_flags_lock);
 
 		/*
 		 * Do an un-protected check to see if the inode is dirty and
@@ -2723,7 +2724,7 @@ xfs_iflush(
 	struct xfs_buf		**bpp)
 {
 	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_buf		*bp = NULL;
+	struct xfs_buf		*bp;
 	struct xfs_dinode	*dip;
 	int			error;
 
@@ -2765,22 +2766,14 @@ xfs_iflush(
 	}
 
 	/*
-	 * Get the buffer containing the on-disk inode. We are doing a try-lock
-	 * operation here, so we may get  an EAGAIN error. In that case, we
-	 * simply want to return with the inode still dirty.
-	 *
-	 * If we get any other error, we effectively have a corruption situation
-	 * and we cannot flush the inode, so we treat it the same as failing
-	 * xfs_iflush_int().
+	 * Get the buffer containing the on-disk inode.
 	 */
 	error = xfs_imap_to_bp(mp, NULL, &ip->i_imap, &dip, &bp, XBF_TRYLOCK,
 			       0);
-	if (error == EAGAIN) {
+	if (error || !bp) {
 		xfs_ifunlock(ip);
 		return error;
 	}
-	if (error)
-		goto corrupt_out;
 
 	/*
 	 * First flush out the inode that xfs_iflush was called with.
@@ -2808,8 +2801,7 @@ xfs_iflush(
 	return 0;
 
 corrupt_out:
-	if (bp)
-		xfs_buf_relse(bp);
+	xfs_buf_relse(bp);
 	xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
 cluster_corrupt_out:
 	error = XFS_ERROR(EFSCORRUPTED);

@@ -13,7 +13,6 @@ struct thread {
 	};
 	struct map_groups	mg;
 	pid_t			pid;
-	pid_t			ppid;
 	char			shortname[3];
 	bool			comm_set;
 	char			*comm;

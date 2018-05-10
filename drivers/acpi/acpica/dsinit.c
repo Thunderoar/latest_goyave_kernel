@@ -127,7 +127,6 @@ acpi_ds_init_one_object(acpi_handle obj_handle,
 		break;
 
 	default:
-
 		break;
 	}
 

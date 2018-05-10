@@ -24,6 +24,7 @@
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/wait.h>
 #include "tpm.h"
 
@@ -73,6 +74,7 @@ struct tpm_inf_dev {
 };
 
 static struct tpm_inf_dev tpm_dev;
+static struct i2c_driver tpm_tis_i2c_driver;
 
 /*
  * iic_tpm_read() - read from TPM register
@@ -742,9 +744,11 @@ static int tpm_tis_i2c_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
+	client->driver = &tpm_tis_i2c_driver;
 	tpm_dev.client = client;
 	rc = tpm_tis_i2c_init(&client->dev);
 	if (rc != 0) {
+		client->driver = NULL;
 		tpm_dev.client = NULL;
 		rc = -ENODEV;
 	}

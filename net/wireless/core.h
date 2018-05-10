@@ -69,7 +69,6 @@ struct cfg80211_registered_device {
 	struct list_head bss_list;
 	struct rb_root bss_tree;
 	u32 bss_generation;
-	u32 bss_entries;
 	struct cfg80211_scan_request *scan_req; /* protected by RTNL */
 	struct cfg80211_sched_scan_request *sched_scan_req;
 	unsigned long suspend_at;
@@ -84,6 +83,8 @@ struct cfg80211_registered_device {
 
 	struct work_struct conn_work;
 	struct work_struct event_work;
+
+	struct cfg80211_wowlan *wowlan;
 
 	struct delayed_work dfs_update_channels_wk;
 
@@ -105,20 +106,17 @@ struct cfg80211_registered_device *wiphy_to_dev(struct wiphy *wiphy)
 static inline void
 cfg80211_rdev_free_wowlan(struct cfg80211_registered_device *rdev)
 {
-#ifdef CONFIG_PM
 	int i;
 
-	if (!rdev->wiphy.wowlan_config)
+	if (!rdev->wowlan)
 		return;
-	for (i = 0; i < rdev->wiphy.wowlan_config->n_patterns; i++)
-		kfree(rdev->wiphy.wowlan_config->patterns[i].mask);
-	kfree(rdev->wiphy.wowlan_config->patterns);
-	if (rdev->wiphy.wowlan_config->tcp &&
-	    rdev->wiphy.wowlan_config->tcp->sock)
-		sock_release(rdev->wiphy.wowlan_config->tcp->sock);
-	kfree(rdev->wiphy.wowlan_config->tcp);
-	kfree(rdev->wiphy.wowlan_config);
-#endif
+	for (i = 0; i < rdev->wowlan->n_patterns; i++)
+		kfree(rdev->wowlan->patterns[i].mask);
+	kfree(rdev->wowlan->patterns);
+	if (rdev->wowlan->tcp && rdev->wowlan->tcp->sock)
+		sock_release(rdev->wowlan->tcp->sock);
+	kfree(rdev->wowlan->tcp);
+	kfree(rdev->wowlan);
 }
 
 extern struct workqueue_struct *cfg80211_wq;
@@ -402,8 +400,6 @@ int cfg80211_mgd_wext_connect(struct cfg80211_registered_device *rdev,
 			      struct wireless_dev *wdev);
 
 void cfg80211_conn_work(struct work_struct *work);
-bool cfg80211_sme_rx_assoc_resp(struct wireless_dev *wdev, u16 status);
-void cfg80211_sme_assoc_timeout(struct wireless_dev *wdev);
 void cfg80211_sme_failed_assoc(struct wireless_dev *wdev);
 bool cfg80211_sme_failed_reassoc(struct wireless_dev *wdev);
 

@@ -175,12 +175,12 @@ get_cache:
 
 static int stat_show(struct seq_file *s, void *v)
 {
-	struct f2fs_stat_info *si;
+	struct f2fs_stat_info *si, *next;
 	int i = 0;
 	int j;
 
 	mutex_lock(&f2fs_stat_mutex);
-	list_for_each_entry(si, &f2fs_stat_list, stat_list) {
+	list_for_each_entry_safe(si, next, &f2fs_stat_list, stat_list) {
 		char devname[BDEVNAME_SIZE];
 
 		update_general_status(si->sbi);
@@ -294,7 +294,6 @@ static int stat_open(struct inode *inode, struct file *file)
 }
 
 static const struct file_operations stat_fops = {
-	.owner = THIS_MODULE,
 	.open = stat_open,
 	.read = seq_read,
 	.llseek = seq_lseek,

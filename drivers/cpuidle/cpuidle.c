@@ -135,9 +135,6 @@ int cpuidle_idle_call(void)
 
 	/* ask the governor for the next state */
 	next_state = cpuidle_curr_governor->select(drv, dev);
-	if (next_state < 0)
-		return -EBUSY;
-
 	if (need_resched()) {
 		dev->last_residency = 0;
 		/* give the governor an opportunity to reflect on the outcome */
@@ -469,7 +466,7 @@ void cpuidle_unregister(struct cpuidle_driver *drv)
 	int cpu;
 	struct cpuidle_device *device;
 
-	for_each_cpu(cpu, drv->cpumask) {
+	for_each_possible_cpu(cpu) {
 		device = &per_cpu(cpuidle_dev, cpu);
 		cpuidle_unregister_device(device);
 	}
@@ -501,7 +498,7 @@ int cpuidle_register(struct cpuidle_driver *drv,
 		return ret;
 	}
 
-	for_each_cpu(cpu, drv->cpumask) {
+	for_each_possible_cpu(cpu) {
 		device = &per_cpu(cpuidle_dev, cpu);
 		device->cpu = cpu;
 

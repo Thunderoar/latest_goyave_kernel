@@ -110,7 +110,7 @@ static int gfs2_writepage_common(struct page *page,
 	/* Is the page fully outside i_size? (truncate in progress) */
 	offset = i_size & (PAGE_CACHE_SIZE-1);
 	if (page->index > end_index || (page->index == end_index && !offset)) {
-		page->mapping->a_ops->invalidatepage(page, 0, PAGE_CACHE_SIZE);
+		page->mapping->a_ops->invalidatepage(page, 0);
 		goto out;
 	}
 	return 1;
@@ -299,8 +299,7 @@ static int gfs2_write_jdata_pagevec(struct address_space *mapping,
 
 		/* Is the page fully outside i_size? (truncate in progress) */
 		if (page->index > end_index || (page->index == end_index && !offset)) {
-			page->mapping->a_ops->invalidatepage(page, 0,
-							     PAGE_CACHE_SIZE);
+			page->mapping->a_ops->invalidatepage(page, 0);
 			unlock_page(page);
 			continue;
 		}
@@ -944,33 +943,27 @@ static void gfs2_discard(struct gfs2_sbd *sdp, struct buffer_head *bh)
 	unlock_buffer(bh);
 }
 
-static void gfs2_invalidatepage(struct page *page, unsigned int offset,
-				unsigned int length)
+static void gfs2_invalidatepage(struct page *page, unsigned long offset)
 {
 	struct gfs2_sbd *sdp = GFS2_SB(page->mapping->host);
-	unsigned int stop = offset + length;
-	int partial_page = (offset || length < PAGE_CACHE_SIZE);
 	struct buffer_head *bh, *head;
 	unsigned long pos = 0;
 
 	BUG_ON(!PageLocked(page));
-	if (!partial_page)
+	if (offset == 0)
 		ClearPageChecked(page);
 	if (!page_has_buffers(page))
 		goto out;
 
 	bh = head = page_buffers(page);
 	do {
-		if (pos + bh->b_size > stop)
-			return;
-
 		if (offset <= pos)
 			gfs2_discard(sdp, bh);
 		pos += bh->b_size;
 		bh = bh->b_this_page;
 	} while (bh != head);
 out:
-	if (!partial_page)
+	if (offset == 0)
 		try_to_release_page(page, 0);
 }
 
@@ -1006,7 +999,6 @@ static ssize_t gfs2_direct_IO(int rw, struct kiocb *iocb,
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
-	struct address_space *mapping = inode->i_mapping;
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_holder gh;
 	int rv;
@@ -1026,35 +1018,6 @@ static ssize_t gfs2_direct_IO(int rw, struct kiocb *iocb,
 	rv = gfs2_ok_for_dio(ip, rw, offset);
 	if (rv != 1)
 		goto out; /* dio not valid, fall back to buffered i/o */
-
-	/*
-	 * Now since we are holding a deferred (CW) lock at this point, you
-	 * might be wondering why this is ever needed. There is a case however
-	 * where we've granted a deferred local lock against a cached exclusive
-	 * glock. That is ok provided all granted local locks are deferred, but
-	 * it also means that it is possible to encounter pages which are
-	 * cached and possibly also mapped. So here we check for that and sort
-	 * them out ahead of the dio. The glock state machine will take care of
-	 * everything else.
-	 *
-	 * If in fact the cached glock state (gl->gl_state) is deferred (CW) in
-	 * the first place, mapping->nr_pages will always be zero.
-	 */
-	if (mapping->nrpages) {
-		loff_t lstart = offset & (PAGE_CACHE_SIZE - 1);
-		loff_t len = iov_length(iov, nr_segs);
-		loff_t end = PAGE_ALIGN(offset + len) - 1;
-
-		rv = 0;
-		if (len == 0)
-			goto out;
-		if (test_and_clear_bit(GIF_SW_PAGED, &ip->i_flags))
-			unmap_shared_mapping_range(ip->i_inode.i_mapping, offset, len);
-		rv = filemap_write_and_wait_range(mapping, lstart, end);
-		if (rv)
-			return rv;
-		truncate_inode_pages_range(mapping, lstart, end);
-	}
 
 	rv = __blockdev_direct_IO(rw, iocb, inode, inode->i_sb->s_bdev, iov,
 				  offset, nr_segs, gfs2_get_block_direct,

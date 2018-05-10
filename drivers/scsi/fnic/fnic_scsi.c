@@ -2432,9 +2432,11 @@ int fnic_is_abts_pending(struct fnic *fnic, struct scsi_cmnd *lr_sc)
 			      "Found IO in %s on lun\n",
 			      fnic_ioreq_state_to_str(CMD_STATE(sc)));
 
-		if (CMD_STATE(sc) == FNIC_IOREQ_ABTS_PENDING)
+		if (CMD_STATE(sc) == FNIC_IOREQ_ABTS_PENDING) {
+			spin_unlock_irqrestore(io_lock, flags);
 			ret = 1;
-		spin_unlock_irqrestore(io_lock, flags);
+			continue;
+		}
 	}
 
 	return ret;

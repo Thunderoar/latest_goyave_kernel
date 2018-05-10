@@ -1,5 +1,3 @@
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/mm.h>
@@ -129,7 +127,7 @@ static int __init xenbus_backend_init(void)
 
 	err = misc_register(&xenbus_backend_dev);
 	if (err)
-		pr_err("Could not register xenbus backend device\n");
+		printk(KERN_ERR "Could not register xenbus backend device\n");
 	return err;
 }
 

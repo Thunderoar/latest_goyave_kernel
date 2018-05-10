@@ -51,10 +51,6 @@ static struct of_device_id hdmiphy_match_types[] = {
 	{
 		.compatible = "samsung,exynos5-hdmiphy",
 	}, {
-		.compatible = "samsung,exynos4210-hdmiphy",
-	}, {
-		.compatible = "samsung,exynos4212-hdmiphy",
-	}, {
 		/* end node */
 	}
 };

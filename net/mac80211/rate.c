@@ -397,14 +397,8 @@ static void rate_idx_match_mask(struct ieee80211_tx_rate *rate,
 			return;
 
 		/* if HT BSS, and we handle a data frame, also try HT rates */
-		switch (chan_width) {
-		case NL80211_CHAN_WIDTH_20_NOHT:
-		case NL80211_CHAN_WIDTH_5:
-		case NL80211_CHAN_WIDTH_10:
+		if (chan_width == NL80211_CHAN_WIDTH_20_NOHT)
 			return;
-		default:
-			break;
-		}
 
 		alt_rate.idx = 0;
 		/* keep protection flags */
@@ -454,7 +448,7 @@ static void rate_fixup_ratelist(struct ieee80211_vif *vif,
 	 */
 	if (!(rates[0].flags & IEEE80211_TX_RC_MCS)) {
 		u32 basic_rates = vif->bss_conf.basic_rates;
-		s8 baserate = basic_rates ? ffs(basic_rates) - 1 : 0;
+		s8 baserate = basic_rates ? ffs(basic_rates - 1) : 0;
 
 		rate = &sband->bitrates[rates[0].idx];
 

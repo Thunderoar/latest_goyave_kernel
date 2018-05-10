@@ -84,7 +84,7 @@ static ssize_t show_##file_name##_gov_sys				\
 		return sprintf(buf, "%d\n", tuners->file_name);			\
 }									\
 									\
-static ssize_t show_##file_name##_gov_pol				\
+static ssize_t show_##file_name##_gov_pol					\
 (struct cpufreq_policy *policy, char *buf)				\
 {									\
 	struct dbs_data *dbs_data = policy->governor_data;		\
@@ -94,7 +94,7 @@ static ssize_t show_##file_name##_gov_pol				\
 
 #define store_one(_gov, file_name)					\
 static ssize_t store_##file_name##_gov_sys				\
-(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count) \
+(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)	\
 {									\
 	struct dbs_data *dbs_data = _gov##_dbs_cdata.gdbs_data;		\
 	return store_##file_name(dbs_data, buf, count);			\
@@ -138,12 +138,6 @@ struct cpu_dbs_common_info {
 	u64 prev_cpu_idle;
 	u64 prev_cpu_wall;
 	u64 prev_cpu_nice;
-	unsigned int prev_load;
-	/*
-	 * Flag to ensure that we copy the previous load only once, upon the
-	 * first wake-up from idle.
-	 */
-	bool copy_prev_load;
 	struct cpufreq_policy *cur_policy;
 	struct delayed_work work;
 	/*
@@ -178,6 +172,7 @@ struct od_dbs_tuners {
 	unsigned int sampling_rate;
 	unsigned int sampling_down_factor;
 	unsigned int up_threshold;
+	unsigned int adj_up_threshold;
 	unsigned int powersave_bias;
 	unsigned int io_is_busy;
 };
@@ -215,8 +210,7 @@ struct sd_dbs_tuners {
 	int load_lo_score;
 	unsigned int cpu_down_threshold;
 	unsigned int cpu_down_count;
-	unsigned int cpu_num_limit;                                                                 
-        unsigned int cpu_num_min_limit;   
+	unsigned int cpu_num_limit;
 };
 
 /* Common Governer data across policies */

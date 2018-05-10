@@ -1584,8 +1584,6 @@ void igb_power_up_link(struct igb_adapter *adapter)
 		igb_power_up_phy_copper(&adapter->hw);
 	else
 		igb_power_up_serdes_link_82575(&adapter->hw);
-
-	igb_setup_link(&adapter->hw);
 }
 
 /**
@@ -1669,13 +1667,10 @@ void igb_down(struct igb_adapter *adapter)
 	wrfl();
 	msleep(10);
 
-	igb_irq_disable(adapter);
-
-	for (i = 0; i < adapter->num_q_vectors; i++) {
-		napi_synchronize(&(adapter->q_vector[i]->napi));
+	for (i = 0; i < adapter->num_q_vectors; i++)
 		napi_disable(&(adapter->q_vector[i]->napi));
-	}
 
+	igb_irq_disable(adapter);
 
 	del_timer_sync(&adapter->watchdog_timer);
 	del_timer_sync(&adapter->phy_info_timer);
@@ -6627,7 +6622,7 @@ static void igb_process_skb_fields(struct igb_ring *rx_ring,
 
 	igb_rx_checksum(rx_ring, rx_desc, skb);
 
-	igb_ptp_rx_hwtstamp(rx_ring, rx_desc, skb);
+	igb_ptp_rx_hwtstamp(rx_ring->q_vector, rx_desc, skb);
 
 	if ((dev->features & NETIF_F_HW_VLAN_CTAG_RX) &&
 	    igb_test_staterr(rx_desc, E1000_RXD_STAT_VP)) {
@@ -7234,8 +7229,6 @@ static int igb_sriov_reinit(struct pci_dev *dev)
 
 	if (netif_running(netdev))
 		igb_close(netdev);
-	else
-		igb_reset(adapter);
 
 	igb_clear_interrupt_scheme(adapter);
 

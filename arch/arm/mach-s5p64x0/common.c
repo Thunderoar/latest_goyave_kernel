@@ -173,8 +173,6 @@ void __init s5p64x0_init_io(struct map_desc *mach_desc, int size)
 	s5p_init_cpu(S5P64X0_SYS_ID);
 
 	s3c_init_cpu(samsung_cpu_id, cpu_ids, ARRAY_SIZE(cpu_ids));
-	samsung_wdt_reset_init(S3C_VA_WATCHDOG);
-
 }
 
 void __init s5p6440_map_io(void)
@@ -442,7 +440,7 @@ arch_initcall(s5p64x0_init_irq_eint);
 void s5p64x0_restart(char mode, const char *cmd)
 {
 	if (mode != 's')
-		samsung_wdt_reset();
+		arch_wdt_reset();
 
 	soft_restart(0);
 }

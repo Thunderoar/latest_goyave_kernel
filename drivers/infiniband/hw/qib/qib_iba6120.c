@@ -2682,6 +2682,8 @@ static void qib_get_6120_faststats(unsigned long opaque)
 	spin_lock_irqsave(&dd->eep_st_lock, flags);
 	traffic_wds -= dd->traffic_wds;
 	dd->traffic_wds += traffic_wds;
+	if (traffic_wds  >= QIB_TRAFFIC_ACTIVE_THRESHOLD)
+		atomic_add(5, &dd->active_time); /* S/B #define */
 	spin_unlock_irqrestore(&dd->eep_st_lock, flags);
 
 	qib_chk_6120_errormask(dd);
@@ -3462,13 +3464,6 @@ static int qib_6120_tempsense_rd(struct qib_devdata *dd, int regnum)
 	return -ENXIO;
 }
 
-#ifdef CONFIG_INFINIBAND_QIB_DCA
-static int qib_6120_notify_dca(struct qib_devdata *dd, unsigned long event)
-{
-	return 0;
-}
-#endif
-
 /* Dummy function, as 6120 boards never disable EEPROM Write */
 static int qib_6120_eeprom_wen(struct qib_devdata *dd, int wen)
 {
@@ -3544,9 +3539,6 @@ struct qib_devdata *qib_init_iba6120_funcs(struct pci_dev *pdev,
 	dd->f_xgxs_reset        = qib_6120_xgxs_reset;
 	dd->f_writescratch      = writescratch;
 	dd->f_tempsense_rd	= qib_6120_tempsense_rd;
-#ifdef CONFIG_INFINIBAND_QIB_DCA
-	dd->f_notify_dca = qib_6120_notify_dca;
-#endif
 	/*
 	 * Do remaining pcie setup and save pcie values in dd.
 	 * Any error printing is already done by the init code.

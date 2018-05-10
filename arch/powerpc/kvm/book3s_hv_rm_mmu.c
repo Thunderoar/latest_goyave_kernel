@@ -27,7 +27,7 @@ static void *real_vmalloc_addr(void *x)
 	unsigned long addr = (unsigned long) x;
 	pte_t *p;
 
-	p = find_linux_pte_or_hugepte(swapper_pg_dir, addr, NULL);
+	p = find_linux_pte(swapper_pg_dir, addr);
 	if (!p || !pte_present(*p))
 		return NULL;
 	/* assume we don't have huge pages in vmalloc space... */
@@ -139,18 +139,20 @@ static pte_t lookup_linux_pte(pgd_t *pgdir, unsigned long hva,
 {
 	pte_t *ptep;
 	unsigned long ps = *pte_sizep;
-	unsigned int hugepage_shift;
+	unsigned int shift;
 
-	ptep = find_linux_pte_or_hugepte(pgdir, hva, &hugepage_shift);
+	ptep = find_linux_pte_or_hugepte(pgdir, hva, &shift);
 	if (!ptep)
 		return __pte(0);
-	if (hugepage_shift)
-		*pte_sizep = 1ul << hugepage_shift;
+	if (shift)
+		*pte_sizep = 1ul << shift;
 	else
 		*pte_sizep = PAGE_SIZE;
 	if (ps > *pte_sizep)
 		return __pte(0);
-	return kvmppc_read_update_linux_pte(ptep, writing, hugepage_shift);
+	if (!pte_present(*ptep))
+		return __pte(0);
+	return kvmppc_read_update_linux_pte(ptep, writing);
 }
 
 static inline void unlock_hpte(unsigned long *hpte, unsigned long hpte_v)
@@ -722,10 +724,6 @@ static int slb_base_page_shift[4] = {
 	20,	/* 1M, unsupported */
 };
 
-/* When called from virtmode, this func should be protected by
- * preempt_disable(), otherwise, the holding of HPTE_V_HVLOCK
- * can trigger deadlock issue.
- */
 long kvmppc_hv_find_lock_hpte(struct kvm *kvm, gva_t eaddr, unsigned long slb_v,
 			      unsigned long valid)
 {

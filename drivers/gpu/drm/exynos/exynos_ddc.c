@@ -53,8 +53,6 @@ static struct of_device_id hdmiddc_match_types[] = {
 	{
 		.compatible = "samsung,exynos5-hdmiddc",
 	}, {
-		.compatible = "samsung,exynos4210-hdmiddc",
-	}, {
 		/* end node */
 	}
 };

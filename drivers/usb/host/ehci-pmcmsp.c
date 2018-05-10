@@ -291,7 +291,8 @@ static const struct hc_driver ehci_msp_hc_driver = {
 	/*
 	 * basic lifecycle operations
 	 */
-	.reset			= ehci_msp_setup,
+	.reset =		ehci_msp_setup,
+	.start =		ehci_run,
 	.shutdown		= ehci_shutdown,
 	.start			= ehci_run,
 	.stop			= ehci_stop,

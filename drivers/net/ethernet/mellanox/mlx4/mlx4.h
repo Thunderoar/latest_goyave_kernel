@@ -482,7 +482,6 @@ struct mlx4_vport_state {
 	u8  default_qos;
 	u32 tx_rate;
 	bool spoofchk;
-	u32 link_state;
 };
 
 struct mlx4_vf_admin_state {
@@ -744,7 +743,6 @@ struct mlx4_priv {
 	spinlock_t		ctx_lock;
 
 	int			pci_dev_data;
-	int                     removed;
 
 	struct list_head        pgdir_list;
 	struct mutex            pgdir_mutex;

@@ -188,8 +188,6 @@ struct ieee80211_channel {
  *	when used with 802.11g (on the 2.4 GHz band); filled by the
  *	core code when registering the wiphy.
  * @IEEE80211_RATE_ERP_G: This is an ERP rate in 802.11g mode.
- * @IEEE80211_RATE_SUPPORTS_5MHZ: Rate can be used in 5 MHz mode
- * @IEEE80211_RATE_SUPPORTS_10MHZ: Rate can be used in 10 MHz mode
  */
 enum ieee80211_rate_flags {
 	IEEE80211_RATE_SHORT_PREAMBLE	= 1<<0,
@@ -197,8 +195,6 @@ enum ieee80211_rate_flags {
 	IEEE80211_RATE_MANDATORY_B	= 1<<2,
 	IEEE80211_RATE_MANDATORY_G	= 1<<3,
 	IEEE80211_RATE_ERP_G		= 1<<4,
-	IEEE80211_RATE_SUPPORTS_5MHZ	= 1<<5,
-	IEEE80211_RATE_SUPPORTS_10MHZ	= 1<<6,
 };
 
 /**
@@ -435,30 +431,6 @@ bool cfg80211_chandef_valid(const struct cfg80211_chan_def *chandef);
 bool cfg80211_chandef_usable(struct wiphy *wiphy,
 			     const struct cfg80211_chan_def *chandef,
 			     u32 prohibited_flags);
-
-/**
- * ieee80211_chandef_rate_flags - returns rate flags for a channel
- *
- * In some channel types, not all rates may be used - for example CCK
- * rates may not be used in 5/10 MHz channels.
- *
- * @chandef: channel definition for the channel
- *
- * Returns: rate flags which apply for this channel
- */
-static inline enum ieee80211_rate_flags
-ieee80211_chandef_rate_flags(struct cfg80211_chan_def *chandef)
-{
-	switch (chandef->width) {
-	case NL80211_CHAN_WIDTH_5:
-		return IEEE80211_RATE_SUPPORTS_5MHZ;
-	case NL80211_CHAN_WIDTH_10:
-		return IEEE80211_RATE_SUPPORTS_10MHZ;
-	default:
-		break;
-	}
-	return 0;
-}
 
 /**
  * enum survey_info_flags - survey information flags
@@ -781,8 +753,6 @@ int cfg80211_check_station_change(struct wiphy *wiphy,
  * @STATION_INFO_LOCAL_PM: @local_pm filled
  * @STATION_INFO_PEER_PM: @peer_pm filled
  * @STATION_INFO_NONPEER_PM: @nonpeer_pm filled
- * @STATION_INFO_CHAIN_SIGNAL: @chain_signal filled
- * @STATION_INFO_CHAIN_SIGNAL_AVG: @chain_signal_avg filled
  */
 enum station_info_flags {
 	STATION_INFO_INACTIVE_TIME	= 1<<0,
@@ -811,8 +781,6 @@ enum station_info_flags {
 	STATION_INFO_NONPEER_PM		= 1<<23,
 	STATION_INFO_RX_BYTES64		= 1<<24,
 	STATION_INFO_TX_BYTES64		= 1<<25,
-	STATION_INFO_CHAIN_SIGNAL	= 1<<26,
-	STATION_INFO_CHAIN_SIGNAL_AVG	= 1<<27,
 };
 
 /**
@@ -889,8 +857,6 @@ struct sta_bss_parameters {
 	u16 beacon_interval;
 };
 
-#define IEEE80211_MAX_CHAINS	4
-
 /**
  * struct station_info - station information
  *
@@ -908,9 +874,6 @@ struct sta_bss_parameters {
  *	For CFG80211_SIGNAL_TYPE_MBM, value is expressed in _dBm_.
  * @signal_avg: Average signal strength, type depends on the wiphy's signal_type.
  *	For CFG80211_SIGNAL_TYPE_MBM, value is expressed in _dBm_.
- * @chains: bitmask for filled values in @chain_signal, @chain_signal_avg
- * @chain_signal: per-chain signal strength of last received packet in dBm
- * @chain_signal_avg: per-chain signal strength average in dBm
  * @txrate: current unicast bitrate from this station
  * @rxrate: current unicast bitrate to this station
  * @rx_packets: packets received from this station
@@ -946,11 +909,6 @@ struct station_info {
 	u8 plink_state;
 	s8 signal;
 	s8 signal_avg;
-
-	u8 chains;
-	s8 chain_signal[IEEE80211_MAX_CHAINS];
-	s8 chain_signal_avg[IEEE80211_MAX_CHAINS];
-
 	struct rate_info txrate;
 	struct rate_info rxrate;
 	u32 rx_packets;
@@ -989,7 +947,6 @@ struct station_info {
  * @MONITOR_FLAG_CONTROL: pass control frames
  * @MONITOR_FLAG_OTHER_BSS: disable BSSID filtering
  * @MONITOR_FLAG_COOK_FRAMES: report frames after processing
- * @MONITOR_FLAG_ACTIVE: active monitor, ACKs frames on its MAC address
  */
 enum monitor_flags {
 	MONITOR_FLAG_FCSFAIL		= 1<<NL80211_MNTR_FLAG_FCSFAIL,
@@ -997,7 +954,6 @@ enum monitor_flags {
 	MONITOR_FLAG_CONTROL		= 1<<NL80211_MNTR_FLAG_CONTROL,
 	MONITOR_FLAG_OTHER_BSS		= 1<<NL80211_MNTR_FLAG_OTHER_BSS,
 	MONITOR_FLAG_COOK_FRAMES	= 1<<NL80211_MNTR_FLAG_COOK_FRAMES,
-	MONITOR_FLAG_ACTIVE		= 1<<NL80211_MNTR_FLAG_ACTIVE,
 };
 
 /**
@@ -1152,9 +1108,6 @@ struct bss_parameters {
  *	setting for new peer links.
  * @dot11MeshAwakeWindowDuration: The duration in TUs the STA will remain awake
  *	after transmitting its beacon.
- * @plink_timeout: If no tx activity is seen from a STA we've established
- *	peering with for longer than this time (in seconds), then remove it
- *	from the STA's list of peers.  Default is 30 minutes.
  */
 struct mesh_config {
 	u16 dot11MeshRetryTimeout;
@@ -1184,7 +1137,6 @@ struct mesh_config {
 	u16 dot11MeshHWMPconfirmationInterval;
 	enum nl80211_mesh_power_mode power_mode;
 	u16 dot11MeshAwakeWindowDuration;
-	u32 plink_timeout;
 };
 
 /**
@@ -1195,7 +1147,6 @@ struct mesh_config {
  * @sync_method: which synchronization method to use
  * @path_sel_proto: which path selection protocol to use
  * @path_metric: which metric to use
- * @auth_id: which authentication method this mesh is using
  * @ie: vendor information elements (optional)
  * @ie_len: length of vendor information elements
  * @is_authenticated: this mesh requires authentication
@@ -1204,7 +1155,6 @@ struct mesh_config {
  * @dtim_period: DTIM period to use
  * @beacon_interval: beacon interval to use
  * @mcast_rate: multicat rate for Mesh Node [6Mbps is the default for 802.11a]
- * @basic_rates: basic rates to use when creating the mesh
  *
  * These parameters are fixed when the mesh is created.
  */
@@ -1215,7 +1165,6 @@ struct mesh_setup {
 	u8 sync_method;
 	u8 path_sel_proto;
 	u8 path_metric;
-	u8 auth_id;
 	const u8 *ie;
 	u8 ie_len;
 	bool is_authenticated;
@@ -1224,7 +1173,6 @@ struct mesh_setup {
 	u8 dtim_period;
 	u16 beacon_interval;
 	int mcast_rate[IEEE80211_NUM_BANDS];
-	u32 basic_rates;
 };
 
 /**
@@ -1458,8 +1406,7 @@ const u8 *ieee80211_bss_get_ie(struct cfg80211_bss *bss, u8 ie);
  * This structure provides information needed to complete IEEE 802.11
  * authentication.
  *
- * @bss: The BSS to authenticate with, the callee must obtain a reference
- *	to it if it needs to keep it.
+ * @bss: The BSS to authenticate with.
  * @auth_type: Authentication type (algorithm)
  * @ie: Extra IEs to add to Authentication frame or %NULL
  * @ie_len: Length of ie buffer in octets
@@ -1497,10 +1444,11 @@ enum cfg80211_assoc_req_flags {
  *
  * This structure provides information needed to complete IEEE 802.11
  * (re)association.
- * @bss: The BSS to associate with. If the call is successful the driver is
- *	given a reference that it must give back to cfg80211_send_rx_assoc()
- *	or to cfg80211_assoc_timeout(). To ensure proper refcounting, new
- *	association requests while already associating must be rejected.
+ * @bss: The BSS to associate with. If the call is successful the driver
+ *	is given a reference that it must release, normally via a call to
+ *	cfg80211_send_rx_assoc(), or, if association timed out, with a
+ *	call to cfg80211_put_bss() (in addition to calling
+ *	cfg80211_send_assoc_timeout())
  * @ie: Extra IEs to add to (Re)Association Request frame or %NULL
  * @ie_len: Length of ie buffer in octets
  * @use_mfp: Use management frame protection (IEEE 802.11w) in this association
@@ -2359,7 +2307,6 @@ struct cfg80211_ops {
  *	responds to probe-requests in hardware.
  * @WIPHY_FLAG_OFFCHAN_TX: Device supports direct off-channel TX.
  * @WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL: Device supports remain-on-channel call.
- * @WIPHY_FLAG_SUPPORTS_5_10_MHZ: Device supports 5 MHz and 10 MHz channels.
  */
 enum wiphy_flags {
 	WIPHY_FLAG_CUSTOM_REGULATORY		= BIT(0),
@@ -2383,7 +2330,6 @@ enum wiphy_flags {
 	WIPHY_FLAG_AP_PROBE_RESP_OFFLOAD	= BIT(19),
 	WIPHY_FLAG_OFFCHAN_TX			= BIT(20),
 	WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL	= BIT(21),
-	WIPHY_FLAG_SUPPORTS_5_10_MHZ		= BIT(22),
 };
 
 /**
@@ -2610,9 +2556,6 @@ struct wiphy_wowlan_support {
  *	may request, if implemented.
  *
  * @wowlan: WoWLAN support information
- * @wowlan_config: current WoWLAN configuration; this should usually not be
- *	used since access to it is necessarily racy, use the parameter passed
- *	to the suspend() operation instead.
  *
  * @ap_sme_capa: AP SME capabilities, flags from &enum nl80211_ap_sme_features.
  * @ht_capa_mod_mask:  Specify what ht_cap values can be over-ridden.
@@ -2680,7 +2623,6 @@ struct wiphy {
 
 #ifdef CONFIG_PM
 	struct wiphy_wowlan_support wowlan;
-	struct cfg80211_wowlan *wowlan_config;
 #endif
 
 	u16 max_remain_on_channel_duration;
@@ -2878,7 +2820,7 @@ struct cfg80211_cached_keys;
  * @current_bss: (private) Used by the internal configuration code
  * @channel: (private) Used by the internal configuration code to track
  *	the user-set AP, monitor and WDS channel
- * @preset_chandef: (private) Used by the internal configuration code to
+ * @preset_chan: (private) Used by the internal configuration code to
  *	track the channel to be used for AP later
  * @bssid: (private) Used by the internal configuration code
  * @ssid: (private) Used by the internal configuration code
@@ -2892,23 +2834,14 @@ struct cfg80211_cached_keys;
  *	by cfg80211 on change_interface
  * @mgmt_registrations: list of registrations for management frames
  * @mgmt_registrations_lock: lock for the list
- * @mtx: mutex used to lock data in this struct, may be used by drivers
- *	and some API functions require it held
+ * @mtx: mutex used to lock data in this struct
+ * @cleanup_work: work struct used for cleanup that can't be done directly
  * @beacon_interval: beacon interval used on this device for transmitting
  *	beacons, 0 when not valid
  * @address: The address for this device, valid only if @netdev is %NULL
  * @p2p_started: true if this is a P2P Device that has been started
  * @cac_started: true if DFS channel availability check has been started
  * @cac_start_time: timestamp (jiffies) when the dfs state was entered.
- * @ps: powersave mode is enabled
- * @ps_timeout: dynamic powersave timeout
- * @ap_unexpected_nlportid: (private) netlink port ID of application
- *	registered for unexpected class 3 frames (AP mode)
- * @conn: (private) cfg80211 software SME connection state machine data
- * @connect_keys: (private) keys to set after connection is established
- * @ibss_fixed: (private) IBSS is using fixed BSSID
- * @event_list: (private) list for internal event processing
- * @event_lock: (private) lock for event list
  */
 struct wireless_dev {
 	struct wiphy *wiphy;
@@ -3055,17 +2988,6 @@ ieee80211_get_channel(struct wiphy *wiphy, int freq)
 struct ieee80211_rate *
 ieee80211_get_response_rate(struct ieee80211_supported_band *sband,
 			    u32 basic_rates, int bitrate);
-
-/**
- * ieee80211_mandatory_rates - get mandatory rates for a given band
- * @sband: the band to look for rates in
- * @scan_width: width of the control channel
- *
- * This function returns a bitmap of the mandatory rates for the given
- * band, bits are set according to the rate position in the bitrates array.
- */
-u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband,
-			      enum nl80211_bss_scan_width scan_width);
 
 /*
  * Radiotap parsing functions -- for controlled injection support
@@ -3510,11 +3432,11 @@ void cfg80211_send_rx_assoc(struct net_device *dev, struct cfg80211_bss *bss,
 /**
  * cfg80211_send_assoc_timeout - notification of timed out association
  * @dev: network device
- * @bss: The BSS entry with which association timed out.
+ * @addr: The MAC address of the device with which the association timed out
  *
  * This function may sleep.
  */
-void cfg80211_assoc_timeout(struct net_device *dev, struct cfg80211_bss *bss);
+void cfg80211_send_assoc_timeout(struct net_device *dev, const u8 *addr);
 
 /**
  * cfg80211_send_deauth - notification of processed deauthentication
@@ -4231,7 +4153,6 @@ void cfg80211_report_wowlan_wakeup(struct wireless_dev *wdev,
  * cfg80211_crit_proto_stopped() - indicate critical protocol stopped by driver.
  *
  * @wdev: the wireless device for which critical protocol is stopped.
- * @gfp: allocation flags
  *
  * This function can be called by the driver to indicate it has reverted
  * operation back to normal. One reason could be that the duration given

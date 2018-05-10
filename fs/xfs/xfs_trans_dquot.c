@@ -103,6 +103,8 @@ xfs_trans_dup_dqinfo(
 		return;
 
 	xfs_trans_alloc_dqinfo(ntp);
+	oqa = otp->t_dqinfo->dqa_usrdquots;
+	nqa = ntp->t_dqinfo->dqa_usrdquots;
 
 	/*
 	 * Because the quota blk reservation is carried forward,
@@ -111,9 +113,7 @@ xfs_trans_dup_dqinfo(
 	if(otp->t_flags & XFS_TRANS_DQ_DIRTY)
 		ntp->t_flags |= XFS_TRANS_DQ_DIRTY;
 
-	for (j = 0; j < XFS_QM_TRANS_DQTYPES; j++) {
-		oqa = otp->t_dqinfo->dqs[j];
-		nqa = ntp->t_dqinfo->dqs[j];
+	for (j = 0; j < 2; j++) {
 		for (i = 0; i < XFS_QM_TRANS_MAXDQS; i++) {
 			if (oqa[i].qt_dquot == NULL)
 				break;
@@ -138,6 +138,8 @@ xfs_trans_dup_dqinfo(
 			oq->qt_ino_res = oq->qt_ino_res_used;
 
 		}
+		oqa = otp->t_dqinfo->dqa_grpdquots;
+		nqa = ntp->t_dqinfo->dqa_grpdquots;
 	}
 }
 
@@ -155,7 +157,8 @@ xfs_trans_mod_dquot_byino(
 
 	if (!XFS_IS_QUOTA_RUNNING(mp) ||
 	    !XFS_IS_QUOTA_ON(mp) ||
-	    xfs_is_quota_inode(&mp->m_sb, ip->i_ino))
+	    ip->i_ino == mp->m_sb.sb_uquotino ||
+	    ip->i_ino == mp->m_sb.sb_gquotino)
 		return;
 
 	if (tp->t_dqinfo == NULL)
@@ -167,18 +170,16 @@ xfs_trans_mod_dquot_byino(
 		(void) xfs_trans_mod_dquot(tp, ip->i_gdquot, field, delta);
 }
 
-STATIC struct xfs_dqtrx *
+STATIC xfs_dqtrx_t *
 xfs_trans_get_dqtrx(
-	struct xfs_trans	*tp,
-	struct xfs_dquot	*dqp)
+	xfs_trans_t	*tp,
+	xfs_dquot_t	*dqp)
 {
-	int			i;
-	struct xfs_dqtrx	*qa;
+	int		i;
+	xfs_dqtrx_t	*qa;
 
-	if (XFS_QM_ISUDQ(dqp))
-		qa = tp->t_dqinfo->dqs[XFS_QM_TRANS_USR];
-	else
-		qa = tp->t_dqinfo->dqs[XFS_QM_TRANS_GRP];
+	qa = XFS_QM_ISUDQ(dqp) ?
+		tp->t_dqinfo->dqa_usrdquots : tp->t_dqinfo->dqa_grpdquots;
 
 	for (i = 0; i < XFS_QM_TRANS_MAXDQS; i++) {
 		if (qa[i].qt_dquot == NULL ||
@@ -338,10 +339,12 @@ xfs_trans_apply_dquot_deltas(
 		return;
 
 	ASSERT(tp->t_dqinfo);
-	for (j = 0; j < XFS_QM_TRANS_DQTYPES; j++) {
-		qa = tp->t_dqinfo->dqs[j];
-		if (qa[0].qt_dquot == NULL)
+	qa = tp->t_dqinfo->dqa_usrdquots;
+	for (j = 0; j < 2; j++) {
+		if (qa[0].qt_dquot == NULL) {
+			qa = tp->t_dqinfo->dqa_grpdquots;
 			continue;
+		}
 
 		/*
 		 * Lock all of the dquots and join them to the transaction.
@@ -492,6 +495,10 @@ xfs_trans_apply_dquot_deltas(
 			ASSERT(dqp->q_res_rtbcount >=
 				be64_to_cpu(dqp->q_core.d_rtbcount));
 		}
+		/*
+		 * Do the group quotas next
+		 */
+		qa = tp->t_dqinfo->dqa_grpdquots;
 	}
 }
 
@@ -514,9 +521,9 @@ xfs_trans_unreserve_and_mod_dquots(
 	if (!tp->t_dqinfo || !(tp->t_flags & XFS_TRANS_DQ_DIRTY))
 		return;
 
-	for (j = 0; j < XFS_QM_TRANS_DQTYPES; j++) {
-		qa = tp->t_dqinfo->dqs[j];
+	qa = tp->t_dqinfo->dqa_usrdquots;
 
+	for (j = 0; j < 2; j++) {
 		for (i = 0; i < XFS_QM_TRANS_MAXDQS; i++) {
 			qtrx = &qa[i];
 			/*
@@ -558,6 +565,7 @@ xfs_trans_unreserve_and_mod_dquots(
 				xfs_dqunlock(dqp);
 
 		}
+		qa = tp->t_dqinfo->dqa_grpdquots;
 	}
 }
 
@@ -632,8 +640,8 @@ xfs_trans_dqresv(
 	if ((flags & XFS_QMOPT_FORCE_RES) == 0 &&
 	    dqp->q_core.d_id &&
 	    ((XFS_IS_UQUOTA_ENFORCED(dqp->q_mount) && XFS_QM_ISUDQ(dqp)) ||
-	     (XFS_IS_GQUOTA_ENFORCED(dqp->q_mount) && XFS_QM_ISGDQ(dqp)) ||
-	     (XFS_IS_PQUOTA_ENFORCED(dqp->q_mount) && XFS_QM_ISPDQ(dqp)))) {
+	     (XFS_IS_OQUOTA_ENFORCED(dqp->q_mount) &&
+	      (XFS_QM_ISPDQ(dqp) || XFS_QM_ISGDQ(dqp))))) {
 		if (nblks > 0) {
 			/*
 			 * dquot is locked already. See if we'd go over the
@@ -740,15 +748,15 @@ error_return:
  */
 int
 xfs_trans_reserve_quota_bydquots(
-	struct xfs_trans	*tp,
-	struct xfs_mount	*mp,
-	struct xfs_dquot	*udqp,
-	struct xfs_dquot	*gdqp,
-	long			nblks,
-	long			ninos,
-	uint			flags)
+	xfs_trans_t	*tp,
+	xfs_mount_t	*mp,
+	xfs_dquot_t	*udqp,
+	xfs_dquot_t	*gdqp,
+	long		nblks,
+	long		ninos,
+	uint		flags)
 {
-	int		error;
+	int		resvd = 0, error;
 
 	if (!XFS_IS_QUOTA_RUNNING(mp) || !XFS_IS_QUOTA_ON(mp))
 		return 0;
@@ -763,24 +771,28 @@ xfs_trans_reserve_quota_bydquots(
 					(flags & ~XFS_QMOPT_ENOSPC));
 		if (error)
 			return error;
+		resvd = 1;
 	}
 
 	if (gdqp) {
 		error = xfs_trans_dqresv(tp, mp, gdqp, nblks, ninos, flags);
-		if (error)
-			goto unwind_usr;
+		if (error) {
+			/*
+			 * can't do it, so backout previous reservation
+			 */
+			if (resvd) {
+				flags |= XFS_QMOPT_FORCE_RES;
+				xfs_trans_dqresv(tp, mp, udqp,
+						 -nblks, -ninos, flags);
+			}
+			return error;
+		}
 	}
 
 	/*
 	 * Didn't change anything critical, so, no need to log
 	 */
 	return 0;
-
-unwind_usr:
-	flags |= XFS_QMOPT_FORCE_RES;
-	if (udqp)
-		xfs_trans_dqresv(tp, mp, udqp, -nblks, -ninos, flags);
-	return error;
 }
 
 
@@ -804,7 +816,8 @@ xfs_trans_reserve_quota_nblks(
 	if (XFS_IS_PQUOTA_ON(mp))
 		flags |= XFS_QMOPT_ENOSPC;
 
-	ASSERT(!xfs_is_quota_inode(&mp->m_sb, ip->i_ino));
+	ASSERT(ip->i_ino != mp->m_sb.sb_uquotino);
+	ASSERT(ip->i_ino != mp->m_sb.sb_gquotino);
 
 	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));
 	ASSERT((flags & ~(XFS_QMOPT_FORCE_RES | XFS_QMOPT_ENOSPC)) ==

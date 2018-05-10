@@ -100,19 +100,9 @@ static void cmd_get_fw_ver_bin(void *device_data)
 	int offset = sizeof(struct mms_bin_hdr);
 	
 	cmd_clear_result(info);
-
-#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
-  dev_dbg(&info->client->dev, "[USE_DUAL_FW] %s [TSP_TYPE] %d\n", __func__, info->tsp_type);
-
-  if (info->tsp_type == TSP_HW_ID_INDEX_1) {
-    request_firmware(&fw, INTERNAL_G1F_FW_PATH, &info->client->dev);
-  } else {
-    request_firmware(&fw, fw_name, &info->client->dev);
-  }
-#else
+	
 	request_firmware(&fw, fw_name, &info->client->dev);
-#endif
-
+	
 	if (!fw) {
 		sprintf(buf, "%s", "NG");
 		info->cmd_state = CMD_STATUS_FAIL;
@@ -200,38 +190,6 @@ static void cmd_get_chip_name(void *device_data)
 	
 	dev_dbg(&info->client->dev, "%s - cmd[%s] len[%d] state[%d]\n", __func__, buf, strnlen(buf, sizeof(buf)), info->cmd_state);
 }
-
-#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
-static void get_module_vendor(void *device_data)
-{
-  struct mms_ts_info *info = (struct mms_ts_info *)device_data;
-	int module_vendor =0;
-	char buf[64] = { 0 };
-
-	cmd_clear_result(info);
-
-	switch(info->tsp_type){
-	case TSP_HW_ID_INDEX_0:
-		module_vendor = 0;
-		snprintf(buf, sizeof(buf), "%s,%d", "OK", module_vendor);
-		break;
-	case TSP_HW_ID_INDEX_1:
-		module_vendor = 1;
-		snprintf(buf, sizeof(buf), "%s,%d", "OK", module_vendor);
-		break;
-	default:
-		break;
-	}
-
-  dev_dbg(&info->client->dev, "[USE_DUAL_FW] %s [TSP_TYPE] %d\n", __func__, info->tsp_type);
-
-	cmd_set_result(info, buf, strnlen(buf, sizeof(buf)));
-	
-	info->cmd_state = CMD_STATUS_OK;
-	
-	dev_dbg(&info->client->dev, "%s - cmd[%s] len[%d] state[%d]\n", __func__, buf, strnlen(buf, sizeof(buf)), info->cmd_state);
-}
-#endif
 
 /**
 * Command : Get X ch num
@@ -800,9 +758,6 @@ static struct mms_cmd mms_commands[] = {
 	{MMS_CMD("get_fw_ver_ic", cmd_get_fw_ver_ic),},
 	{MMS_CMD("get_chip_vendor", cmd_get_chip_vendor),},
 	{MMS_CMD("get_chip_name", cmd_get_chip_name),},
-#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
-	{MMS_CMD("get_module_vendor", get_module_vendor),},
-#endif
 	{MMS_CMD("get_x_num", cmd_get_x_num),},
 	{MMS_CMD("get_y_num", cmd_get_y_num),},
 	{MMS_CMD("get_max_x", cmd_get_max_x),},
@@ -1125,17 +1080,7 @@ static ssize_t mms_sys_threshold_key(struct device *dev, struct device_attribute
 
 	//need to match threshold value with firmware
 	int threshold = 25;
-
-#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
-    dev_dbg(&info->client->dev, "[USE_DUAL_FW] %s [TSP_TYPE] %d\n", __func__, info->tsp_type);
-
-    if (info->tsp_type == TSP_HW_ID_INDEX_1) {
-        threshold = 40;
-    } else {
-        threshold = 25;
-    }
-#endif
-
+	
 	dev_dbg(&info->client->dev, "%s - threshold [%d]\n", __func__, threshold);
 
 	return snprintf(buf, PAGE_SIZE, "%d %d %d %d", threshold, threshold, threshold, threshold);

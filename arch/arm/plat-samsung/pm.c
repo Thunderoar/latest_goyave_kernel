@@ -22,17 +22,13 @@
 
 #include <asm/cacheflush.h>
 #include <asm/suspend.h>
-
-#include <plat/regs-serial.h>
-
-#ifdef CONFIG_SAMSUNG_ATAGS
 #include <mach/hardware.h>
 #include <mach/map.h>
+
+#include <plat/regs-serial.h>
 #include <mach/regs-clock.h>
 #include <mach/regs-irq.h>
 #include <mach/irqs.h>
-#endif
-
 #include <asm/irq.h>
 
 #include <plat/pm.h>

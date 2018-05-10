@@ -213,7 +213,7 @@ int btrfs_check_trunc_cache_free_space(struct btrfs_root *root,
 	else
 		ret = 0;
 	spin_unlock(&rsv->lock);
-	return ret;
+	return 0;
 }
 
 int btrfs_truncate_free_space_cache(struct btrfs_root *root,
@@ -835,7 +835,7 @@ int load_free_space_cache(struct btrfs_fs_info *fs_info,
 
 	if (!matched) {
 		__btrfs_remove_free_space_cache(ctl);
-		btrfs_warn(fs_info, "block group %llu has wrong amount of free space",
+		btrfs_err(fs_info, "block group %llu has wrong amount of free space",
 			block_group->key.objectid);
 		ret = -1;
 	}
@@ -847,7 +847,7 @@ out:
 		spin_unlock(&block_group->lock);
 		ret = 0;
 
-		btrfs_warn(fs_info, "failed to load free space cache for block group %llu, rebuild it now",
+		btrfs_err(fs_info, "failed to load free space cache for block group %llu",
 			block_group->key.objectid);
 	}
 
@@ -3150,8 +3150,6 @@ again:
 	return 0;
 }
 
-#define test_msg(fmt, ...) printk(KERN_INFO "btrfs: selftest: " fmt, ##__VA_ARGS__)
-
 /*
  * This test just does basic sanity checking, making sure we can add an exten
  * entry and remove space from either end and the middle, and make sure we can
@@ -3161,63 +3159,63 @@ static int test_extents(struct btrfs_block_group_cache *cache)
 {
 	int ret = 0;
 
-	test_msg("Running extent only tests\n");
+	printk(KERN_ERR "Running extent only tests\n");
 
 	/* First just make sure we can remove an entire entry */
 	ret = btrfs_add_free_space(cache, 0, 4 * 1024 * 1024);
 	if (ret) {
-		test_msg("Error adding initial extents %d\n", ret);
+		printk(KERN_ERR "Error adding initial extents %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 0, 4 * 1024 * 1024);
 	if (ret) {
-		test_msg("Error removing extent %d\n", ret);
+		printk(KERN_ERR "Error removing extent %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, 0, 4 * 1024 * 1024)) {
-		test_msg("Full remove left some lingering space\n");
+		printk(KERN_ERR "Full remove left some lingering space\n");
 		return -1;
 	}
 
 	/* Ok edge and middle cases now */
 	ret = btrfs_add_free_space(cache, 0, 4 * 1024 * 1024);
 	if (ret) {
-		test_msg("Error adding half extent %d\n", ret);
+		printk(KERN_ERR "Error adding half extent %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 3 * 1024 * 1024, 1 * 1024 * 1024);
 	if (ret) {
-		test_msg("Error removing tail end %d\n", ret);
+		printk(KERN_ERR "Error removing tail end %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 0, 1 * 1024 * 1024);
 	if (ret) {
-		test_msg("Error removing front end %d\n", ret);
+		printk(KERN_ERR "Error removing front end %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 2 * 1024 * 1024, 4096);
 	if (ret) {
-		test_msg("Error removing middle peice %d\n", ret);
+		printk(KERN_ERR "Error removing middle peice %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, 0, 1 * 1024 * 1024)) {
-		test_msg("Still have space at the front\n");
+		printk(KERN_ERR "Still have space at the front\n");
 		return -1;
 	}
 
 	if (check_exists(cache, 2 * 1024 * 1024, 4096)) {
-		test_msg("Still have space in the middle\n");
+		printk(KERN_ERR "Still have space in the middle\n");
 		return -1;
 	}
 
 	if (check_exists(cache, 3 * 1024 * 1024, 1 * 1024 * 1024)) {
-		test_msg("Still have space at the end\n");
+		printk(KERN_ERR "Still have space at the end\n");
 		return -1;
 	}
 
@@ -3232,34 +3230,34 @@ static int test_bitmaps(struct btrfs_block_group_cache *cache)
 	u64 next_bitmap_offset;
 	int ret;
 
-	test_msg("Running bitmap only tests\n");
+	printk(KERN_ERR "Running bitmap only tests\n");
 
 	ret = add_free_space_entry(cache, 0, 4 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't create a bitmap entry %d\n", ret);
+		printk(KERN_ERR "Couldn't create a bitmap entry %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 0, 4 * 1024 * 1024);
 	if (ret) {
-		test_msg("Error removing bitmap full range %d\n", ret);
+		printk(KERN_ERR "Error removing bitmap full range %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, 0, 4 * 1024 * 1024)) {
-		test_msg("Left some space in bitmap\n");
+		printk(KERN_ERR "Left some space in bitmap\n");
 		return -1;
 	}
 
 	ret = add_free_space_entry(cache, 0, 4 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't add to our bitmap entry %d\n", ret);
+		printk(KERN_ERR "Couldn't add to our bitmap entry %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 1 * 1024 * 1024, 2 * 1024 * 1024);
 	if (ret) {
-		test_msg("Couldn't remove middle chunk %d\n", ret);
+		printk(KERN_ERR "Couldn't remove middle chunk %d\n", ret);
 		return ret;
 	}
 
@@ -3273,21 +3271,21 @@ static int test_bitmaps(struct btrfs_block_group_cache *cache)
 	ret = add_free_space_entry(cache, next_bitmap_offset -
 				   (2 * 1024 * 1024), 4 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't add space that straddles two bitmaps %d\n",
-				ret);
+		printk(KERN_ERR "Couldn't add space that straddles two bitmaps"
+		       " %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, next_bitmap_offset -
 				      (1 * 1024 * 1024), 2 * 1024 * 1024);
 	if (ret) {
-		test_msg("Couldn't remove overlapping space %d\n", ret);
+		printk(KERN_ERR "Couldn't remove overlapping space %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, next_bitmap_offset - (1 * 1024 * 1024),
 			 2 * 1024 * 1024)) {
-		test_msg("Left some space when removing overlapping\n");
+		printk(KERN_ERR "Left some space when removing overlapping\n");
 		return -1;
 	}
 
@@ -3302,7 +3300,7 @@ static int test_bitmaps_and_extents(struct btrfs_block_group_cache *cache)
 	u64 bitmap_offset = (u64)(BITS_PER_BITMAP * 4096);
 	int ret;
 
-	test_msg("Running bitmap and extent tests\n");
+	printk(KERN_ERR "Running bitmap and extent tests\n");
 
 	/*
 	 * First let's do something simple, an extent at the same offset as the
@@ -3311,42 +3309,42 @@ static int test_bitmaps_and_extents(struct btrfs_block_group_cache *cache)
 	 */
 	ret = add_free_space_entry(cache, 4 * 1024 * 1024, 1 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't create bitmap entry %d\n", ret);
+		printk(KERN_ERR "Couldn't create bitmap entry %d\n", ret);
 		return ret;
 	}
 
 	ret = add_free_space_entry(cache, 0, 1 * 1024 * 1024, 0);
 	if (ret) {
-		test_msg("Couldn't add extent entry %d\n", ret);
+		printk(KERN_ERR "Couldn't add extent entry %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 0, 1 * 1024 * 1024);
 	if (ret) {
-		test_msg("Couldn't remove extent entry %d\n", ret);
+		printk(KERN_ERR "Couldn't remove extent entry %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, 0, 1 * 1024 * 1024)) {
-		test_msg("Left remnants after our remove\n");
+		printk(KERN_ERR "Left remnants after our remove\n");
 		return -1;
 	}
 
 	/* Now to add back the extent entry and remove from the bitmap */
 	ret = add_free_space_entry(cache, 0, 1 * 1024 * 1024, 0);
 	if (ret) {
-		test_msg("Couldn't re-add extent entry %d\n", ret);
+		printk(KERN_ERR "Couldn't re-add extent entry %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 4 * 1024 * 1024, 1 * 1024 * 1024);
 	if (ret) {
-		test_msg("Couldn't remove from bitmap %d\n", ret);
+		printk(KERN_ERR "Couldn't remove from bitmap %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, 4 * 1024 * 1024, 1 * 1024 * 1024)) {
-		test_msg("Left remnants in the bitmap\n");
+		printk(KERN_ERR "Left remnants in the bitmap\n");
 		return -1;
 	}
 
@@ -3356,18 +3354,19 @@ static int test_bitmaps_and_extents(struct btrfs_block_group_cache *cache)
 	 */
 	ret = add_free_space_entry(cache, 1 * 1024 * 1024, 4 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't add to a bitmap %d\n", ret);
+		printk(KERN_ERR "Couldn't add to a bitmap %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 512 * 1024, 3 * 1024 * 1024);
 	if (ret) {
-		test_msg("Couldn't remove overlapping space %d\n", ret);
+		printk(KERN_ERR "Couldn't remove overlapping space %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, 512 * 1024, 3 * 1024 * 1024)) {
-		test_msg("Left over peices after removing overlapping\n");
+		printk(KERN_ERR "Left over peices after removing "
+		       "overlapping\n");
 		return -1;
 	}
 
@@ -3376,24 +3375,24 @@ static int test_bitmaps_and_extents(struct btrfs_block_group_cache *cache)
 	/* Now with the extent entry offset into the bitmap */
 	ret = add_free_space_entry(cache, 4 * 1024 * 1024, 4 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't add space to the bitmap %d\n", ret);
+		printk(KERN_ERR "Couldn't add space to the bitmap %d\n", ret);
 		return ret;
 	}
 
 	ret = add_free_space_entry(cache, 2 * 1024 * 1024, 2 * 1024 * 1024, 0);
 	if (ret) {
-		test_msg("Couldn't add extent to the cache %d\n", ret);
+		printk(KERN_ERR "Couldn't add extent to the cache %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 3 * 1024 * 1024, 4 * 1024 * 1024);
 	if (ret) {
-		test_msg("Problem removing overlapping space %d\n", ret);
+		printk(KERN_ERR "Problem removing overlapping space %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, 3 * 1024 * 1024, 4 * 1024 * 1024)) {
-		test_msg("Left something behind when removing space");
+		printk(KERN_ERR "Left something behind when removing space");
 		return -1;
 	}
 
@@ -3411,27 +3410,27 @@ static int test_bitmaps_and_extents(struct btrfs_block_group_cache *cache)
 	ret = add_free_space_entry(cache, bitmap_offset + 4 * 1024 * 1024,
 				   4 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't add bitmap %d\n", ret);
+		printk(KERN_ERR "Couldn't add bitmap %d\n", ret);
 		return ret;
 	}
 
 	ret = add_free_space_entry(cache, bitmap_offset - 1 * 1024 * 1024,
 				   5 * 1024 * 1024, 0);
 	if (ret) {
-		test_msg("Couldn't add extent entry %d\n", ret);
+		printk(KERN_ERR "Couldn't add extent entry %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, bitmap_offset + 1 * 1024 * 1024,
 				      5 * 1024 * 1024);
 	if (ret) {
-		test_msg("Failed to free our space %d\n", ret);
+		printk(KERN_ERR "Failed to free our space %d\n", ret);
 		return ret;
 	}
 
 	if (check_exists(cache, bitmap_offset + 1 * 1024 * 1024,
 			 5 * 1024 * 1024)) {
-		test_msg("Left stuff over\n");
+		printk(KERN_ERR "Left stuff over\n");
 		return -1;
 	}
 
@@ -3445,19 +3444,20 @@ static int test_bitmaps_and_extents(struct btrfs_block_group_cache *cache)
 	 */
 	ret = add_free_space_entry(cache, 1 * 1024 * 1024, 2 * 1024 * 1024, 1);
 	if (ret) {
-		test_msg("Couldn't add bitmap entry %d\n", ret);
+		printk(KERN_ERR "Couldn't add bitmap entry %d\n", ret);
 		return ret;
 	}
 
 	ret = add_free_space_entry(cache, 3 * 1024 * 1024, 1 * 1024 * 1024, 0);
 	if (ret) {
-		test_msg("Couldn't add extent entry %d\n", ret);
+		printk(KERN_ERR "Couldn't add extent entry %d\n", ret);
 		return ret;
 	}
 
 	ret = btrfs_remove_free_space(cache, 1 * 1024 * 1024, 3 * 1024 * 1024);
 	if (ret) {
-		test_msg("Error removing bitmap and extent overlapping %d\n", ret);
+		printk(KERN_ERR "Error removing bitmap and extent "
+		       "overlapping %d\n", ret);
 		return ret;
 	}
 
@@ -3469,11 +3469,11 @@ void btrfs_test_free_space_cache(void)
 {
 	struct btrfs_block_group_cache *cache;
 
-	test_msg("Running btrfs free space cache tests\n");
+	printk(KERN_ERR "Running btrfs free space cache tests\n");
 
 	cache = init_test_block_group();
 	if (!cache) {
-		test_msg("Couldn't run the tests\n");
+		printk(KERN_ERR "Couldn't run the tests\n");
 		return;
 	}
 
@@ -3487,9 +3487,6 @@ out:
 	__btrfs_remove_free_space_cache(cache->free_space_ctl);
 	kfree(cache->free_space_ctl);
 	kfree(cache);
-	test_msg("Free space cache tests finished\n");
+	printk(KERN_ERR "Free space cache tests finished\n");
 }
-#undef test_msg
-#else /* !CONFIG_BTRFS_FS_RUN_SANITY_TESTS */
-void btrfs_test_free_space_cache(void) {}
-#endif /* !CONFIG_BTRFS_FS_RUN_SANITY_TESTS */
+#endif /* CONFIG_BTRFS_FS_RUN_SANITY_TESTS */

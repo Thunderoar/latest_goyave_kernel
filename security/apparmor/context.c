@@ -69,23 +69,6 @@ void aa_dup_task_context(struct aa_task_cxt *new, const struct aa_task_cxt *old)
 }
 
 /**
- * aa_get_task_profile - Get another task's profile
- * @task: task to query  (NOT NULL)
- *
- * Returns: counted reference to @task's profile
- */
-struct aa_profile *aa_get_task_profile(struct task_struct *task)
-{
-	struct aa_profile *p;
-
-	rcu_read_lock();
-	p = aa_get_profile(__aa_task_profile(task));
-	rcu_read_unlock();
-
-	return p;
-}
-
-/**
  * aa_replace_current_profile - replace the current tasks profiles
  * @profile: new profile  (NOT NULL)
  *
@@ -93,7 +76,7 @@ struct aa_profile *aa_get_task_profile(struct task_struct *task)
  */
 int aa_replace_current_profile(struct aa_profile *profile)
 {
-	struct aa_task_cxt *cxt = current_cxt();
+	struct aa_task_cxt *cxt = current_cred()->security;
 	struct cred *new;
 	BUG_ON(!profile);
 
@@ -104,13 +87,17 @@ int aa_replace_current_profile(struct aa_profile *profile)
 	if (!new)
 		return -ENOMEM;
 
-	cxt = cred_cxt(new);
-	if (unconfined(profile) || (cxt->profile->ns != profile->ns))
+	cxt = new->security;
+	if (unconfined(profile) || (cxt->profile->ns != profile->ns)) {
 		/* if switching to unconfined or a different profile namespace
 		 * clear out context state
 		 */
-		aa_clear_task_cxt_trans(cxt);
-
+		aa_put_profile(cxt->previous);
+		aa_put_profile(cxt->onexec);
+		cxt->previous = NULL;
+		cxt->onexec = NULL;
+		cxt->token = 0;
+	}
 	/* be careful switching cxt->profile, when racing replacement it
 	 * is possible that cxt->profile->replacedby is the reference keeping
 	 * @profile valid, so make sure to get its reference before dropping
@@ -136,7 +123,7 @@ int aa_set_current_onexec(struct aa_profile *profile)
 	if (!new)
 		return -ENOMEM;
 
-	cxt = cred_cxt(new);
+	cxt = new->security;
 	aa_get_profile(profile);
 	aa_put_profile(cxt->onexec);
 	cxt->onexec = profile;
@@ -163,7 +150,7 @@ int aa_set_current_hat(struct aa_profile *profile, u64 token)
 		return -ENOMEM;
 	BUG_ON(!profile);
 
-	cxt = cred_cxt(new);
+	cxt = new->security;
 	if (!cxt->previous) {
 		/* transfer refcount */
 		cxt->previous = cxt->profile;
@@ -200,7 +187,7 @@ int aa_restore_previous_profile(u64 token)
 	if (!new)
 		return -ENOMEM;
 
-	cxt = cred_cxt(new);
+	cxt = new->security;
 	if (cxt->token != token) {
 		abort_creds(new);
 		return -EACCES;
@@ -218,10 +205,11 @@ int aa_restore_previous_profile(u64 token)
 		aa_get_profile(cxt->profile);
 		aa_put_profile(cxt->previous);
 	}
-	/* ref has been transfered so avoid putting ref in clear_task_cxt */
-	cxt->previous = NULL;
 	/* clear exec && prev information when restoring to previous context */
-	aa_clear_task_cxt_trans(cxt);
+	cxt->previous = NULL;
+	cxt->token = 0;
+	aa_put_profile(cxt->onexec);
+	cxt->onexec = NULL;
 
 	commit_creds(new);
 	return 0;

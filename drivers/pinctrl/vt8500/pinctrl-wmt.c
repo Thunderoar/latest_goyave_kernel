@@ -276,20 +276,7 @@ static int wmt_pctl_dt_node_to_map_pull(struct wmt_pinctrl_data *data,
 	if (!configs)
 		return -ENOMEM;
 
-	switch (pull) {
-	case 0:
-		configs[0] = PIN_CONFIG_BIAS_DISABLE;
-		break;
-	case 1:
-		configs[0] = PIN_CONFIG_BIAS_PULL_DOWN;
-		break;
-	case 2:
-		configs[0] = PIN_CONFIG_BIAS_PULL_UP;
-		break;
-	default:
-		configs[0] = PIN_CONFIG_BIAS_DISABLE;
-		dev_err(data->dev, "invalid pull state %d - disabling\n", pull);
-	}
+	configs[0] = pull;
 
 	map->type = PIN_MAP_TYPE_CONFIGS_PIN;
 	map->data.configs.group_or_pin = data->groups[group];
@@ -582,9 +569,11 @@ int wmt_pinctrl_probe(struct platform_device *pdev,
 	struct resource *res;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	data->base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(data->base))
-		return PTR_ERR(data->base);
+	data->base = devm_request_and_ioremap(&pdev->dev, res);
+	if (!data->base) {
+		dev_err(&pdev->dev, "failed to map memory resource\n");
+		return -EBUSY;
+	}
 
 	wmt_desc.pins = data->pins;
 	wmt_desc.npins = data->npins;

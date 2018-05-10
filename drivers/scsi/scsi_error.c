@@ -45,6 +45,8 @@
 
 static void scsi_eh_done(struct scsi_cmnd *scmd);
 
+#define SENSE_TIMEOUT		(10*HZ)
+
 /*
  * These should *probably* be handled by the host itself.
  * Since it is allowed to sleep, it probably should.
@@ -536,7 +538,7 @@ static void scsi_eh_done(struct scsi_cmnd *scmd)
 
 /**
  * scsi_try_host_reset - ask host adapter to reset itself
- * @scmd:	SCSI cmd to send host reset.
+ * @scmd:	SCSI cmd to send hsot reset.
  */
 static int scsi_try_host_reset(struct scsi_cmnd *scmd)
 {
@@ -879,7 +881,7 @@ retry:
  */
 static int scsi_request_sense(struct scsi_cmnd *scmd)
 {
-	return scsi_send_eh_cmnd(scmd, NULL, 0, scmd->device->eh_timeout, ~0);
+	return scsi_send_eh_cmnd(scmd, NULL, 0, SENSE_TIMEOUT, ~0);
 }
 
 /**
@@ -896,6 +898,7 @@ static int scsi_request_sense(struct scsi_cmnd *scmd)
  */
 void scsi_eh_finish_cmd(struct scsi_cmnd *scmd, struct list_head *done_q)
 {
+	scmd->device->host->host_failed--;
 	scmd->eh_eflags = 0;
 	list_move_tail(&scmd->eh_entry, done_q);
 }
@@ -979,8 +982,7 @@ static int scsi_eh_tur(struct scsi_cmnd *scmd)
 	int retry_cnt = 1, rtn;
 
 retry_tur:
-	rtn = scsi_send_eh_cmnd(scmd, tur_command, 6,
-				scmd->device->eh_timeout, 0);
+	rtn = scsi_send_eh_cmnd(scmd, tur_command, 6, SENSE_TIMEOUT, 0);
 
 	SCSI_LOG_ERROR_RECOVERY(3, printk("%s: scmd %p rtn %x\n",
 		__func__, scmd, rtn));
@@ -1687,10 +1689,8 @@ static void scsi_restart_operations(struct Scsi_Host *shost)
 	 * is no point trying to lock the door of an off-line device.
 	 */
 	shost_for_each_device(sdev, shost) {
-		if (scsi_device_online(sdev) && sdev->was_reset && sdev->locked) {
+		if (scsi_device_online(sdev) && sdev->locked)
 			scsi_eh_lock_door(sdev);
-			sdev->was_reset = 0;
-		}
 	}
 
 	/*
@@ -1847,17 +1847,8 @@ int scsi_error_handler(void *data)
 	 * We never actually get interrupted because kthread_run
 	 * disables signal delivery for the created thread.
 	 */
-	while (true) {
-		/*
-		 * The sequence in kthread_stop() sets the stop flag first
-		 * then wakes the process.  To avoid missed wakeups, the task
-		 * should always be in a non running state before the stop
-		 * flag is checked
-		 */
+	while (!kthread_should_stop()) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		if (kthread_should_stop())
-			break;
-
 		if ((shost->host_failed == 0 && shost->host_eh_scheduled == 0) ||
 		    shost->host_failed != shost->host_busy) {
 			SCSI_LOG_ERROR_RECOVERY(1,
@@ -1889,9 +1880,6 @@ int scsi_error_handler(void *data)
 			shost->transportt->eh_strategy_handler(shost);
 		else
 			scsi_unjam_host(shost);
-
-		/* All scmds have been handled */
-		shost->host_failed = 0;
 
 		/*
 		 * Note - if the above fails completely, the action is to take

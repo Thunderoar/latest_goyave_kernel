@@ -528,7 +528,7 @@ static int lp3972_i2c_probe(struct i2c_client *i2c,
 		return -ENODEV;
 	}
 
-	lp3972 = devm_kzalloc(&i2c->dev, sizeof(struct lp3972), GFP_KERNEL);
+	lp3972 = kzalloc(sizeof(struct lp3972), GFP_KERNEL);
 	if (!lp3972)
 		return -ENOMEM;
 
@@ -546,15 +546,19 @@ static int lp3972_i2c_probe(struct i2c_client *i2c,
 	}
 	if (ret < 0) {
 		dev_err(&i2c->dev, "failed to detect device. ret = %d\n", ret);
-		return ret;
+		goto err_detect;
 	}
 
 	ret = setup_regulators(lp3972, pdata);
 	if (ret < 0)
-		return ret;
+		goto err_detect;
 
 	i2c_set_clientdata(i2c, lp3972);
 	return 0;
+
+err_detect:
+	kfree(lp3972);
+	return ret;
 }
 
 static int lp3972_i2c_remove(struct i2c_client *i2c)
@@ -565,6 +569,7 @@ static int lp3972_i2c_remove(struct i2c_client *i2c)
 	for (i = 0; i < lp3972->num_regulators; i++)
 		regulator_unregister(lp3972->rdev[i]);
 	kfree(lp3972->rdev);
+	kfree(lp3972);
 
 	return 0;
 }

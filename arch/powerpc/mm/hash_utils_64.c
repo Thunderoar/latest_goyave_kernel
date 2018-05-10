@@ -1050,26 +1050,13 @@ int hash_page(unsigned long ea, unsigned long access, unsigned long trap)
 		goto bail;
 	}
 
-	if (hugeshift) {
-		if (pmd_trans_huge(*(pmd_t *)ptep))
-			rc = __hash_page_thp(ea, access, vsid, (pmd_t *)ptep,
-					     trap, local, ssize, psize);
 #ifdef CONFIG_HUGETLB_PAGE
-		else
-			rc = __hash_page_huge(ea, access, vsid, ptep, trap,
-					      local, ssize, hugeshift, psize);
-#else
-		else {
-			/*
-			 * if we have hugeshift, and is not transhuge with
-			 * hugetlb disabled, something is really wrong.
-			 */
-			rc = 1;
-			WARN_ON(1);
-		}
-#endif
+	if (hugeshift) {
+		rc = __hash_page_huge(ea, access, vsid, ptep, trap, local,
+					ssize, hugeshift, psize);
 		goto bail;
 	}
+#endif /* CONFIG_HUGETLB_PAGE */
 
 #ifndef CONFIG_PPC_64K_PAGES
 	DBG_LOW(" i-pte: %016lx\n", pte_val(*ptep));
@@ -1158,7 +1145,6 @@ EXPORT_SYMBOL_GPL(hash_page);
 void hash_preload(struct mm_struct *mm, unsigned long ea,
 		  unsigned long access, unsigned long trap)
 {
-	int hugepage_shift;
 	unsigned long vsid;
 	pgd_t *pgdir;
 	pte_t *ptep;
@@ -1180,27 +1166,10 @@ void hash_preload(struct mm_struct *mm, unsigned long ea,
 	pgdir = mm->pgd;
 	if (pgdir == NULL)
 		return;
-
-	/* Get VSID */
-	ssize = user_segment_size(ea);
-	vsid = get_vsid(mm->context.id, ea, ssize);
-	if (!vsid)
-		return;
-	/*
-	 * Hash doesn't like irqs. Walking linux page table with irq disabled
-	 * saves us from holding multiple locks.
-	 */
-	local_irq_save(flags);
-
-	/*
-	 * THP pages use update_mmu_cache_pmd. We don't do
-	 * hash preload there. Hence can ignore THP here
-	 */
-	ptep = find_linux_pte_or_hugepte(pgdir, ea, &hugepage_shift);
+	ptep = find_linux_pte(pgdir, ea);
 	if (!ptep)
-		goto out_exit;
+		return;
 
-	WARN_ON(hugepage_shift);
 #ifdef CONFIG_PPC_64K_PAGES
 	/* If either _PAGE_4K_PFN or _PAGE_NO_CACHE is set (and we are on
 	 * a 64K kernel), then we don't preload, hash_page() will take
@@ -1209,8 +1178,17 @@ void hash_preload(struct mm_struct *mm, unsigned long ea,
 	 * page size demotion here
 	 */
 	if (pte_val(*ptep) & (_PAGE_4K_PFN | _PAGE_NO_CACHE))
-		goto out_exit;
+		return;
 #endif /* CONFIG_PPC_64K_PAGES */
+
+	/* Get VSID */
+	ssize = user_segment_size(ea);
+	vsid = get_vsid(mm->context.id, ea, ssize);
+	if (!vsid)
+		return;
+
+	/* Hash doesn't like irqs */
+	local_irq_save(flags);
 
 	/* Is that local to this CPU ? */
 	if (cpumask_equal(mm_cpumask(mm), cpumask_of(smp_processor_id())))
@@ -1233,7 +1211,7 @@ void hash_preload(struct mm_struct *mm, unsigned long ea,
 				   mm->context.user_psize,
 				   mm->context.user_psize,
 				   pte_val(*ptep));
-out_exit:
+
 	local_irq_restore(flags);
 }
 
@@ -1254,11 +1232,7 @@ void flush_hash_page(unsigned long vpn, real_pte_t pte, int psize, int ssize,
 		slot = (hash & htab_hash_mask) * HPTES_PER_GROUP;
 		slot += hidx & _PTEIDX_GROUP_IX;
 		DBG_LOW(" sub %ld: hash=%lx, hidx=%lx\n", index, slot, hidx);
-		/*
-		 * We use same base page size and actual psize, because we don't
-		 * use these functions for hugepage
-		 */
-		ppc_md.hpte_invalidate(slot, vpn, psize, psize, ssize, local);
+		ppc_md.hpte_invalidate(slot, vpn, psize, ssize, local);
 	} pte_iterate_hashed_end();
 
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM
@@ -1391,8 +1365,7 @@ static void kernel_unmap_linear_page(unsigned long vaddr, unsigned long lmi)
 		hash = ~hash;
 	slot = (hash & htab_hash_mask) * HPTES_PER_GROUP;
 	slot += hidx & _PTEIDX_GROUP_IX;
-	ppc_md.hpte_invalidate(slot, vpn, mmu_linear_psize, mmu_linear_psize,
-			       mmu_kernel_ssize, 0);
+	ppc_md.hpte_invalidate(slot, vpn, mmu_linear_psize, mmu_kernel_ssize, 0);
 }
 
 void kernel_map_pages(struct page *page, int numpages, int enable)

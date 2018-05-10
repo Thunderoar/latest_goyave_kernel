@@ -78,7 +78,6 @@ struct bkey *bch_keylist_pop(struct keylist *l)
 bool __bch_ptr_invalid(struct cache_set *c, int level, const struct bkey *k)
 {
 	unsigned i;
-	char buf[80];
 
 	if (level && (!KEY_PTRS(k) || !KEY_SIZE(k) || KEY_DIRTY(k)))
 		goto bad;
@@ -103,8 +102,7 @@ bool __bch_ptr_invalid(struct cache_set *c, int level, const struct bkey *k)
 
 	return false;
 bad:
-	bch_bkey_to_text(buf, sizeof(buf), k);
-	cache_bug(c, "spotted bad key %s: %s", buf, bch_ptr_status(c, k));
+	cache_bug(c, "spotted bad key %s: %s", pkey(k), bch_ptr_status(c, k));
 	return true;
 }
 
@@ -164,16 +162,10 @@ bool bch_ptr_bad(struct btree *b, const struct bkey *k)
 #ifdef CONFIG_BCACHE_EDEBUG
 bug:
 	mutex_unlock(&b->c->bucket_lock);
-
-	{
-		char buf[80];
-
-		bch_bkey_to_text(buf, sizeof(buf), k);
-		btree_bug(b,
+	btree_bug(b,
 "inconsistent pointer %s: bucket %zu pin %i prio %i gen %i last_gc %i mark %llu gc_gen %i",
-			  buf, PTR_BUCKET_NR(b->c, k, i), atomic_read(&g->pin),
-			  g->prio, g->gen, g->last_gc, GC_MARK(g), g->gc_gen);
-	}
+		  pkey(k), PTR_BUCKET_NR(b->c, k, i), atomic_read(&g->pin),
+		  g->prio, g->gen, g->last_gc, GC_MARK(g), g->gc_gen);
 	return true;
 #endif
 }
@@ -403,7 +395,7 @@ void inorder_test(void)
 #endif
 
 /*
- * Cacheline/offset <-> bkey pointer arithmetic:
+ * Cacheline/offset <-> bkey pointer arithmatic:
  *
  * t->tree is a binary search tree in an array; each node corresponds to a key
  * in one cacheline in t->set (BSET_CACHELINE bytes).
@@ -412,7 +404,7 @@ void inorder_test(void)
  * the binary tree points to; to_inorder() gives us the cacheline, and then
  * bkey_float->m gives us the offset within that cacheline, in units of 8 bytes.
  *
- * cacheline_to_bkey() and friends abstract out all the pointer arithmetic to
+ * cacheline_to_bkey() and friends abstract out all the pointer arithmatic to
  * make this work.
  *
  * To construct the bfloat for an arbitrary key we need to know what the key
@@ -935,7 +927,7 @@ static void sort_key_next(struct btree_iter *iter,
 		*i = iter->data[--iter->used];
 }
 
-static struct bkey *btree_sort_fixup(struct btree_iter *iter, struct bkey *tmp)
+static void btree_sort_fixup(struct btree_iter *iter)
 {
 	while (iter->used > 1) {
 		struct btree_iter_set *top = iter->data, *i = top + 1;
@@ -963,22 +955,9 @@ static struct bkey *btree_sort_fixup(struct btree_iter *iter, struct bkey *tmp)
 		} else {
 			/* can't happen because of comparison func */
 			BUG_ON(!bkey_cmp(&START_KEY(top->k), &START_KEY(i->k)));
-
-			if (bkey_cmp(i->k, top->k) < 0) {
-				bkey_copy(tmp, top->k);
-
-				bch_cut_back(&START_KEY(i->k), tmp);
-				bch_cut_front(i->k, top->k);
-				heap_sift(iter, 0, btree_iter_cmp);
-
-				return tmp;
-			} else {
-				bch_cut_back(&START_KEY(i->k), top->k);
-			}
+			bch_cut_back(&START_KEY(i->k), top->k);
 		}
 	}
-
-	return NULL;
 }
 
 static void btree_mergesort(struct btree *b, struct bset *out,
@@ -986,20 +965,15 @@ static void btree_mergesort(struct btree *b, struct bset *out,
 			    bool fixup, bool remove_stale)
 {
 	struct bkey *k, *last = NULL;
-	BKEY_PADDED(k) tmp;
 	bool (*bad)(struct btree *, const struct bkey *) = remove_stale
 		? bch_ptr_bad
 		: bch_ptr_invalid;
 
 	while (!btree_iter_end(iter)) {
 		if (fixup && !b->level)
-			k = btree_sort_fixup(iter, &tmp.k);
-		else
-			k = NULL;
+			btree_sort_fixup(iter);
 
-		if (!k)
-			k = bch_btree_iter_next(iter);
-
+		k = bch_btree_iter_next(iter);
 		if (bad(b, k))
 			continue;
 
@@ -1127,39 +1101,33 @@ void bch_btree_sort_into(struct btree *b, struct btree *new)
 	new->sets->size = 0;
 }
 
-#define SORT_CRIT	(4096 / sizeof(uint64_t))
-
 void bch_btree_sort_lazy(struct btree *b)
 {
-	unsigned crit = SORT_CRIT;
-	int i;
+	if (b->nsets) {
+		unsigned i, j, keys = 0, total;
 
-	/* Don't sort if nothing to do */
-	if (!b->nsets)
-		goto out;
+		for (i = 0; i <= b->nsets; i++)
+			keys += b->sets[i].data->keys;
 
-	/* If not a leaf node, always sort */
-	if (b->level) {
-		bch_btree_sort(b);
-		return;
-	}
+		total = keys;
 
-	for (i = b->nsets - 1; i >= 0; --i) {
-		crit *= b->c->sort_crit_factor;
+		for (j = 0; j < b->nsets; j++) {
+			if (keys * 2 < total ||
+			    keys < 1000) {
+				bch_btree_sort_partial(b, j);
+				return;
+			}
 
-		if (b->sets[i].data->keys < crit) {
-			bch_btree_sort_partial(b, i);
+			keys -= b->sets[j].data->keys;
+		}
+
+		/* Must sort if b->nsets == 3 or we'll overflow */
+		if (b->nsets >= (MAX_BSETS - 1) - b->level) {
+			bch_btree_sort(b);
 			return;
 		}
 	}
 
-	/* Sort if we'd overflow */
-	if (b->nsets + 1 == MAX_BSETS) {
-		bch_btree_sort(b);
-		return;
-	}
-
-out:
 	bset_build_written_tree(b);
 }
 

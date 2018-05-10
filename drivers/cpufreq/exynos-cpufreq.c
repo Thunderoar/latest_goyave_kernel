@@ -113,8 +113,7 @@ static int exynos_cpufreq_scale(unsigned int target_freq)
 		if (ret) {
 			pr_err("%s: failed to set cpu voltage to %d\n",
 				__func__, arm_volt);
-			freqs.new = freqs.old;
-			goto post_notify;
+			goto out;
 		}
 	}
 
@@ -124,18 +123,13 @@ static int exynos_cpufreq_scale(unsigned int target_freq)
 		if (ret) {
 			pr_err("%s: failed to set cpu voltage to %d\n",
 				__func__, safe_arm_volt);
-			freqs.new = freqs.old;
-			goto post_notify;
+			goto out;
 		}
 	}
 
 	exynos_info->set_freq(old_index, index);
 
-post_notify:
 	cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
-
-	if (ret)
-		goto out;
 
 	/* When the new frequency is lower than current frequency */
 	if ((freqs.new < freqs.old) ||

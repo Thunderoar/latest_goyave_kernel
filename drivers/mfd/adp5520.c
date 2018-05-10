@@ -223,7 +223,7 @@ static int adp5520_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
-	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
+	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 
@@ -244,7 +244,7 @@ static int adp5520_probe(struct i2c_client *client,
 		if (ret) {
 			dev_err(&client->dev, "failed to request irq %d\n",
 					chip->irq);
-			return ret;
+			goto out_free_chip;
 		}
 	}
 
@@ -302,6 +302,9 @@ out_free_irq:
 	if (chip->irq)
 		free_irq(chip->irq, chip);
 
+out_free_chip:
+	kfree(chip);
+
 	return ret;
 }
 
@@ -314,6 +317,7 @@ static int adp5520_remove(struct i2c_client *client)
 
 	adp5520_remove_subdevs(chip);
 	adp5520_write(chip->dev, ADP5520_MODE_STATUS, 0);
+	kfree(chip);
 	return 0;
 }
 

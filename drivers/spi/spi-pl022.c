@@ -368,6 +368,11 @@ struct pl022 {
 	resource_size_t			phybase;
 	void __iomem			*virtbase;
 	struct clk			*clk;
+	/* Two optional pin states - default & sleep */
+	struct pinctrl			*pinctrl;
+	struct pinctrl_state		*pins_default;
+	struct pinctrl_state		*pins_idle;
+	struct pinctrl_state		*pins_sleep;
 	struct spi_master		*master;
 	struct pl022_ssp_controller	*master_info;
 	/* Message per-transfer pump */
@@ -503,12 +508,12 @@ static void giveback(struct pl022 *pl022)
 	pl022->cur_msg = NULL;
 	pl022->cur_transfer = NULL;
 	pl022->cur_chip = NULL;
+	spi_finalize_current_message(pl022->master);
 
 	/* disable the SPI/SSP operation */
 	writew((readw(SSP_CR1(pl022->virtbase)) &
 		(~SSP_CR1_MASK_SSE)), SSP_CR1(pl022->virtbase));
 
-	spi_finalize_current_message(pl022->master);
 }
 
 /**
@@ -1075,7 +1080,7 @@ err_rxdesc:
 		     pl022->sgt_tx.nents, DMA_TO_DEVICE);
 err_tx_sgmap:
 	dma_unmap_sg(rxchan->device->dev, pl022->sgt_rx.sgl,
-		     pl022->sgt_rx.nents, DMA_FROM_DEVICE);
+		     pl022->sgt_tx.nents, DMA_FROM_DEVICE);
 err_rx_sgmap:
 	sg_free_table(&pl022->sgt_tx);
 err_alloc_tx_sg:
@@ -2078,7 +2083,6 @@ pl022_platform_data_dt_get(struct device *dev)
 	}
 
 	pd->bus_id = -1;
-	pd->enable_dma = 1;
 	of_property_read_u32(np, "num-cs", &tmp);
 	pd->num_chipselect = tmp;
 	of_property_read_u32(np, "pl022,autosuspend-delay",
@@ -2129,7 +2133,32 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 	pl022->chipselects = devm_kzalloc(dev, num_cs * sizeof(int),
 					  GFP_KERNEL);
 
-	pinctrl_pm_select_default_state(dev);
+	pl022->pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR(pl022->pinctrl)) {
+		status = PTR_ERR(pl022->pinctrl);
+		goto err_no_pinctrl;
+	}
+
+	pl022->pins_default = pinctrl_lookup_state(pl022->pinctrl,
+						 PINCTRL_STATE_DEFAULT);
+	/* enable pins to be muxed in and configured */
+	if (!IS_ERR(pl022->pins_default)) {
+		status = pinctrl_select_state(pl022->pinctrl,
+				pl022->pins_default);
+		if (status)
+			dev_err(dev, "could not set default pins\n");
+	} else
+		dev_err(dev, "could not get default pinstate\n");
+
+	pl022->pins_idle = pinctrl_lookup_state(pl022->pinctrl,
+					      PINCTRL_STATE_IDLE);
+	if (IS_ERR(pl022->pins_idle))
+		dev_dbg(dev, "could not get idle pinstate\n");
+
+	pl022->pins_sleep = pinctrl_lookup_state(pl022->pinctrl,
+					       PINCTRL_STATE_SLEEP);
+	if (IS_ERR(pl022->pins_sleep))
+		dev_dbg(dev, "could not get sleep pinstate\n");
 
 	/*
 	 * Bus Number Which has been Assigned to this SSP controller
@@ -2279,6 +2308,7 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 	amba_release_regions(adev);
  err_no_ioregion:
  err_no_gpio:
+ err_no_pinctrl:
 	spi_master_put(master);
 	return status;
 }
@@ -2318,21 +2348,44 @@ pl022_remove(struct amba_device *adev)
  */
 static void pl022_suspend_resources(struct pl022 *pl022, bool runtime)
 {
+	int ret;
+	struct pinctrl_state *pins_state;
+
 	clk_disable(pl022->clk);
 
-	if (runtime)
-		pinctrl_pm_select_idle_state(&pl022->adev->dev);
-	else
-		pinctrl_pm_select_sleep_state(&pl022->adev->dev);
+	pins_state = runtime ? pl022->pins_idle : pl022->pins_sleep;
+	/* Optionally let pins go into sleep states */
+	if (!IS_ERR(pins_state)) {
+		ret = pinctrl_select_state(pl022->pinctrl, pins_state);
+		if (ret)
+			dev_err(&pl022->adev->dev, "could not set %s pins\n",
+				runtime ? "idle" : "sleep");
+	}
 }
 
 static void pl022_resume_resources(struct pl022 *pl022, bool runtime)
 {
+	int ret;
+
+	/* Optionaly enable pins to be muxed in and configured */
 	/* First go to the default state */
-	pinctrl_pm_select_default_state(&pl022->adev->dev);
-	if (!runtime)
+	if (!IS_ERR(pl022->pins_default)) {
+		ret = pinctrl_select_state(pl022->pinctrl, pl022->pins_default);
+		if (ret)
+			dev_err(&pl022->adev->dev,
+				"could not set default pins\n");
+	}
+
+	if (!runtime) {
 		/* Then let's idle the pins until the next transfer happens */
-		pinctrl_pm_select_idle_state(&pl022->adev->dev);
+		if (!IS_ERR(pl022->pins_idle)) {
+			ret = pinctrl_select_state(pl022->pinctrl,
+					pl022->pins_idle);
+		if (ret)
+			dev_err(&pl022->adev->dev,
+				"could not set idle pins\n");
+		}
+	}
 
 	clk_enable(pl022->clk);
 }

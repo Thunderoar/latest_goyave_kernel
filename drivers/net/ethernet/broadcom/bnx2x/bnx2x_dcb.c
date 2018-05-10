@@ -253,6 +253,7 @@ static void bnx2x_dcbx_get_ets_feature(struct bnx2x *bp,
 
 	memset(&pg_help_data, 0, sizeof(struct pg_help_data));
 
+
 	if (GET_FLAGS(error, DCBX_LOCAL_ETS_ERROR))
 		DP(BNX2X_MSG_DCB, "DCBX_LOCAL_ETS_ERROR\n");
 
@@ -297,6 +298,7 @@ static void bnx2x_dcbx_get_ets_feature(struct bnx2x *bp,
 static void  bnx2x_dcbx_get_pfc_feature(struct bnx2x *bp,
 					struct dcbx_pfc_feature *pfc, u32 error)
 {
+
 	if (GET_FLAGS(error, DCBX_LOCAL_PFC_ERROR))
 		DP(BNX2X_MSG_DCB, "DCBX_LOCAL_PFC_ERROR\n");
 
@@ -364,6 +366,7 @@ static int bnx2x_dcbx_read_mib(struct bnx2x *bp,
 	u32 mib_size, prefix_seq_num, suffix_seq_num;
 	struct lldp_remote_mib *remote_mib ;
 	struct lldp_local_mib  *local_mib;
+
 
 	switch (read_mib_type) {
 	case DCBX_READ_LOCAL_MIB:
@@ -626,6 +629,7 @@ static int bnx2x_dcbx_read_shmem_neg_results(struct bnx2x *bp)
 	return 0;
 }
 
+
 #ifdef BCM_DCBNL
 static inline
 u8 bnx2x_dcbx_dcbnl_app_up(struct dcbx_app_priority_entry *ent)
@@ -687,7 +691,7 @@ static inline void bnx2x_dcbx_update_tc_mapping(struct bnx2x *bp)
 	}
 
 	/* setup tc must be called under rtnl lock, but we can't take it here
-	 * as we are handling an attention on a work queue which must be
+	 * as we are handling an attetntion on a work queue which must be
 	 * flushed at some rtnl-locked contexts (e.g. if down)
 	 */
 	if (!test_and_set_bit(BNX2X_SP_RTNL_SETUP_TC, &bp->sp_rtnl_state))
@@ -707,7 +711,7 @@ void bnx2x_dcbx_set_params(struct bnx2x *bp, u32 state)
 			 */
 			bnx2x_dcbnl_update_applist(bp, true);
 
-			/* Read remote mib if dcbx is in the FW */
+			/* Read rmeote mib if dcbx is in the FW */
 			if (bnx2x_dcbx_read_shmem_remote_mib(bp))
 				return;
 #endif
@@ -738,7 +742,7 @@ void bnx2x_dcbx_set_params(struct bnx2x *bp, u32 state)
 			bnx2x_dcbx_update_tc_mapping(bp);
 
 			/*
-			 * allow other functions to update their netdevices
+			 * allow other funtions to update their netdevices
 			 * accordingly
 			 */
 			if (IS_MF(bp))
@@ -860,7 +864,7 @@ static void bnx2x_dcbx_admin_mib_updated_params(struct bnx2x *bp,
 			   i, DCBX_PRI_PG_GET(af->ets.pri_pg_tbl, i));
 		}
 
-		/*For IEEE admin_recommendation_bw_percentage
+		/*For IEEE admin_recommendation_bw_precentage
 		 *For IEEE admin_recommendation_ets_pg */
 		af->pfc.pri_en_bitmap = (u8)dp->admin_pfc_bitmap;
 		for (i = 0; i < DCBX_CONFIG_MAX_APP_PROTOCOL; i++) {
@@ -892,11 +896,13 @@ static void bnx2x_dcbx_admin_mib_updated_params(struct bnx2x *bp,
 		}
 
 		af->app.default_pri = (u8)dp->admin_default_priority;
+
 	}
 
 	/* Write the data. */
 	bnx2x_write_data(bp, (u32 *)&admin_mib, offset,
 			 sizeof(struct lldp_admin_mib));
+
 }
 
 void bnx2x_dcbx_set_state(struct bnx2x *bp, bool dcb_on, u32 dcbx_enabled)
@@ -1070,7 +1076,7 @@ static void bnx2x_dcbx_get_num_pg_traf_type(struct bnx2x *bp,
 	bool pg_found  = false;
 	u32 i, traf_type, add_traf_type, add_pg;
 	u32 *ttp = bp->dcbx_port_params.app.traffic_type_priority;
-	struct pg_entry_help_data *data = help_data->data; /*shortcut*/
+	struct pg_entry_help_data *data = help_data->data; /*shotcut*/
 
 	/* Set to invalid */
 	for (i = 0; i < LLFC_DRIVER_TRAFFIC_TYPE_MAX; i++)
@@ -1166,8 +1172,7 @@ static void bnx2x_dcbx_separate_pauseable_from_non(struct bnx2x *bp,
 				DCBX_PG_BW_GET(ets->pg_bw_tbl, pg_entry));
 		else
 			/* If we join a group and one is strict
-			 * than the bw rules
-			 */
+			 * than the bw rulls */
 			cos_data->data[entry].strict =
 						BNX2X_DCBX_STRICT_COS_HIGHEST;
 	}
@@ -1175,6 +1180,7 @@ static void bnx2x_dcbx_separate_pauseable_from_non(struct bnx2x *bp,
 	    (0 == cos_data->data[1].pri_join_mask))
 		BNX2X_ERR("dcbx error: Both groups must have priorities\n");
 }
+
 
 #ifndef POWER_OF_2
 #define POWER_OF_2(x)	((0 != x) && (0 == (x & (x-1))))
@@ -1278,7 +1284,7 @@ static void bnx2x_dcbx_2cos_limit_cee_single_pg_to_cos_params(struct bnx2x *bp,
 		} else {
 			/* If there are only pauseable priorities or
 			 * only non-pauseable,* the lower priorities go
-			 * to the first queue and the higher priorities go
+			 * to the first queue and the higherpriorities go
 			 * to the second queue.
 			 */
 			cos_data->data[0].pausable =
@@ -1478,7 +1484,7 @@ static void bnx2x_dcbx_2cos_limit_cee_three_pg_to_cos_params(
 		 * queue and one priority goes to the second queue.
 		 *
 		 * We will join this two cases:
-		 * if one is BW limited it will go to the second queue
+		 * if one is BW limited it will go to the secoend queue
 		 * otherwise the last priority will get it
 		 */
 
@@ -1498,8 +1504,7 @@ static void bnx2x_dcbx_2cos_limit_cee_three_pg_to_cos_params(
 				    false == b_found_strict)
 					/* last entry will be handled separately
 					 * If no priority is strict than last
-					 * entry goes to last queue.
-					 */
+					 * enty goes to last queue.*/
 					entry = 1;
 				cos_data->data[entry].pri_join_mask |=
 								pri_tested;
@@ -1511,14 +1516,14 @@ static void bnx2x_dcbx_2cos_limit_cee_three_pg_to_cos_params(
 				b_found_strict = true;
 				cos_data->data[1].pri_join_mask |= pri_tested;
 				/* If we join a group and one is strict
-				 * than the bw rules
-				 */
+				 * than the bw rulls */
 				cos_data->data[1].strict =
 					BNX2X_DCBX_STRICT_COS_HIGHEST;
 			}
 		}
 	}
 }
+
 
 static void bnx2x_dcbx_2cos_limit_cee_fill_cos_params(struct bnx2x *bp,
 				       struct pg_help_data *help_data,
@@ -1528,6 +1533,7 @@ static void bnx2x_dcbx_2cos_limit_cee_fill_cos_params(struct bnx2x *bp,
 				       u32 pri_join_mask,
 				       u8 num_of_dif_pri)
 {
+
 	/* default E2 settings */
 	cos_data->num_of_cos = DCBX_COS_MAX_NUM_E2;
 
@@ -1623,6 +1629,7 @@ static u8 bnx2x_dcbx_cee_fill_strict_pri(struct bnx2x *bp,
 					 u8 num_spread_of_entries,
 					 u8 strict_app_pris)
 {
+
 	if (bnx2x_dcbx_spread_strict_pri(bp, cos_data, entry,
 					 num_spread_of_entries,
 					 strict_app_pris)) {
@@ -1841,7 +1848,7 @@ static void bnx2x_dcbx_fw_struct(struct bnx2x *bp,
 
 void bnx2x_dcbx_pmf_update(struct bnx2x *bp)
 {
-	/* if we need to synchronize DCBX result from prev PMF
+	/* if we need to syncronize DCBX result from prev PMF
 	 * read it from shmem and update bp and netdev accordingly
 	 */
 	if (SHMEM2_HAS(bp, drv_flags) &&
@@ -1869,6 +1876,7 @@ void bnx2x_dcbx_pmf_update(struct bnx2x *bp)
 		 * dcbx negotiation.
 		 */
 		bnx2x_dcbx_update_tc_mapping(bp);
+
 	}
 }
 
@@ -1935,14 +1943,14 @@ static void bnx2x_dcbnl_set_pg_tccfg_tx(struct net_device *netdev, int prio,
 		return;
 
 	/**
-	 * bw_pct ignored -	band-width percentage devision between user
+	 * bw_pct ingnored -	band-width percentage devision between user
 	 *			priorities within the same group is not
 	 *			standard and hence not supported
 	 *
-	 * prio_type ignored -	priority levels within the same group are not
+	 * prio_type igonred -	priority levels within the same group are not
 	 *			standard and hence are not supported. According
 	 *			to the standard pgid 15 is dedicated to strict
-	 *			priority traffic (on the port level).
+	 *			prioirty traffic (on the port level).
 	 *
 	 * up_map ignored
 	 */
@@ -1987,14 +1995,14 @@ static void bnx2x_dcbnl_get_pg_tccfg_tx(struct net_device *netdev, int prio,
 	DP(BNX2X_MSG_DCB, "prio = %d\n", prio);
 
 	/**
-	 * bw_pct ignored -	band-width percentage devision between user
+	 * bw_pct ingnored -	band-width percentage devision between user
 	 *			priorities within the same group is not
 	 *			standard and hence not supported
 	 *
-	 * prio_type ignored -	priority levels within the same group are not
+	 * prio_type igonred -	priority levels within the same group are not
 	 *			standard and hence are not supported. According
 	 *			to the standard pgid 15 is dedicated to strict
-	 *			priority traffic (on the port level).
+	 *			prioirty traffic (on the port level).
 	 *
 	 * up_map ignored
 	 */
@@ -2381,7 +2389,7 @@ static u8 bnx2x_dcbnl_get_featcfg(struct net_device *netdev, int featid,
 				*flags |= DCB_FEATCFG_ERROR;
 			break;
 		default:
-			BNX2X_ERR("Non valid feature-ID\n");
+			BNX2X_ERR("Non valid featrue-ID\n");
 			rval = 1;
 			break;
 		}
@@ -2422,7 +2430,7 @@ static u8 bnx2x_dcbnl_set_featcfg(struct net_device *netdev, int featid,
 				flags & DCB_FEATCFG_WILLING ? 1 : 0;
 			break;
 		default:
-			BNX2X_ERR("Non valid feature-ID\n");
+			BNX2X_ERR("Non valid featrue-ID\n");
 			rval = 1;
 			break;
 		}

@@ -132,16 +132,16 @@ int dialog_checklist(const char *title, const char *prompt, int height,
 	}
 
 do_resize:
-	if (getmaxy(stdscr) < (height + CHECKLIST_HEIGTH_MIN))
+	if (getmaxy(stdscr) < (height + 6))
 		return -ERRDISPLAYTOOSMALL;
-	if (getmaxx(stdscr) < (width + CHECKLIST_WIDTH_MIN))
+	if (getmaxx(stdscr) < (width + 6))
 		return -ERRDISPLAYTOOSMALL;
 
 	max_choice = MIN(list_height, item_count());
 
 	/* center dialog box on screen */
-	x = (getmaxx(stdscr) - width) / 2;
-	y = (getmaxy(stdscr) - height) / 2;
+	x = (COLS - width) / 2;
+	y = (LINES - height) / 2;
 
 	draw_shadow(stdscr, y, x, height, width);
 

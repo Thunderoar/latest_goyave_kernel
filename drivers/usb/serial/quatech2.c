@@ -141,7 +141,6 @@ static void qt2_release(struct usb_serial *serial)
 
 	serial_priv = usb_get_serial_data(serial);
 
-	usb_kill_urb(serial_priv->read_urb);
 	usb_free_urb(serial_priv->read_urb);
 	kfree(serial_priv);
 }
@@ -344,7 +343,7 @@ static int qt2_open(struct tty_struct *tty, struct usb_serial_port *port)
 	int status;
 	unsigned long flags;
 
-	device_port = port->port_number;
+	device_port = (u16) (port->number - port->serial->minor);
 
 	serial = port->serial;
 
@@ -389,8 +388,9 @@ static int qt2_open(struct tty_struct *tty, struct usb_serial_port *port)
 	status = qt2_set_port_config(serial->dev, device_port,
 				     DEFAULT_BAUD_RATE, UART_LCR_WLEN8);
 	if (status < 0) {
-		dev_err(&port->dev, "%s - initial setup failed (%i)\n",
-			__func__, device_port);
+		dev_err(&port->dev,
+			"%s - initial setup failed for port %i (%i)\n",
+			__func__, port->number, device_port);
 		return status;
 	}
 
@@ -407,12 +407,16 @@ static void qt2_close(struct usb_serial_port *port)
 {
 	struct usb_serial *serial;
 	struct qt2_port_private *port_priv;
+	unsigned long flags;
 	int i;
 
 	serial = port->serial;
 	port_priv = usb_get_serial_port_data(port);
 
+	spin_lock_irqsave(&port_priv->urb_lock, flags);
 	usb_kill_urb(port_priv->write_urb);
+	port_priv->urb_in_use = false;
+	spin_unlock_irqrestore(&port_priv->urb_lock, flags);
 
 	/* flush the port transmit buffer */
 	i = usb_control_msg(serial->dev,
@@ -462,7 +466,7 @@ static int get_serial_info(struct usb_serial_port *port,
 		return -EFAULT;
 
 	memset(&tmp, 0, sizeof(tmp));
-	tmp.line		= port->minor;
+	tmp.line		= port->serial->minor;
 	tmp.port		= 0;
 	tmp.irq			= 0;
 	tmp.flags		= ASYNC_SKIP_TEST | ASYNC_AUTO_IRQ;
@@ -519,7 +523,7 @@ static void qt2_process_flush(struct usb_serial_port *port, unsigned char *ch)
 	return;
 }
 
-static void qt2_process_read_urb(struct urb *urb)
+void qt2_process_read_urb(struct urb *urb)
 {
 	struct usb_serial *serial;
 	struct qt2_serial_private *serial_priv;

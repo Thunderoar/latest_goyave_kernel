@@ -838,9 +838,6 @@ static int palmas_regulators_probe(struct platform_device *pdev)
 				continue;
 			ramp_delay_support = true;
 			break;
-		case PALMAS_REG_SMPS10:
-			if (!PALMAS_PMIC_HAS(palmas, SMPS10_BOOST))
-				continue;
 		}
 
 		if ((id == PALMAS_REG_SMPS6) || (id == PALMAS_REG_SMPS8))
@@ -1054,7 +1051,6 @@ static struct of_device_id of_palmas_match_tbl[] = {
 	{ .compatible = "ti,tps65913-pmic", },
 	{ .compatible = "ti,tps65914-pmic", },
 	{ .compatible = "ti,tps80036-pmic", },
-	{ .compatible = "ti,tps659038-pmic", },
 	{ /* end */ }
 };
 

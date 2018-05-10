@@ -35,7 +35,7 @@ static ssize_t chars_chartab_show(struct kobject *kobj,
 	size_t bufsize = PAGE_SIZE;
 	unsigned long flags;
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	*buf_pointer = '\0';
 	for (i = 0; i < 256; i++) {
 		if (bufsize <= 1)
@@ -70,7 +70,7 @@ static ssize_t chars_chartab_show(struct kobject *kobj,
 		bufsize -= len;
 		buf_pointer += len;
 	}
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return buf_pointer - buf;
 }
 
@@ -127,7 +127,7 @@ static ssize_t chars_chartab_store(struct kobject *kobj,
 	size_t desc_length = 0;
 	int i;
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	while (cp < end) {
 
 		while ((cp < end) && (*cp == ' ' || *cp == '\t'))
@@ -212,7 +212,7 @@ static ssize_t chars_chartab_store(struct kobject *kobj,
 			spk_reset_default_chartab();
 	}
 
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	report_char_chartab_status(reset, received, used, rejected,
 		do_characters);
 	return retval;
@@ -232,7 +232,7 @@ static ssize_t keymap_show(struct kobject *kobj, struct kobj_attribute *attr,
 	u_char *cp1;
 	u_char ch;
 	unsigned long flags;
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	cp1 = spk_key_buf + SHIFT_TBL_SIZE;
 	num_keys = (int)(*cp1);
 	nstates = (int)cp1[1];
@@ -248,7 +248,7 @@ static ssize_t keymap_show(struct kobject *kobj, struct kobj_attribute *attr,
 		}
 	}
 	cp += sprintf(cp, "0, %d\n", KEY_MAP_VER);
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return (int)(cp-buf);
 }
 
@@ -265,17 +265,17 @@ static ssize_t keymap_store(struct kobject *kobj, struct kobj_attribute *attr,
 	u_char *cp1;
 	unsigned long flags;
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	in_buff = kmemdup(buf, count + 1, GFP_ATOMIC);
 	if (!in_buff) {
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		return -ENOMEM;
 	}
 	if (strchr("dDrR", *in_buff)) {
 		spk_set_key_info(spk_key_defaults, spk_key_buf);
 		pr_info("keymap set to default values\n");
 		kfree(in_buff);
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		return count;
 	}
 	if (in_buff[count - 1] == '\n')
@@ -294,7 +294,7 @@ static ssize_t keymap_store(struct kobject *kobj, struct kobj_attribute *attr,
 		pr_warn("i %d %d %d %d\n", i,
 				(int)cp1[-3], (int)cp1[-2], (int)cp1[-1]);
 		kfree(in_buff);
-		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+		spk_unlock(flags);
 		return -EINVAL;
 	}
 	while (--i >= 0) {
@@ -315,7 +315,7 @@ static ssize_t keymap_store(struct kobject *kobj, struct kobj_attribute *attr,
 		}
 	}
 	kfree(in_buff);
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return ret;
 }
 
@@ -341,7 +341,7 @@ static ssize_t silent_store(struct kobject *kobj, struct kobj_attribute *attr,
 		pr_warn("silent value '%c' not in range (0,7)\n", ch);
 		return -EINVAL;
 	}
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	if (ch&2) {
 		shut = 1;
 		spk_do_flush();
@@ -354,7 +354,7 @@ static ssize_t silent_store(struct kobject *kobj, struct kobj_attribute *attr,
 		spk_shut_up |= shut;
 	else
 		spk_shut_up &= ~shut;
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return count;
 }
 
@@ -470,7 +470,7 @@ static ssize_t punc_show(struct kobject *kobj, struct kobj_attribute *attr,
 		return -EINVAL;
 	}
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	pb = (struct st_bits_data *) &spk_punc_info[var->value];
 	mask = pb->mask;
 	for (i = 33; i < 128; i++) {
@@ -478,7 +478,7 @@ static ssize_t punc_show(struct kobject *kobj, struct kobj_attribute *attr,
 			continue;
 		*cp++ = (char)i;
 	}
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return cp-buf;
 }
 
@@ -518,14 +518,14 @@ static ssize_t punc_store(struct kobject *kobj, struct kobj_attribute *attr,
 		x--;
 	punc_buf[x] = '\0';
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 
 	if (*punc_buf == 'd' || *punc_buf == 'r')
-		x = spk_set_mask_bits(NULL, var->value, 3);
+		x = spk_set_mask_bits(0, var->value, 3);
 	else
 		x = spk_set_mask_bits(punc_buf, var->value, 3);
 
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return count;
 }
 
@@ -547,7 +547,7 @@ ssize_t spk_var_show(struct kobject *kobj, struct kobj_attribute *attr,
 	if (param == NULL)
 		return -EINVAL;
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	var = (struct var_t *) param->data;
 	switch (param->var_type) {
 	case VAR_NUM:
@@ -580,7 +580,7 @@ ssize_t spk_var_show(struct kobject *kobj, struct kobj_attribute *attr,
 			param->name, param->var_type);
 		break;
 	}
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return rv;
 }
 EXPORT_SYMBOL_GPL(spk_var_show);
@@ -609,7 +609,7 @@ ssize_t spk_var_store(struct kobject *kobj, struct kobj_attribute *attr,
 	cp = (char *)buf;
 	string_unescape_any_inplace(cp);
 
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	switch (param->var_type) {
 	case VAR_NUM:
 	case VAR_TIME:
@@ -670,7 +670,7 @@ ssize_t spk_var_store(struct kobject *kobj, struct kobj_attribute *attr,
 			}
 		}
 	}
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 
 	if (ret == -ERESTART)
 		pr_info("%s reset to default value\n", attr->attr.name);
@@ -818,9 +818,9 @@ static ssize_t message_show(struct kobject *kobj,
 	unsigned long flags;
 
 	BUG_ON(!group);
-	spin_lock_irqsave(&speakup_info.spinlock, flags);
+	spk_lock(flags);
 	retval = message_show_helper(buf, group->start, group->end);
-	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
+	spk_unlock(flags);
 	return retval;
 }
 

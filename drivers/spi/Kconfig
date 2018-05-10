@@ -266,7 +266,7 @@ config SPI_OC_TINY
 
 config SPI_OCTEON
 	tristate "Cavium OCTEON SPI controller"
-	depends on CAVIUM_OCTEON_SOC
+	depends on CPU_CAVIUM_OCTEON
 	help
 	  SPI host driver for the hardware found on some Cavium OCTEON
 	  SOCs.
@@ -404,7 +404,7 @@ config SPI_SH_HSPI
 
 config SPI_SIRF
 	tristate "CSR SiRFprimaII SPI controller"
-	depends on ARCH_SIRF
+	depends on ARCH_PRIMA2
 	select SPI_BITBANG
 	help
 	  SPI driver for CSR SiRFprimaII SoCs

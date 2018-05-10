@@ -95,14 +95,14 @@ static int twl6040_clk_probe(struct platform_device *pdev)
 	if (IS_ERR(clkdata->clk))
 		return PTR_ERR(clkdata->clk);
 
-	platform_set_drvdata(pdev, clkdata);
+	dev_set_drvdata(&pdev->dev, clkdata);
 
 	return 0;
 }
 
 static int twl6040_clk_remove(struct platform_device *pdev)
 {
-	struct twl6040_clk *clkdata = platform_get_drvdata(pdev);
+	struct twl6040_clk *clkdata = dev_get_drvdata(&pdev->dev);
 
 	clk_unregister(clkdata->clk);
 

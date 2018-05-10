@@ -94,8 +94,8 @@ static void exynos4_mct_write(unsigned int value, unsigned long offset)
 	__raw_writel(value, reg_base + offset);
 
 	if (likely(offset >= EXYNOS4_MCT_L_BASE(0))) {
-		stat_addr = (offset & EXYNOS4_MCT_L_MASK) + MCT_L_WSTAT_OFFSET;
-		switch (offset & ~EXYNOS4_MCT_L_MASK) {
+		stat_addr = (offset & ~EXYNOS4_MCT_L_MASK) + MCT_L_WSTAT_OFFSET;
+		switch (offset & EXYNOS4_MCT_L_MASK) {
 		case MCT_L_TCON_OFFSET:
 			mask = 1 << 3;		/* L_TCON write status */
 			break;
@@ -400,6 +400,18 @@ static irqreturn_t exynos4_mct_tick_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static struct irqaction mct_tick0_event_irq = {
+	.name		= "mct_tick0_irq",
+	.flags		= IRQF_TIMER | IRQF_NOBALANCING,
+	.handler	= exynos4_mct_tick_isr,
+};
+
+static struct irqaction mct_tick1_event_irq = {
+	.name		= "mct_tick1_irq",
+	.flags		= IRQF_TIMER | IRQF_NOBALANCING,
+	.handler	= exynos4_mct_tick_isr,
+};
+
 static int __cpuinit exynos4_local_timer_setup(struct clock_event_device *evt)
 {
 	struct mct_clock_event_device *mevt;
@@ -417,33 +429,38 @@ static int __cpuinit exynos4_local_timer_setup(struct clock_event_device *evt)
 	evt->set_mode = exynos4_tick_set_mode;
 	evt->features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT;
 	evt->rating = 450;
+	clockevents_config_and_register(evt, clk_rate / (TICK_BASE_CNT + 1),
+					0xf, 0x7fffffff);
 
 	exynos4_mct_write(TICK_BASE_CNT, mevt->base + MCT_L_TCNTB_OFFSET);
 
 	if (mct_int_type == MCT_INT_SPI) {
-		evt->irq = mct_irqs[MCT_L0_IRQ + cpu];
-		if (request_irq(evt->irq, exynos4_mct_tick_isr,
-				IRQF_TIMER | IRQF_NOBALANCING,
-				evt->name, mevt)) {
-			pr_err("exynos-mct: cannot register IRQ %d\n",
-				evt->irq);
-			return -EIO;
+		if (cpu == 0) {
+			mct_tick0_event_irq.dev_id = mevt;
+			evt->irq = mct_irqs[MCT_L0_IRQ];
+			setup_irq(evt->irq, &mct_tick0_event_irq);
+		} else {
+			mct_tick1_event_irq.dev_id = mevt;
+			evt->irq = mct_irqs[MCT_L1_IRQ];
+			setup_irq(evt->irq, &mct_tick1_event_irq);
+			irq_set_affinity(evt->irq, cpumask_of(1));
 		}
-		irq_set_affinity(evt->irq, cpumask_of(cpu));
 	} else {
 		enable_percpu_irq(mct_irqs[MCT_L0_IRQ], 0);
 	}
-	clockevents_config_and_register(evt, clk_rate / (TICK_BASE_CNT + 1),
-					0xf, 0x7fffffff);
 
 	return 0;
 }
 
 static void exynos4_local_timer_stop(struct clock_event_device *evt)
 {
+	unsigned int cpu = smp_processor_id();
 	evt->set_mode(CLOCK_EVT_MODE_UNUSED, evt);
 	if (mct_int_type == MCT_INT_SPI)
-		free_irq(evt->irq, this_cpu_ptr(&percpu_mct_tick));
+		if (cpu == 0)
+			remove_irq(evt->irq, &mct_tick0_event_irq);
+		else
+			remove_irq(evt->irq, &mct_tick1_event_irq);
 	else
 		disable_percpu_irq(mct_irqs[MCT_L0_IRQ]);
 }
