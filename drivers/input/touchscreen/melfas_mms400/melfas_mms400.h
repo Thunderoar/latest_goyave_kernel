@@ -6,7 +6,7 @@
  */
 
 //Config debug msg : Must be disabled for production builds
-#if 1	// 0 : disable, 1 : enable
+#if 0	// 0 : disable, 1 : enable
 #define DEBUG	
 #endif
 
