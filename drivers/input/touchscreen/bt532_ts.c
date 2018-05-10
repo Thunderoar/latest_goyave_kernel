@@ -78,7 +78,7 @@ static bool ta_connected =0;
 #include <linux/cpufreq_limit.h>
 extern int _store_cpu_num_min_limit(unsigned int input);
 struct cpufreq_limit_handle *min_handle = NULL;
-static const unsigned long touch_cpufreq_lock = 1200000;
+static const unsigned long touch_cpufreq_lock = 1000000;
 #endif
 
 #ifdef SUPPORTED_PALM_TOUCH
