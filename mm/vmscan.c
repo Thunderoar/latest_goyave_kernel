@@ -2267,7 +2267,7 @@ static bool shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 	return aborted_reclaim;
 }
 
-static unsigned long zone_reclaimable_pages(struct zone *zone)
+unsigned long zone_reclaimable_pages(struct zone *zone)
 {
 	int nr;
 
@@ -2281,7 +2281,7 @@ static unsigned long zone_reclaimable_pages(struct zone *zone)
 	return nr;
 }
 
-static bool zone_reclaimable(struct zone *zone)
+bool zone_reclaimable(struct zone *zone)
 {
 	return zone->pages_scanned < zone_reclaimable_pages(zone) * 6;
 }
@@ -3313,7 +3313,6 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
 	wake_up_interruptible(&pgdat->kswapd_wait);
 }
 
-<<<<<<< HEAD
 /*
  * The reclaimable count would be mostly accurate.
  * The less reclaimable pages may be
@@ -3482,8 +3481,6 @@ unsigned long rtcc_reclaim_pages(unsigned long nr_to_reclaim, int swappiness, un
 }
 #endif /* CONFIG_RUNTIME_COMPCACHE */
 
-=======
->>>>>>> 4852614... mm/page-writeback.c: do not count anon pages as dirtyable memory
 #ifdef CONFIG_HIBERNATION
 /*
  * Try to free `nr_to_reclaim' of memory, system-wide, and return the number of
