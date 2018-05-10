@@ -1,137 +1,52 @@
-#
-# NOTE! Don't add files that are generated in specific
-# subdirectories here. Add them in the ".gitignore" file
-# in that subdirectory instead.
-#
-# NOTE! Please use 'git ls-files -i --exclude-standard'
-# command after changing this file, to see if there are
-# any tracked files which get ignored after the change.
-#
-# Normal rules
-#
-.*
+# Prerequisites
+*.d
+
+# Object files
 *.o
-*.o.*
-*.a
-*.s
 *.ko
-*.so
-*.so.dbg
-*.mod.c
-*.i
-*.lst
-*.symtypes
-*.order
-modules.builtin
+*.obj
 *.elf
-*.bin
-*.gz
-*.bz2
-*.lzma
-*.xz
-*.lz4
-*.lzo
-*.lz4
-*.patch
-*.gcno
 
-#
-# Top-level generic files
-#
-/tags
-/TAGS
-/linux
-/vmlinux
-/vmlinuz
-/System.map
-/Module.markers
-/Module.symvers
+# Linker output
+*.ilk
+*.map
+*.exp
 
-#
-# Debian directory (make deb-pkg)
-#
-/debian/
+# Precompiled Headers
+*.gch
+*.pch
 
-#
-# git files that we don't want to ignore even it they are dot-files
-#
-!.gitignore
-!.mailmap
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
 
-#
-# Generated include files
-#
-include/config
-include/generated
-arch/*/include/generated
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
 
-# stgit generated dirs
-patches-*
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
 
-# quilt's files
-patches
-series
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
 
-# cscope files
-cscope.*
-ncscope.*
-
-# gnu global files
-GPATH
-GRTAGS
-GSYMS
-GTAGS
-
-*.orig
-*.rej
-*~
-\#*#
-
-#
-# Leavings from module signing
-#
-extra_certificates
-signing_key.priv
-signing_key.x509
-x509.genkey
-
-# kernel builds
-Image
-zImage
-xipImage
-bootpImage
-uImage
-*.dtb
-zImage-dtb 
-zImage-dtb
-dt.img
-
-# Flashable packages
-*.zip
-
-# scripts
-~.sh
-scripts/*
-
-# SELinux generated includes
-av_permissions.h
-flask.h
-
-# Others
-defconfig
-ashldi3.S
-hyp-stub.S
-lib1funcs.S
-piggy.gzip
-vmlinux
-vmlinux.lds
-vmlinux.lds
-hz.bc
-timeconst.h
-crc32table.h
-gen_crc32table
-gen_init_cpio
-initramfs_data.cpio
-firmware/*
-output/*
-dt_img/dt_img_gpve.img
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
