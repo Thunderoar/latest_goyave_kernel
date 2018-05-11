@@ -38,6 +38,10 @@
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
 
+extern int vcell_val;
+extern int curr_val;
+extern soc_val;
+
 #if defined(CONFIG_MACH_GRANDNEOVE3G) || defined(CONFIG_MACH_J13G)
 extern unsigned int system_rev ;
 extern int sec_vf_adc_current_check(void);
@@ -81,8 +85,9 @@ static int SM5701_get_charging_status(struct SM5701_charger_data *charger)
 	int status = POWER_SUPPLY_STATUS_UNKNOWN;
 	int nCHG;
 	u8 stat2, chg_en, cln;
-#if defined(CONFIG_MACH_CORE3_W) || defined(CONFIG_MACH_VIVALTO5MVE3G) || defined(CONFIG_MACH_YOUNG2VE3G)
-	union power_supply_propval vol_val, soc_val, curr_val;	int vol_thresh,curr_thresh ;
+#if defined(CONFIG_MACH_VIVALTO5MVE3G) || defined(CONFIG_MACH_YOUNG2VE3G)
+	union power_supply_propval vol_val, soc_val, curr_val;
+	int vol_thresh,curr_thresh ;
 #endif
 
 	SM5701_reg_read(charger->SM5701->i2c, SM5701_STATUS2, &stat2);
@@ -100,6 +105,12 @@ static int SM5701_get_charging_status(struct SM5701_charger_data *charger)
 		status = POWER_SUPPLY_STATUS_FULL;
 		charger->is_fullcharged = true;
 		pr_info("%s : Status, Power Supply Full \n", __func__);
+#if defined(CONFIG_MACH_CORE3_W)
+		if (soc_val < 94) {
+			pr_info("%s : SPRD FG IC error : %d)\n", __func__, soc_val);
+			charger->pdata->recharge_condition_vcell = 4300;
+		}
+#endif
 	} else {
 		if (nCHG)
 			status = POWER_SUPPLY_STATUS_DISCHARGING;
@@ -107,16 +118,21 @@ static int SM5701_get_charging_status(struct SM5701_charger_data *charger)
 			status = POWER_SUPPLY_STATUS_CHARGING;
 	}
 
-#if defined(CONFIG_MACH_CORE3_W) || defined(CONFIG_MACH_VIVALTO5MVE3G) || defined(CONFIG_MACH_YOUNG2VE3G)
+#if defined(CONFIG_MACH_VIVALTO5MVE3G) || defined(CONFIG_MACH_YOUNG2VE3G)
 	psy_do_property("sec-fuelgauge", get,
 		POWER_SUPPLY_PROP_VOLTAGE_NOW, vol_val);
 	psy_do_property("sec-fuelgauge", get,
 		POWER_SUPPLY_PROP_CAPACITY, soc_val);
 	psy_do_property("sec-fuelgauge", get,
-		POWER_SUPPLY_PROP_CURRENT_NOW, curr_val);
-#if defined(CONFIG_MACH_CORE3_W)	vol_thresh=4380;	curr_thresh=160;
+		POWER_SUPPLY_PROP_CURRENT_NOW, curr_val);
+
+
+#if defined(CONFIG_MACH_CORE3_W)
+	vol_thresh=4380;
+	curr_thresh=160;
 #elif defined(CONFIG_MACH_VIVALTO5MVE3G)
-	vol_thresh=4330;	curr_thresh=120;
+	vol_thresh=4330;
+	curr_thresh=120;
 #elif defined(CONFIG_MACH_YOUNG2VE3G)
 	vol_thresh=4330;
 	curr_thresh=120;
@@ -130,7 +146,16 @@ static int SM5701_get_charging_status(struct SM5701_charger_data *charger)
 			__func__, vol_val.intval, soc_val.intval, curr_val.intval);
 	}
 #endif
-
+#if defined(CONFIG_MACH_CORE3_W)
+	/* workaround for eoc chip bug */
+	if ((vcell_val >= 4380) && (soc_val == 100) &&
+		(curr_val < 160) && (!nCHG)) {
+		status = POWER_SUPPLY_STATUS_FULL;
+		charger->is_fullcharged = true;
+		pr_info("%s : topoff error occur, forced change to full status:%dV, %d%, %dmA\n",
+			__func__, vcell_val, soc_val, curr_val);
+	}
+#endif
 	return (int)status;
 }
 

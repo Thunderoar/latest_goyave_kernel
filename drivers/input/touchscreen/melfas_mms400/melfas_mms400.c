@@ -568,15 +568,27 @@ ERROR:
 */
 int mms_fw_update_from_kernel(struct mms_ts_info *info, bool force)
 {
+#ifndef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
 	const char *fw_name = INTERNAL_FW_PATH;
+#endif
 	const struct firmware *fw;
 	int retires = 3;
 	int ret;
 	
 	dev_dbg(&info->client->dev, "%s [START]\n", __func__);
 
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+  dev_dbg(&info->client->dev, "[USE_DUAL_FW] %s [TSP_TYPE] %d\n", __func__, info->tsp_type);
+
+  if (info->tsp_type == TSP_HW_ID_INDEX_1) {
+    request_firmware(&fw, INTERNAL_G1F_FW_PATH, &info->client->dev);
+  } else {
+    request_firmware(&fw, INTERNAL_FW_PATH, &info->client->dev);
+  }
+#else
 	request_firmware(&fw, fw_name, &info->client->dev);
-	
+#endif
+
 	if (!fw) {
 		dev_err(&info->client->dev, "%s [ERROR] request_firmware\n", __func__);
 		goto ERROR;
@@ -755,6 +767,42 @@ void mms_charger_enable(int status)
 
 }
 
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+static void mms_firmware_check(struct device *dev, struct mms_ts_info *info)
+{
+  int ret;
+  int tsp_vendor_1 = info->pdata->tsp_vendor_1;
+  int tsp_vendor_2 = info->pdata->tsp_vendor_2;
+  struct device_node *np = dev->of_node;
+
+  info->tsp_type = -1;
+
+  dev_dbg(&info->client->dev, "%s [START] tsp_type:%d\n", __func__, info->tsp_type);
+
+  dev_dbg(&info->client->dev,
+    "[USE_DUAL_FW] gpio_get_value(TSP_ID_1:gpio%d)=%d,gpio_get_value(TSP_ID_2:gpio%d)=%d\n",
+    tsp_vendor_1,gpio_get_value(tsp_vendor_1),
+    tsp_vendor_2,gpio_get_value(tsp_vendor_2));
+
+  if(!(gpio_get_value(tsp_vendor_1) || gpio_get_value(tsp_vendor_2)))
+  {
+    info->tsp_type = TSP_HW_ID_INDEX_0;
+  }
+  else
+  {
+    info->tsp_type = TSP_HW_ID_INDEX_1;
+  }
+
+  if((gpio_get_value(tsp_vendor_1)== 1) && (gpio_get_value(tsp_vendor_2)== 1))
+  {
+    info->tsp_type = TSP_HW_ID_INDEX_NO_LCD;
+  }
+
+  dev_dbg(&info->client->dev, "%s [DONE] tsp_type:%d\n", __func__, info->tsp_type);
+
+}
+#endif
+
 /**
 * Initial config
 */
@@ -905,6 +953,10 @@ static int __init mms_probe(struct i2c_client *client, const struct i2c_device_i
 	//Power on
 	mms_power_on(info);
 
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+  mms_firmware_check(&client->dev, info);
+#endif
+
 	//Firmware update
 #if MMS_USE_AUTO_FW_UPDATE
 	/*	
@@ -976,7 +1028,7 @@ static int __init mms_probe(struct i2c_client *client, const struct i2c_device_i
 #if TOUCH_BOOSTER
 	info->finger_cnt = 0;
         info->min_handle = NULL;
-	info->touch_cpufreq_lock = 1000000;
+	info->touch_cpufreq_lock = 1200000;
 #endif
 
 	//Enable device
@@ -1081,6 +1133,11 @@ static int mms_remove(struct i2c_client *client)
 	unregister_early_suspend(&info->early_suspend);
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+  gpio_free(info->pdata->tsp_vendor_1);
+	gpio_free(info->pdata->tsp_vendor_2);
+#endif
+
 	tsp_charger_status_cb = NULL;
 
 	input_unregister_device(info->input_dev);
@@ -1150,6 +1207,10 @@ int mms_resume(struct device *dev)
 	int ret = 0;
 
 	dev_dbg(&client->dev, "%s [START]\n", __func__);
+
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+  mms_firmware_check(&client->dev, info);
+#endif
 
 	if(info->enabled == false){
 		ret = mms_enable(info);

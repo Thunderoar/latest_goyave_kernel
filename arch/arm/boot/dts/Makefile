@@ -258,18 +258,27 @@ ifeq ($(CONFIG_MACH_GOYAVE3G_SWA),y)
 dtb-$(CONFIG_MACH_GOYAVE3G_SWA) += sprd-scx35_goya5mve3g_rev02.dtb \
 				sprd-scx35_goya5mve3g_rev03.dtb \
 				sprd-scx35_goya5mve3g_rev04.dtb
+else ifeq ($(CONFIG_MACH_GOYAVE3G_LTN_OPEN),y)
+dtb-$(CONFIG_MACH_GOYAVE3G_LTN_OPEN) += sprd-scx35_goyave3gltn_open_rev03.dtb \
+				sprd-scx35_goyave3gltn_open_rev04.dtb
 else ifeq ($(CONFIG_MACH_GOYAVE3G_SEA),y)
 dtb-$(CONFIG_MACH_GOYAVE3G_SEA) += sprd-scx35_goyafcve3g_rev03.dtb \
 				sprd-scx35_goyafcve3g_rev04.dtb
 else
-dtb-$(CONFIG_MACH_GOYAVE3G) += sprd-scx35_goyave3g_rev04.dtb
+dtb-$(CONFIG_MACH_GOYAVE3G) += sprd-scx35_goyave3g_rev00.dtb \
+				sprd-scx35_goyave3g_rev01.dtb \
+				sprd-scx35_goyave3g_rev02.dtb \
+				sprd-scx35_goyave3g_rev03.dtb \
+				sprd-scx35_goyave3g_rev04.dtb
 endif
 ifeq ($(CONFIG_MACH_GOYAVEWIFI_SEA_XTC),y)
 dtb-$(CONFIG_MACH_GOYAVEWIFI_SEA_XTC) += sprd-scx35_goyafcvewifi_rev02.dtb \
 				sprd-scx35_goyafcvewifi_rev03.dtb \
 				sprd-scx35_goyafcvewifi_rev04.dtb 
 else
-dtb-$(CONFIG_MACH_GOYAVEWIFI) += sprd-scx35_goyavewifi_rev04.dtb
+dtb-$(CONFIG_MACH_GOYAVEWIFI) += sprd-scx35_goyavewifi_rev02.dtb \
+				sprd-scx35_goyavewifi_rev03.dtb \
+				sprd-scx35_goyavewifi_rev04.dtb
 endif
 dtb-$(CONFIG_MACH_J13G) += sprd-scx35_j13g_rev00.dtb \
 				sprd-scx35_j13g_rev00_4Gb.dtb \

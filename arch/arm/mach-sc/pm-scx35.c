@@ -265,12 +265,23 @@ static void setup_autopd_mode(void)
 	/* KEEP eMMC/SD power */
 	sci_adi_clr(ANA_REG_GLB_LDO_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN | BIT_SLP_LDOEMMCIO_PD_EN);
 	sci_adi_clr(ANA_REG_GLB_LDO_SLP_CTRL1, BIT_SLP_LDOSD_PD_EN );
-#else
-#if defined(CONFIG_ADIE_SC2723S)
+#elif defined (CONFIG_ADIE_SC2723S) && defined (CONFIG_LDOGEN0_VCCQ)
 	/* KEEP eMMC/SD power */
-	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN); /* | BIT_SLP_LDOEMMCIO_PD_EN);*/
-	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL1, BIT_SLP_LDOSDIO_PD_EN );
-#endif
+	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN | BIT_SLP_LDOGEN0_PD_EN);
+	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL1, BIT_SLP_LDOSDIO_PD_EN);
+#elif defined (CONFIG_ADIE_SC2723S) && defined (CONFIG_LDOGEN1_VCCQ)
+	/* KEEP eMMC/SD power */
+	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL0, BIT_SLP_LDOEMMCCORE_PD_EN | BIT_SLP_LDOGEN1_PD_EN);
+	sci_adi_clr(ANA_REG_GLB_PWR_SLP_CTRL1, BIT_SLP_LDOSDIO_PD_EN);
+#else
+	/*
+	 * The eMMC should keep power on for bootloader power-on write protection.
+	 * 1. sprd-scx35.dtsi : unregister eMMC regulator for not control eMMC power
+	 * 2. eMMC VCCQ : check VCCQ power on the schematics (LDOGEN1 or LDOGEN0)
+	 * 3. model_defconfig : configure either CONFIG_LDOGEN0_VCCQ or CONFIG_LDOGEN1_VCCQ
+	 * make build error without config.
+	 */
+#error "Please configure the proper config depend on your H/W(eMMC VCCQ)"
 #endif
 	/*****************  for idle to deep  ****************/
 	configure_for_deepsleep(1);
@@ -1181,15 +1192,9 @@ int deep_sleep(int from_idle)
 #endif
 
 #define SLEEP_MAGIC (SPRD_IRAM0_BASE + 0xFB0)
-#if defined(CONFIG_ADIE_SC2723S) || defined(CONFIG_ADIE_SC2723)
-	sci_adi_write(ANA_REG_GLB_DCDC_GEN_ADI,0x01b0,0xffff);
-#endif
     __raw_writel(0x12345678, SLEEP_MAGIC); 
 	ret = sp_pm_collapse(0, from_idle);
     __raw_writel(0xaaaaaaaa, SLEEP_MAGIC); 
-#if defined(CONFIG_ADIE_SC2723S) || defined(CONFIG_ADIE_SC2723)
-	sci_adi_write(ANA_REG_GLB_DCDC_GEN_ADI,0x01e0,0xffff);
-#endif
 
 #if defined(CONFIG_MACH_SC9620OPENPHONE)
         cp0_sys_power_domain_open();

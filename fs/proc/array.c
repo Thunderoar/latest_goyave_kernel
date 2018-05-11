@@ -168,16 +168,16 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 	int g;
 	struct fdtable *fdt = NULL;
 	const struct cred *cred;
-	pid_t ppid, tpid;
+	pid_t ppid = 0, tpid = 0;
+	struct task_struct *leader = NULL;
 
 	rcu_read_lock();
-	ppid = pid_alive(p) ?
-		task_tgid_nr_ns(rcu_dereference(p->real_parent), ns) : 0;
-	tpid = 0;
 	if (pid_alive(p)) {
 		struct task_struct *tracer = ptrace_parent(p);
 		if (tracer)
 			tpid = task_pid_nr_ns(tracer, ns);
+		ppid = task_tgid_nr_ns(rcu_dereference(p->real_parent), ns);
+		leader = p->group_leader;
 	}
 	cred = get_task_cred(p);
 	seq_printf(m,
@@ -189,7 +189,7 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 		"Uid:\t%d\t%d\t%d\t%d\n"
 		"Gid:\t%d\t%d\t%d\t%d\n",
 		get_task_state(p),
-		task_tgid_nr_ns(p, ns),
+		leader ? task_pid_nr_ns(leader, ns) : 0,
 		pid_nr_ns(pid, ns),
 		ppid, tpid,
 		from_kuid_munged(user_ns, cred->uid),
@@ -304,10 +304,14 @@ static void render_cap_t(struct seq_file *m, const char *header,
 	seq_puts(m, header);
 	CAP_FOR_EACH_U32(__capi) {
 		seq_printf(m, "%08x",
-			   a->cap[CAP_LAST_U32 - __capi]);
+			   a->cap[(_KERNEL_CAPABILITY_U32S-1) - __capi]);
 	}
 	seq_putc(m, '\n');
 }
+
+/* Remove non-existent capabilities */
+#define NORM_CAPS(v) (v.cap[CAP_TO_INDEX(CAP_LAST_CAP)] &= \
+				CAP_TO_MASK(CAP_LAST_CAP + 1) - 1)
 
 static inline void task_cap(struct seq_file *m, struct task_struct *p)
 {
@@ -321,6 +325,11 @@ static inline void task_cap(struct seq_file *m, struct task_struct *p)
 	cap_effective	= cred->cap_effective;
 	cap_bset	= cred->cap_bset;
 	rcu_read_unlock();
+
+	NORM_CAPS(cap_inheritable);
+	NORM_CAPS(cap_permitted);
+	NORM_CAPS(cap_effective);
+	NORM_CAPS(cap_bset);
 
 	render_cap_t(m, "CapInh:\t", &cap_inheritable);
 	render_cap_t(m, "CapPrm:\t", &cap_permitted);

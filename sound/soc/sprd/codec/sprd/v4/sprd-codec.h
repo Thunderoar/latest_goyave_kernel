@@ -214,6 +214,20 @@
 #define ADCR_RST		    (2)
 #define FM_REC_EN           (1)
 
+#define ADC_PGAL_BYP_SEL_MASK                (0x3)
+#define ADC_PGAL_BYP_SEL_NORMAL_INPUT        (0x0)
+#define ADC_PGAL_BYP_SEL_PGAL1_2_ADCL        (0x1)
+#define ADC_PGAL_BYP_SEL_HEADMIC_2_ADCL      (0x2)
+#define ADC_PGAL_BYP_SEL_ALL_DISCONNECT      (0x3)
+
+#define ADC_PGAR_BYP_SEL_MASK                (0x3)
+#define ADC_PGAR_BYP_SEL_NORMAL_INPUT        (0x0)
+#define ADC_PGAR_BYP_SEL_PGAR1_2_ADCR        (0x1)
+#define ADC_PGAR_BYP_SEL_HEADMIC_2_ADCR      (0x2)
+#define ADC_PGAR_BYP_SEL_ALL_DISCONNECT      (0x3)
+
+
+
 /* ANA_CDC2 */
 #define DACL_EN			    (15)
 #define DACR_EN			    (14)
@@ -322,6 +336,26 @@
 #define DACR_G			(10)
 #define DACR_G_MASK		(0x7)
 
+#define DACL_G_MUTE         (0x0)
+#define DACL_G_MINUS_3DB    (0x1)
+#define DACL_G_MINUS_2_5DB  (0x2)
+#define DACL_G_MINUS_2DB    (0x3)
+#define DACL_G_MINUS_1_5DB  (0x4)
+#define DACL_G_MINUS_1DB    (0x5)
+#define DACL_G_MINUS_0_5DB  (0x6)
+#define DACL_G_MINUS_0DB    (0x7)
+
+#define DACR_G_MUTE         (0x0)
+#define DACR_G_MINUS_3DB    (0x1)
+#define DACR_G_MINUS_2_5DB  (0x2)
+#define DACR_G_MINUS_2DB    (0x3)
+#define DACR_G_MINUS_1_5DB  (0x4)
+#define DACR_G_MINUS_1DB    (0x5)
+#define DACR_G_MINUS_0_5DB  (0x6)
+#define DACR_G_MINUS_0DB    (0x7)
+
+
+
 /* ANA_CDC11 */
 #define AOL_G			(12)
 #define AOL_G_MASK		(0xF)
@@ -379,6 +413,38 @@
 #define HP_POP_STEP_8		(6)
 #define HP_POP_STEP_16		(7)
 
+#define ADC_PGA_IBIAS_CTL_OFFSET  (8)
+#define ADC_PGA_IBIAS_CTL_MASK    (0x3)
+#define ADC_PGA_IBIAS_CTL_10      (0x0)
+#define ADC_PGA_IBIAS_CTL_08      (0x1)
+#define ADC_PGA_IBIAS_CTL_05      (0x2)
+#define ADC_PGA_IBIAS_CTL_04      (0x3)
+
+#define DAC_FILTER_IBIS_CTL_OFFSET    (10)
+#define DAC_FILTER_IBIS_CTL_MASK      (0x3)
+#define DAC_FILTER_IBIS_CTL_10        (0x0)
+#define DAC_FILTER_IBIS_CTL_075       (0x1)
+#define DAC_FILTER_IBIS_CTL_05        (0x2)
+#define DAC_FILTER_IBIS_CTL_3_PER_7   (0x3)
+
+#define RCV_IBIS_CTL_OFFSET   (12)
+#define RCV_IBIS_CTL_MASK     (0x3)
+#define RCV_IBIS_CTL_095      (0x0)
+#define RCV_IBIS_CTL_075      (0x1)
+#define RCV_IBIS_CTL_065      (0x2)
+#define RCV_IBIS_CTL_05       (0x3)
+
+#define HP_CLASSAB_IBIS_CTL_OFFSET    (14)
+#define HP_CLASSAB_IBIS_CTL_MASK      (0x3)
+#define HP_CLASSAB_IBIS_CTL_09        (0x0)
+#define HP_CLASSAB_IBIS_CTL_06        (0x1)
+#define HP_CLASSAB_IBIS_CTL_05        (0x2)
+#define HP_CLASSAB_IBIS_CTL_3_PER_7   (0x3)
+
+#define AUDIO_POP_CHGR_PD        (2)
+#define AUDIO_POP_SOFTCHG_EN     (1)
+
+
 /* ANA_CDC17 */
 
 /* ANA_CDC18 */
@@ -405,6 +471,7 @@
 /* ANA_HDT2 */
 
 /* ANA_STS0 */
+#define CG_HP_DVLD		    (12)
 #define HP_POP_FLG		    (7)////////////CHECK
 #define HP_POP_FLG_MASK		(0x3)
 #define HP_POP_FLG_NEAR_CMP	(3)

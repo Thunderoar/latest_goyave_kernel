@@ -498,6 +498,7 @@ static int sprd_codec_test_fun(struct sprd_codec_priv *sprd_codec, int fun)
 
 static void sprd_codec_wait(u32 wait_time)
 {
+	sp_asoc_pr_dbg("%s %d ms.\n", __func__, wait_time);
 	if (wait_time)
 		schedule_timeout_uninterruptible(msecs_to_jiffies(wait_time));
 }
@@ -1860,6 +1861,28 @@ static int sprd_inter_headphone_pa(struct snd_soc_codec *codec, int on)
 	return 0;
 }
 
+/* Check if the calibration of class G is ready. If no, bypass the class G
+ * calibrating this time.
+*/
+static int classg_cal_valid_check(struct snd_soc_codec *codec)
+{
+	unsigned int val, mask;
+
+	val = snd_soc_read(codec, ANA_STS0);
+	if (!(val & BIT(CG_HP_DVLD))) {
+		pr_debug("%s class g calibration is valid.\n", __func__);
+		return 0;
+	}
+
+	pr_err("%s, class G calibration failed! sts0: %#x\n", __func__, val);
+
+	pr_err("%s, clear bit AUDIO_POP_CHGR_PD of ANA_CDC16.\n", __func__);
+	snd_soc_update_bits(codec, ANA_CDC16,
+			    BIT(AUDIO_POP_CHGR_PD), 0);
+
+	return -1;
+}
+
 static int sprd_inter_headphone_pa_post(struct snd_soc_codec *codec, int on)
 {
 	struct sprd_codec_priv *sprd_codec = snd_soc_codec_get_drvdata(codec);
@@ -1877,7 +1900,7 @@ static int sprd_inter_headphone_pa_post(struct snd_soc_codec *codec, int on)
 		sprd_codec_hp_pa_hpl_en(codec, 1);
 		sprd_codec_hp_pa_hpr_en(codec, 1);
 		sprd_codec_wait(p_setting->class_g_hp_on_delay_20ms * 20);
-
+		classg_cal_valid_check(codec);
 		/*unmute */
 		sprd_codec_hp_pa_hpl_mute(codec, 0);
 		sprd_codec_hp_pa_hpr_mute(codec, 0);

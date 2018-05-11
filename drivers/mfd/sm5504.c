@@ -548,15 +548,9 @@ static void sm5504_preprocess_status(sm5504_chip_t *chip)
 {
 	chip->curr_status.ocp_status =
 	    (chip->curr_status.irq_flags[1] & 0x60) ? 1 : 0;
-#if defined(CONFIG_MACH_GRANDNEOVE3G)
 	chip->curr_status.ovp_status =
 	    ( (  (chip->curr_status.irq_flags[1] & 0x10) && ( (chip->curr_status.irq_flags[1] & 0x80) == 0x00 )  ) ||
 	    (chip->curr_status.irq_flags[0] & 0x10)) ? 1 : 0;
-#else
-	chip->curr_status.ovp_status =
-	    ((chip->curr_status.irq_flags[1] & 0x10) ||
-	    (chip->curr_status.irq_flags[0] & 0x10)) ? 1 : 0;
-#endif
 	chip->curr_status.otp_status =
 	    ((chip->curr_status.irq_flags[1] & 0x08) ||
         (chip->curr_status.irq_flags[0] & 0x80))  ? 1 : 0;
@@ -745,7 +739,6 @@ static void sm5504_cable_change_handler(struct sm5504_chip *chip,
 	RTINFO("Cable change to %s\n",
 	       sm5504_cable_names[chip->curr_status.cable_type]);
 
-#if defined(CONFIG_MACH_GRANDNEOVE3G)
 	if ( chip->curr_status.cable_type == MUIC_SM5504_CABLE_TYPE_REGULAR_TA ) { // TA attach
 		// DM_COM open
 		sm5504_reg_write(chip, SM5504_REG_MANUAL_SW1, 0x04);
@@ -758,7 +751,6 @@ static void sm5504_cable_change_handler(struct sm5504_chip *chip,
 	    sm5504_reg_write(chip, SM5504_REG_MANUAL_SW2, 0x01);	
 		RTINFO("DCP detach \n");
 	}
-#endif
 
 #if defined(CONFIG_BATTERY_SAMSUNG) || defined(CONFIG_RT_BATTERY)
 	if((chip->curr_status.cable_type == MUIC_SM5504_CABLE_TYPE_OTG) &&  (chip->curr_status.vbus_status== 1))

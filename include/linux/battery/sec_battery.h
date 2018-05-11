@@ -41,6 +41,14 @@ struct sec_battery_extcon_cable{
 };
 #endif /* CONFIG_EXTCON */
 
+#if defined(CONFIG_CHARGING_VZWCONCEPT)
+#define STORE_MODE_CHARGING_MAX 35
+#define STORE_MODE_CHARGING_MIN 30
+#else
+#define STORE_MODE_CHARGING_MAX 70
+#define STORE_MODE_CHARGING_MIN 60
+#endif
+
 #define ADC_CH_COUNT		10
 #define ADC_SAMPLE_COUNT	10
 
@@ -166,6 +174,7 @@ struct sec_battery_info {
 
 	/* test mode */
 	int test_mode;
+	bool store_mode;
 	bool factory_mode;
 	bool slate_mode;
 
@@ -173,6 +182,13 @@ struct sec_battery_info {
 #if defined(CONFIG_SAMSUNG_BATTERY_ENG_TEST)
 	int stability_test;
 	int eng_not_full_status;
+#endif
+	bool charging_block;
+#if defined(CONFIG_BATTERY_SWELLING)
+	bool swelling_mode;
+	unsigned long swelling_block_start;
+	unsigned long swelling_block_passed;
+	int swelling_full_check_cnt;
 #endif
 };
 
@@ -259,6 +275,7 @@ enum {
 	WC_STATUS,
 	WC_ENABLE,
 	FACTORY_MODE,
+	STORE_MODE,
 	UPDATE,
 	TEST_MODE,
 

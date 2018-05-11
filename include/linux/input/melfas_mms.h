@@ -34,6 +34,11 @@ struct mms_platform_data {
 	//int gpio_sda;			//Optional
 	//int gpio_scl;			//Optional
 
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+  int tsp_vendor_1;   //Required (mark between GFF and G1F)
+  int tsp_vendor_2;   //Required (mark between GFF and G1F)
+#endif
+
 #if MMS_USE_CALLBACK
 	void (*register_callback) (void *);
 #endif

@@ -346,6 +346,24 @@ int mms_flash_fw(struct mms_ts_info *info, const u8 *fw_data, size_t fw_size, bo
 		}
 	}
 
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+	/*
+	* Exceptive Case
+	* G1F TSP connected -> power off -> GFF TSP connected -> GFF FW should be updated even though GFF FW is lower. 
+	* GFF Chip firmware version [0x0122 0x0122 0x0117 0x0117]
+	* G1F Chip firmware version [0x0122 0x0126 0x0146 0x0146]
+	*/
+	if (info->tsp_type == TSP_HW_ID_INDEX_0) { //GFF
+		if ( (ver_chip[2] >= 0x0140) || (ver_chip[3] >= 0x0140) ) {
+			update_flag = true;
+			update_flags[1] = true;
+			update_flags[2] = true;
+			update_flags[3] = true;
+			dev_info(&client->dev, "[USE_DUAL_FW] %s - need to be updated.\n", __func__);
+		}
+	}
+#endif
+
 	//Set force update flag
 	if(force == true){
 		update_flag = true;

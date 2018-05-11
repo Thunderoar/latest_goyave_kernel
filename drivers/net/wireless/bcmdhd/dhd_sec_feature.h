@@ -1,7 +1,7 @@
 /*
  * Customer HW 4 dependant file
  *
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -80,12 +80,18 @@
 #define HW_OOB
 #endif /* CONFIG_MACH_SAMSUNG_ESPRESSO && CONFIG_MACH_SAMSUNG_ESPRESSO_10 */
 
-#if defined(CONFIG_MACH_UNIVERSAL5430)
+#if defined(CONFIG_MACH_UNIVERSAL5430) && !defined(CONFIG_BCM43455)
 #undef CUSTOM_SET_CPUCORE
 #define PRIMARY_CPUCORE 0
 #define DPC_CPUCORE 4
 #define RXF_CPUCORE 7
 #define ARGOS_CPU_SCHEDULER
+#elif defined(CONFIG_MACH_UNIVERSAL5430) && defined(CONFIG_BCM43455)
+#define CUSTOM_SET_CPUCORE
+#define PRIMARY_CPUCORE 0
+#define MAX_RETRY_SET_CPUCORE 5
+#define DPC_CPUCORE 0
+#define RXF_CPUCORE 4
 #elif defined(CONFIG_MACH_HL3G) || defined(CONFIG_MACH_HLLTE) || \
 	defined(CONFIG_MACH_M2LTE) || \
 	defined(CONFIG_MACH_UNIVERSAL5422)
@@ -227,6 +233,12 @@
 #endif /* !READ_MACADDR && !WRITE_MACADDR && !RDWR_KORICS_MACADDR && !RDWR_MACADDR */
 
 #define WRITE_WLANINFO
+
+#if defined(CONFIG_BCM4343) && defined(CONFIG_ARCH_SCX35)
+#undef DHD_FIRSTREAD
+#undef MAX_HDR_READ
+#define CUSTOM_DPC_CPUCORE 0
+#endif /* CONFIG_BCM4343 && CONFIG_ARCH_SCX35 */
 
 #if defined(CONFIG_MACH_KONA)
 #define DISABLE_FLOW_CONTROL

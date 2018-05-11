@@ -1,7 +1,7 @@
 /*
  * Broadcom Dongle Host Driver (DHD), common DHD core.
  *
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_common.c 479444 2014-05-21 04:19:36Z $
+ * $Id: dhd_common.c 557500 2015-05-19 06:30:12Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -1204,7 +1204,7 @@ wl_show_host_event(wl_event_msg_t *event, void *event_data)
 #endif /* SHOW_EVENTS */
 
 int
-wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata,
+wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, size_t pktlen,
               wl_event_msg_t *event, void **data_ptr)
 {
 	/* check whether packet is a BRCM event pkt */
@@ -1212,18 +1212,23 @@ wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata,
 	uint8 *event_data;
 	uint32 type, status, datalen;
 	uint16 flags;
-	int evlen;
+	uint evlen;
 
 	if (bcmp(BRCM_OUI, &pvt_data->bcm_hdr.oui[0], DOT11_OUI_LEN)) {
 		DHD_ERROR(("%s: mismatched OUI, bailing\n", __FUNCTION__));
 		return (BCME_ERROR);
 	}
 
-	/* BRCM event pkt may be unaligned - use xxx_ua to load user_subtype. */
-	if (ntoh16_ua((void *)&pvt_data->bcm_hdr.usr_subtype) != BCMILCP_BCM_SUBTYPE_EVENT) {
-		DHD_ERROR(("%s: mismatched subtype, bailing\n", __FUNCTION__));
+	if (ntoh16_ua((void *)&pvt_data->bcm_hdr.subtype) != BCMILCP_SUBTYPE_VENDOR_LONG ||
+		(bcmp(BRCM_OUI, &pvt_data->bcm_hdr.oui[0], DOT11_OUI_LEN)) ||
+		ntoh16_ua((void *)&pvt_data->bcm_hdr.usr_subtype) != BCMILCP_BCM_SUBTYPE_EVENT)
+	{
+		DHD_ERROR(("%s: mismatched bcm_event_t info, bailing out\n", __FUNCTION__));
 		return (BCME_ERROR);
 	}
+
+	if (pktlen < sizeof(bcm_event_t))
+		return (BCME_ERROR);
 
 	*data_ptr = &pvt_data[1];
 	event_data = *data_ptr;
@@ -1235,12 +1240,20 @@ wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata,
 	flags = ntoh16_ua((void *)&event->flags);
 	status = ntoh32_ua((void *)&event->status);
 	datalen = ntoh32_ua((void *)&event->datalen);
+	if (datalen > pktlen)
+		return (BCME_ERROR);
+
 	evlen = datalen + sizeof(bcm_event_t);
+	if (evlen > pktlen)
+		return (BCME_ERROR);
 
 	switch (type) {
 #ifdef PROP_TXSTATUS
 	case WLC_E_FIFO_CREDIT_MAP:
-		dhd_wlfc_enable(dhd_pub);
+		if (dhd_wlfc_enable(dhd_pub) != BCME_OK) {
+			DHD_ERROR(("%s: dhd_wlfc_enable failed\n", __FUNCTION__));
+			return (BCME_ERROR);
+		}
 		dhd_wlfc_FIFOcreditmap_event(dhd_pub, event_data);
 		WLFC_DBGMESG(("WLC_E_FIFO_CREDIT_MAP:(AC0,AC1,AC2,AC3),(BC_MC),(OTHER): "
 			"(%d,%d,%d,%d),(%d),(%d)\n", event_data[0], event_data[1],
@@ -1251,7 +1264,7 @@ wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata,
 	case WLC_E_BCMC_CREDIT_SUPPORT:
 		dhd_wlfc_BCMCCredit_support_event(dhd_pub);
 		break;
-#endif
+#endif /* PROP_TXSTATUS */
 
 	case WLC_E_IF: {
 		struct wl_event_data_if *ifevent = (struct wl_event_data_if *)event_data;

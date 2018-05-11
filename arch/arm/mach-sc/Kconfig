@@ -69,6 +69,18 @@ config ADIE_SC2723S
 	help
 	  Say Y here to support for Spreadtrum a-die sc2723S chip.
 
+config LDOGEN0_VCCQ
+	bool "eMMC power vccq select LDOGEN0"
+	default n
+	help
+	  Support LDOGEN0 -  eMMC VCCQ power
+
+config LDOGEN1_VCCQ
+	bool "eMMC power vccq select LDOGEN1"
+	default n
+	help
+	  Support LDOGEN1 -  eMMC VCCQ power
+
 endmenu
 
 
@@ -572,7 +584,20 @@ config MACH_GOYAVE3G_SEA
 	default n
 	help
 	GOYAVE3G SWA board based on SC8830g serial
-	
+
+config MACH_GOYAVE3G_LTN_OPEN
+	bool "GOYAVE3G Board"
+	depends on ARCH_SC
+	depends on ARCH_SCX35
+	select MACH_SAMSUNG
+	select MUIC_CABLE_DETECT
+	select FUELGAUGE_SPRD4SAMSUNG27X3
+	select CLKSRC_OF if OF
+	select COMMON_CLK if OF
+	default n
+	help
+	GOYAVE3G LTN_OPEN board based on SC8830g serial
+
 config MACH_GOYAVEWIFI
 	bool "GOYAVEWIFI Board"
 	depends on ARCH_SC

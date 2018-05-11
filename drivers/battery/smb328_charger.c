@@ -28,6 +28,7 @@
 static bool is_siop_limited;
 #endif
 
+extern int soc_val;
 int otg_enable_flag;
 
 static enum power_supply_property sec_charger_props[] = {
@@ -148,8 +149,11 @@ static int smb328_otg_over_current_status(struct i2c_client *client)
 
 static int smb328_get_charging_status(struct i2c_client *client)
 {
+	struct sec_charger_info *charger = i2c_get_clientdata(client);
 	int status = POWER_SUPPLY_STATUS_UNKNOWN;
 	u8 stat_c = 0;
+
+
 
 	smb328_i2c_read(client, SMB328_BATTERY_CHARGING_STATUS_C, &stat_c);
 	pr_info("%s : Charging status C(0x%02x)\n", __func__, stat_c);
@@ -160,6 +164,10 @@ static int smb328_get_charging_status(struct i2c_client *client)
 	if (stat_c & 0xc0) {
 		/* top-off by full charging */
 		status = POWER_SUPPLY_STATUS_FULL;
+		if (soc_val < 94) {
+			pr_info("%s : SPRD FG IC error : %d)\n", __func__, soc_val);
+			charger->pdata->recharge_condition_vcell = 4250;
+		}
 		return status;
 	}
 
@@ -177,6 +185,9 @@ static int smb328_get_charging_status(struct i2c_client *client)
 	} else {
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
 	}
+
+
+
 
 	return (int)status;
 }
@@ -205,6 +216,18 @@ static void smb328_set_writable(struct i2c_client *client, int writable)
 		reg_data &= ~CMD_A_ALLOW_WRITE;
 
 	smb328_i2c_write(client, SMB328_COMMAND, &reg_data);
+}
+
+static u8 smb328_get_float_voltage(struct i2c_client *client)
+{
+	struct sec_charger_info *charger = i2c_get_clientdata(client);
+	u8 data = 0;
+
+	smb328_i2c_read(client,	SMB328_FLOAT_VOLTAGE, &data);
+
+	pr_info("%s: battery cv voltage 0x%x\n", __func__, data);
+
+	return data;
 }
 
 static u8 smb328_set_charge_enable(struct i2c_client *client, int enable)
@@ -320,6 +343,11 @@ static u8 smb328_set_fast_charging_current(struct i2c_client *client,
 static void smb328_charger_function_control(struct sec_charger_info *charger)
 {
 	u8 reg_data, charge_mode;
+	union power_supply_propval chg_stat;
+	union power_supply_propval chg_mode;
+#if defined(CONFIG_BATTERY_SWELLING)
+	union power_supply_propval swelling_mode;
+#endif
 
 	smb328_set_writable(charger->client, 1);
 	reg_data = 0x6E;
@@ -331,7 +359,11 @@ static void smb328_charger_function_control(struct sec_charger_info *charger)
 	smb328_i2c_write(charger->client,
 			SMB328_INTERRUPT_SIGNAL_SELECTION, &reg_data);
 
-	if ((charger->cable_type == POWER_SUPPLY_TYPE_BATTERY) ||
+	psy_do_property("battery", get,
+				POWER_SUPPLY_PROP_STATUS, chg_stat);
+
+	if (((charger->cable_type == POWER_SUPPLY_TYPE_BATTERY) &&
+		(chg_stat.intval != POWER_SUPPLY_STATUS_DISCHARGING)) ||
 		(charger->cable_type == POWER_SUPPLY_TYPE_OTG)) {
 		/* turn off charger */
 		smb328_set_charge_enable(charger->client, 0);
@@ -353,13 +385,90 @@ static void smb328_charger_function_control(struct sec_charger_info *charger)
 				SMB328_FUNCTION_CONTROL_A, &reg_data);
 
 		/* 4.2V float voltage */
+#if defined(CONFIG_BATTERY_SWELLING)
+		psy_do_property("battery", get,
+					POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+					swelling_mode);
+		if (swelling_mode.intval) {
+			smb328_set_float_voltage(charger->client,
+				charger->pdata->swelling_drop_float_voltage);
+		} else {
+			smb328_set_float_voltage(charger->client,
+				charger->pdata->chg_float_voltage);
+		}
+#else
 		smb328_set_float_voltage(charger->client,
 			charger->pdata->chg_float_voltage);
-
+#endif
+		pr_info("%s : full_check_type_2nd (%d)\n",
+						__func__, charger->pdata->full_check_type_2nd);
 		/* Set termination current */
-		smb328_set_termination_current_limit(charger->client,
-			charger->pdata->charging_current[charger->
-			cable_type].full_check_current_1st);
+		if (charger->pdata->full_check_type_2nd
+				== SEC_BATTERY_FULLCHARGED_CHGPSY) {
+				psy_do_property("battery", get,
+				POWER_SUPPLY_PROP_CHARGE_NOW,
+				chg_mode);
+
+				if ((chg_mode.intval == SEC_BATTERY_CHARGING_2ND) ||
+					(chg_mode.intval
+						== SEC_BATTERY_CHARGING_RECHARGING)) {
+					/* Set topoff current */
+					pr_info("%s : 2nd topoff current (%dmA)\n",
+						__func__, charger->pdata->charging_current[
+						charger->cable_type].full_check_current_2nd);
+					smb328_set_charge_enable(charger->client, 0);
+#if defined(CONFIG_BATTERY_SWELLING)
+					if (swelling_mode.intval) {
+						smb328_set_termination_current_limit(charger->client,
+						charger->pdata->swelling_full_check_current_2nd);
+						pr_info("%s : swelling topoff current (%dmA)\n",
+						__func__, charger->pdata->swelling_full_check_current_2nd);
+					} else {
+						smb328_set_termination_current_limit(charger->client,
+						charger->pdata->charging_current[charger->
+						cable_type].full_check_current_2nd);
+					}
+#else
+					smb328_set_termination_current_limit(charger->client,
+						charger->pdata->charging_current[charger->
+						cable_type].full_check_current_2nd);
+#endif
+					smb328_set_charge_enable(charger->client, 1);
+				} else {
+#if defined(CONFIG_BATTERY_SWELLING)
+					psy_do_property("battery", get,
+					POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+					swelling_mode);
+					if (swelling_mode.intval) {
+						smb328_set_charge_enable(charger->client, 0);
+						smb328_set_termination_current_limit(charger->client,
+						charger->pdata->swelling_full_check_current_2nd);
+						pr_info("%s : swelling topoff current (%dmA)\n",
+						__func__, charger->pdata->swelling_full_check_current_2nd);
+						smb328_set_charge_enable(charger->client, 1);
+					} else {
+						smb328_set_termination_current_limit(charger->client,
+						charger->pdata->charging_current[charger->
+						cable_type].full_check_current_1st);
+					}
+#else
+					pr_info("%s : topoff current (%dmA)\n",
+						__func__, charger->pdata->charging_current[
+						charger->cable_type].full_check_current_1st);
+					smb328_set_termination_current_limit(charger->client,
+						charger->pdata->charging_current[charger->
+						cable_type].full_check_current_1st);
+#endif
+				}
+		} else {
+				pr_info("%s : topoff current (%dmA)\n",
+					__func__, charger->pdata->charging_current[
+					charger->cable_type].full_check_current_1st);
+				smb328_set_termination_current_limit(charger->client,
+						charger->pdata->charging_current[charger->
+						cable_type].full_check_current_1st);
+		}
+
 #if defined(CONFIG_MACH_GOYAVEWIFI) || defined(CONFIG_MACH_GOYAVE3G)
 		if ((charger->pdata->siop_level < 100) &&
 			(charger->cable_type != POWER_SUPPLY_TYPE_USB)) {
@@ -616,7 +725,12 @@ static int sec_chg_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_POWER_STATUS:
 		val->intval = smb328_get_power_status(charger);
 		break;
-#endif		
+#endif
+#if defined(CONFIG_BATTERY_SWELLING)
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+			val->intval = smb328_get_float_voltage(charger->client);
+			break;
+#endif
 	default:
 		return false;
 	}
@@ -661,6 +775,12 @@ static int sec_chg_set_property(struct power_supply *psy,
 			smb328_charger_function_control(charger);
 		}
 		break;
+#if defined(CONFIG_BATTERY_SWELLING)
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		pr_info("%s: float voltage(%d)\n", __func__, val->intval);
+		smb328_set_float_voltage(charger->client, val->intval);
+		break;
+#endif
 	default:
 		return false;
 	}
@@ -710,6 +830,22 @@ static int smb328_charger_parse_dt(struct device *dev,
                                  "battery,full_check_current_2nd", i,
                                  &pdata->charging_current[i].full_check_current_2nd);
                 }
+
+		ret = of_property_read_u32(np,
+			"battery,swelling_drop_float_voltage",
+			&pdata->swelling_drop_float_voltage);
+		if (ret)
+			pr_info("%s: swelling drop float voltage is Empty\n", __func__);
+
+		ret = of_property_read_u32(np, "battery,full_check_type_2nd",
+			&pdata->full_check_type_2nd);
+		if (ret)
+			pr_info("%s : Full check type 2nd is Empty\n", __func__);
+
+		ret = of_property_read_u32(np, "battery,swelling_full_check_current_2nd",
+			&pdata->swelling_full_check_current_2nd);
+		if (ret)
+			pr_info("%s : Full check type 2nd is Empty\n", __func__);
         }
 
         return ret;

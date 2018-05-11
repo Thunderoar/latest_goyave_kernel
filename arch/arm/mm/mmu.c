@@ -459,16 +459,6 @@ static void __init build_mem_type_table(void)
 	hyp_device_pgprot = s2_device_pgprot = mem_types[MT_DEVICE].prot_pte;
 
 	/*
-	 * We don't use domains on ARMv6 (since this causes problems with
-	 * v6/v7 kernels), so we must use a separate memory type for user
-	 * r/o, kernel r/w to map the vectors page.
-	 */
-#ifndef CONFIG_ARM_LPAE
-	if (cpu_arch == CPU_ARCH_ARMv6)
-		vecs_pgprot |= L_PTE_MT_VECTORS;
-#endif
-
-	/*
 	 * ARMv6 and above have extended page tables.
 	 */
 	if (cpu_arch >= CPU_ARCH_ARMv6 && (cr & CR_XP)) {
@@ -675,7 +665,8 @@ static void __init __map_init_section(pmd_t *pmd, unsigned long addr,
 
 static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 				      unsigned long end, phys_addr_t phys,
-				      const struct mem_type *type)
+				      const struct mem_type *type,
+				      bool force_pages)
 {
 	pmd_t *pmd = pmd_offset(pud, addr);
 	unsigned long next;
@@ -706,15 +697,15 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 }
 
 static void __init alloc_init_pud(pgd_t *pgd, unsigned long addr,
-				  unsigned long end, phys_addr_t phys,
-				  const struct mem_type *type)
+	unsigned long end, unsigned long phys, const struct mem_type *type,
+	bool force_pages)
 {
 	pud_t *pud = pud_offset(pgd, addr);
 	unsigned long next;
 
 	do {
 		next = pud_addr_end(addr, end);
-		alloc_init_pmd(pud, addr, next, phys, type);
+		alloc_init_pmd(pud, addr, next, phys, type, force_pages);
 		phys += next - addr;
 	} while (pud++, addr = next, addr != end);
 }
@@ -788,7 +779,7 @@ static void __init create_36bit_mapping(struct map_desc *md,
  * offsets, and we take full advantage of sections and
  * supersections.
  */
-static void __init create_mapping(struct map_desc *md)
+static void __init create_mapping(struct map_desc *md, bool force_pages)
 {
 	unsigned long addr, length, end;
 	phys_addr_t phys;
@@ -838,7 +829,7 @@ static void __init create_mapping(struct map_desc *md)
 	do {
 		unsigned long next = pgd_addr_end(addr, end);
 
-		alloc_init_pud(pgd, addr, next, phys, type);
+		alloc_init_pud(pgd, addr, next, phys, type, force_pages);
 
 		phys += next - addr;
 		addr = next;
@@ -860,7 +851,7 @@ void __init iotable_init(struct map_desc *io_desc, int nr)
 	svm = early_alloc_aligned(sizeof(*svm) * nr, __alignof__(*svm));
 
 	for (md = io_desc; nr; md++, nr--) {
-		create_mapping(md);
+		create_mapping(md, false);
 
 		vm = &svm->vm;
 		vm->addr = (void *)(md->virtual & PAGE_MASK);
@@ -981,7 +972,7 @@ void __init debug_ll_io_init(void)
 	map.virtual &= PAGE_MASK;
 	map.length = PAGE_SIZE;
 	map.type = MT_DEVICE;
-	create_mapping(&map);
+	create_mapping(&map, false);
 }
 #endif
 
@@ -1245,7 +1236,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	map.virtual = MODULES_VADDR;
 	map.length = ((unsigned long)_etext - map.virtual + ~SECTION_MASK) & SECTION_MASK;
 	map.type = MT_ROM;
-	create_mapping(&map);
+	create_mapping(&map, false);
 #endif
 
 	/*
@@ -1256,14 +1247,14 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	map.virtual = FLUSH_BASE;
 	map.length = SZ_1M;
 	map.type = MT_CACHECLEAN;
-	create_mapping(&map);
+	create_mapping(&map, false);
 #endif
 #ifdef FLUSH_BASE_MINICACHE
 	map.pfn = __phys_to_pfn(FLUSH_BASE_PHYS + SZ_1M);
 	map.virtual = FLUSH_BASE_MINICACHE;
 	map.length = SZ_1M;
 	map.type = MT_MINICLEAN;
-	create_mapping(&map);
+	create_mapping(&map, false);
 #endif
 
 	/*
@@ -1279,13 +1270,13 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 #else
 	map.type = MT_LOW_VECTORS;
 #endif
-	create_mapping(&map);
+	create_mapping(&map, false);
 
 	if (!vectors_high()) {
 		map.virtual = 0;
 		map.length = PAGE_SIZE * 2;
 		map.type = MT_LOW_VECTORS;
-		create_mapping(&map);
+		create_mapping(&map, false);
 	}
 
 	/* Now create a kernel read-only mapping */
@@ -1293,7 +1284,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	map.virtual = 0xffff0000 + PAGE_SIZE;
 	map.length = PAGE_SIZE;
 	map.type = MT_LOW_VECTORS;
-	create_mapping(&map);
+	create_mapping(&map, false);
 
 	/*
 	 * Ask the machine support to map in the statically mapped devices.
@@ -1346,7 +1337,7 @@ static void __init map_lowmem(void)
 		map.length = end - start;
 		map.type = MT_MEMORY;
 
-		create_mapping(&map);
+		create_mapping(&map, false);
 	}
 
 #ifdef CONFIG_DEBUG_RODATA
@@ -1358,7 +1349,7 @@ static void __init map_lowmem(void)
 	map.length = end - start;
 	map.type = MT_MEMORY;
 
-	create_mapping(&map);
+	create_mapping(&map, true);
 #endif
 }
 

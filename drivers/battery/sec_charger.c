@@ -43,6 +43,9 @@ static enum power_supply_property sec_charger_props[] = {
 	POWER_SUPPLY_PROP_POWER_STATUS,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 #endif
+#if defined(CONFIG_BATTERY_SWELLING)
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+#endif
 };
 
 static int input_current[] = {
@@ -82,6 +85,9 @@ static int sec_chg_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		val->intval = charger->charging_current * val->intval / 100;
 		break;
+#if defined(CONFIG_BATTERY_SWELLING)
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+#endif
 	case POWER_SUPPLY_PROP_PRESENT:
 		if (!sec_hal_chg_get_property(charger_variable, psp, val))
 			return -EINVAL;
@@ -140,6 +146,9 @@ static int sec_chg_set_property(struct power_supply *psy,
 	 * use input current limit and set charging current as much as possible
 	 * so we only control input current limit to control charge current
 	 */
+#if defined(CONFIG_BATTERY_SWELLING)
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+#endif
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		if (!sec_hal_chg_set_property(charger_variable, psp, val))
 			return -EINVAL;

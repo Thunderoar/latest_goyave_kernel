@@ -7,6 +7,10 @@ config BATTERY_SAMSUNG
 	 To see battery-related functions,
 	 refer to sec_charging_common.h
 
+config BATTERY_SWELLING
+	bool "prevent battery swellin "
+	help
+	  Say Y to include support for prevent battery swelling
 config SAMSUNG_LPM_MODE
 	bool "Off charging mode support in sec battery driver"
 	default n
@@ -400,3 +404,9 @@ config CHARGER_SPRD4SAMSUNG27X3
 	 for Summit sprd27X3 charger driver.
 	 This driver source code implemented
 	 all functions for sprd27X3 charger.
+
+config STORE_MODE
+       bool "enable store mode"
+       default n
+       help
+	 Say Y to enable CONFIG_STORE_MODE

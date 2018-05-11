@@ -456,6 +456,20 @@ struct sec_battery_platform_data {
 	bool event_check;
 	/* sustaining event after deactivated (second) */
 	unsigned int event_waiting_time;
+	/* battery swelling */
+	int swelling_high_temp_block;
+	int swelling_high_temp_recov;
+	int swelling_low_temp_block;
+	int swelling_low_temp_recov;
+	unsigned int swelling_chg_current;
+	unsigned int swelling_high_chg_current;
+	unsigned int swelling_low_chg_current;
+	unsigned int swelling_full_check_current_2nd;
+	unsigned int swelling_normal_float_voltage;
+	unsigned int swelling_drop_float_voltage;
+	unsigned int swelling_high_rechg_voltage;
+	unsigned int swelling_low_rechg_voltage;
+	unsigned int swelling_block_time;
 
 	/* Monitor setting */
 	sec_battery_monitor_polling_t polling_type;
@@ -521,6 +535,8 @@ struct sec_battery_platform_data {
 	/* 2nd full check */
 	sec_battery_full_charged_t full_check_type_2nd;
 	unsigned int full_check_count;
+	unsigned int full_check_adc_1st;
+	unsigned int full_check_adc_2nd;
 	int chg_gpio_full_check;
 	/* 1 : active high, 0 : active low */
 	int chg_polarity_full_check;

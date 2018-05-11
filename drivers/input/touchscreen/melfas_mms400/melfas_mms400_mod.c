@@ -249,10 +249,8 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 					{
 						cpufreq_limit_put(info->min_handle);
 						info->min_handle = NULL;
-#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 						_store_cpu_num_min_limit(1);
 						dev_info(&client->dev, "cpu freq off\n");
-#endif
 					}
 #endif
 				}
@@ -284,10 +282,8 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 						info->touch_cpufreq_lock, PTR_ERR(info->min_handle));
 						info->min_handle = NULL;
 					}
-#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 					_store_cpu_num_min_limit(2);
 					dev_info(&client->dev,"cpu freq on\n");
-#endif
 				}
 				info->finger_cnt++;
 #endif
@@ -373,6 +369,50 @@ int mms_parse_devicetree(struct device *dev, struct mms_ts_info *info)
 	else{
 		info->pdata->gpio_intr = ret;
 	}
+
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+  ret = of_get_named_gpio(np, "tsp_vendor_1", 0);
+  dev_dbg(dev, "[USE_DUAL_FW] %s of_get_named_gpio : info->pdata->tsp_vendor_1 : %d, tsp_vendor_1 : %d\n", __func__, info->pdata->tsp_vendor_1, ret);
+  if (!gpio_is_valid(ret)) {
+    dev_err(dev, "[USE_DUAL_FW] %s [ERROR] of_get_named_gpio : tsp_vendor_1\n", __func__);
+    goto ERROR;
+  }
+	else{
+		info->pdata->tsp_vendor_1 = ret;
+	}
+
+  ret = of_get_named_gpio(np, "tsp_vendor_2", 0);
+  dev_dbg(dev, "[USE_DUAL_FW] %s info->pdata->tsp_vendor_2 : %d, of_get_named_gpio : tsp_vendor_2 : %d\n", __func__, info->pdata->tsp_vendor_2, ret);
+  if (!gpio_is_valid(ret)) {
+    dev_err(dev, "[USE_DUAL_FW] %s [ERROR] of_get_named_gpio : tsp_vendor_2\n", __func__);
+    goto ERROR;
+  } else {
+		info->pdata->tsp_vendor_2 = ret;
+	}
+
+  dev_dbg(dev, "[USE_DUAL_FW] %s gpio_direction_input [START] \n", __func__);
+
+  ret = gpio_request(info->pdata->tsp_vendor_1, "tsp_vendor_1");
+  if (ret < 0) {
+    dev_err(dev, "[USE_DUAL_FW] %s gpio_request [ERROR] : tsp_vendor_1\n", __func__);
+  } else {
+    gpio_direction_input(info->pdata->tsp_vendor_1);  
+  }
+
+  ret = gpio_request(info->pdata->tsp_vendor_2, "tsp_vendor_2");
+  if (ret < 0) {
+    dev_err(dev, "[USE_DUAL_FW] %s gpio_request [ERROR] : tsp_vendor_2\n", __func__);
+  } else {
+    gpio_direction_input(info->pdata->tsp_vendor_2);  
+  }
+
+  dev_dbg(&info->client->dev,
+    "[USE_DUAL_FW] gpio_get_value(TSP_ID_1:gpio%d)=%d,gpio_get_value(TSP_ID_2:gpio%d)=%d\n",
+    info->pdata->tsp_vendor_1,gpio_get_value(info->pdata->tsp_vendor_1),
+    info->pdata->tsp_vendor_2,gpio_get_value(info->pdata->tsp_vendor_2));
+
+  dev_dbg(dev, "[USE_DUAL_FW] %s gpio_direction_input [DONE] \n", __func__);
+#endif
 
 	/*
 	ret = of_get_named_gpio(np, MMS_DEVICE_NAME",reset-gpio", 0);

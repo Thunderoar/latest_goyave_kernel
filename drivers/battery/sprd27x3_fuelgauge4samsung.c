@@ -31,6 +31,21 @@
 #include "sprd_2713_fgu.h"
 #include "sprd_battery.h"
 
+int soc_val = 0;
+
+#if defined(CONFIG_CHARGER_SMB328)
+bool should_reset_fgu = 0;
+
+static int __init need_reset_fgu(char *str)
+{
+	printk("~~~~~  %s %d\n", __FUNCTION__, __LINE__);
+	should_reset_fgu = 1;
+	return 1;
+}
+
+__setup("reset_fgu", need_reset_fgu);
+#endif
+
 int sprdbat_interpolate(int x, int n, struct sprdbat_table_data *tab)
 {
 	int index;
@@ -87,7 +102,11 @@ static void print_pdata(struct sprd_battery_platform_data *pdata)
 }
 
 static uint32_t init_flag = 0;
-#define SPRDBAT_ONE_PERCENT_TIME   (40)
+//when discharge, the time interval is 40S
+#define SPRDBAT_ONE_PERCENT_TIME_DISCHG	(40)
+//when charge, the time interval is 60S
+#define SPRDBAT_ONE_PERCENT_TIME_CHG	(60)
+static int SPRDBAT_ONE_PERCENT_TIME = SPRDBAT_ONE_PERCENT_TIME_DISCHG;
 #define SPRDBAT_AVOID_JUMPING_TEMI  (SPRDBAT_ONE_PERCENT_TIME)
 
 static unsigned long sprdbat_update_capacity_time;
@@ -110,6 +129,13 @@ bool sec_hal_fg_init(fuelgauge_variable_t * fg_var)
 		update_capacity = sprdfgu_poweron_capacity();
 	}
 	init_flag = 1;
+
+#if defined(CONFIG_CHARGER_SMB328)
+	if (should_reset_fgu)
+		sec_hal_fg_reset(fg_var);
+
+	printk("~~~~  %s %d: %d\n", __FUNCTION__, __LINE__, should_reset_fgu);
+#endif
 	return true;
 }
 
@@ -133,6 +159,7 @@ static uint32_t sprdbat_update_capacty(void)
 
 	switch (value.intval) {
 	case POWER_SUPPLY_STATUS_CHARGING:
+		SPRDBAT_ONE_PERCENT_TIME = SPRDBAT_ONE_PERCENT_TIME_CHG;
 		if (fgu_capacity < update_capacity) {
 			if (sprdfgu_read_batcurrent() > 0) {
 				pr_info("avoid vol jumping\n");
@@ -177,6 +204,7 @@ static uint32_t sprdbat_update_capacty(void)
 		break;
 	case POWER_SUPPLY_STATUS_NOT_CHARGING:
 	case POWER_SUPPLY_STATUS_DISCHARGING:
+		SPRDBAT_ONE_PERCENT_TIME = SPRDBAT_ONE_PERCENT_TIME_DISCHG;
 		if (fgu_capacity >= update_capacity) {
 			fgu_capacity = update_capacity;
 		} else {
@@ -314,6 +342,7 @@ bool sec_hal_fg_get_property(fuelgauge_variable_t * fg_var,
 			}
 #else
 			int cap = sprdbat_update_capacty();
+			soc_val = cap;
 #endif
 			val->intval = cap * 10;
 		} else {

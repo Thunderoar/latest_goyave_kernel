@@ -6,7 +6,7 @@
  */
 
 //Config debug msg : Must be disabled for production builds
-#if 0	// 0 : disable, 1 : enable
+#if 1	// 0 : disable, 1 : enable
 #define DEBUG	
 #endif
 
@@ -131,6 +131,16 @@ extern int _store_cpu_num_min_limit(unsigned int input);
 #define CMD_RESULT_LEN 			512
 #define CMD_PARAM_NUM 			8
 
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+#define INTERNAL_G1F_FW_PATH	"melfas/melfas_mms400_G1F.fw"		//path of firmware included in the kernel image (/firmware)
+
+#define TSP_HW_ID_INDEX_0 0 //GFF
+#define TSP_HW_ID_INDEX_1 3 //G1F
+#define TSP_HW_ID_INDEX_NO_LCD  0x11
+
+static void get_module_vendor(void *device_data);
+#endif
+
 #if MMS_USE_CALLBACK
 //Callback functions
 struct mms_callbacks {
@@ -222,6 +232,9 @@ struct mms_ts_info {
 	u8				  finger_cnt;
        unsigned long touch_cpufreq_lock;
        struct cpufreq_limit_handle *min_handle;
+#endif
+#ifdef CONFIG_TOUCHSCREEN_MELFAS_MMS449_USE_DUAL_FW
+	u8							tsp_type;
 #endif
 
 };
