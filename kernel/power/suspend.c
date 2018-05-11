@@ -124,7 +124,7 @@ static int suspend_test(int level)
  * hibernation).  Run suspend notifiers, allocate the "suspend" console and
  * freeze processes.
  */
-static int suspend_prepare(void)
+static int suspend_prepare(suspend_state_t state)
 {
 	int error;
 
