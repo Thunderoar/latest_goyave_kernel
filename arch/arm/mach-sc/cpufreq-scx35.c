@@ -48,7 +48,7 @@
 #define GR_GEN1			(REG_GLB_GEN1)
 #endif
 
-#define FREQ_TABLE_SIZE 	10
+#define FREQ_TABLE_SIZE 	13
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
 #define TRANSITION_LATENCY	(100 * 1000) /* ns */
@@ -232,15 +232,31 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 #else
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 	.freq_tbl = {
-		{0, 1300000},
-		{1, 1200000},
-		{2, 1000000},
-		{3, SHARK_TDPLL_FREQUENCY},
-		{4, CPUFREQ_TABLE_END},
+		{0, 1516800},
+		{1, 1401600},
+		{2, 1363200},
+		{3, 1300000},
+		{4, 1209600},
+		{5, 1152000},
+		{6, 1094400},
+		{7, 998400},
+		{8, 800000},
+		{9, SHARK_TDPLL_FREQUENCY},
+		{10, 533330},
+		{11, 400000},
+		{12, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
+		1150000,
+		1150000,
+		1100000,
+		1100000,
+		1050000,
 		1050000,
 		1000000,
+		1000000,
+		950000,
+		950000,
 		900000,
 		900000,
 		900000,
@@ -434,8 +450,8 @@ static int sprd_cpufreq_verify_speed(struct cpufreq_policy *policy)
 	return cpufreq_frequency_table_verify(policy, sprd_cpufreq_conf->freq_tbl);
 }
 
-unsigned int cpufreq_min_limit = ULONG_MAX;
-unsigned int cpufreq_max_limit = 0;
+unsigned int cpufreq_min_limit = 400000;
+unsigned int cpufreq_max_limit = 1516800;
 unsigned int dvfs_score_select = 5;
 unsigned int dvfs_unplug_select = 2;
 unsigned int dvfs_plug_select = 0;
