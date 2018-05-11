@@ -41,9 +41,11 @@
 #endif
 
 #if !defined(CONFIG_WIFI_CONTROL_FUNC)
+#if 0
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58))
 #define WLAN_PLAT_NODFS_FLAG    0x01
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58) */
+#endif
 struct wifi_platform_data {
 	int (*set_power)(int val);
 	int (*set_reset)(int val);
@@ -227,11 +229,11 @@ void *wifi_platform_get_country_code(wifi_adapter_info_t *adapter, char *ccode)
 
 	DHD_TRACE(("%s\n", __FUNCTION__));
 	if (plat_data->get_country_code) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58))
-		return plat_data->get_country_code(ccode, WLAN_PLAT_NODFS_FLAG);
-#else
+//#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58))
+//		return plat_data->get_country_code(ccode, WLAN_PLAT_NODFS_FLAG);
+//#else
 		return plat_data->get_country_code(ccode);
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58)) */
+//#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 58)) */
 	}
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)) */
 
