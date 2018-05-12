@@ -20,10 +20,7 @@ struct fib_rule {
 	u32			table;
 	u8			action;
 	u32			target;
-	__be64			tun_id;
 	struct fib_rule __rcu	*ctarget;
-	int			suppress_ifgroup;
-	int			suppress_prefixlen;
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
 	struct rcu_head		rcu;
@@ -83,8 +80,6 @@ struct fib_rules_ops {
 	[FRA_FWMARK]	= { .type = NLA_U32 }, \
 	[FRA_FWMASK]	= { .type = NLA_U32 }, \
 	[FRA_TABLE]     = { .type = NLA_U32 }, \
-	[FRA_SUPPRESS_IFGROUP] = { .type = NLA_U32 }, \
-	[FRA_SUPPRESS_PREFIXLEN] = { .type = NLA_U32 }, \
 	[FRA_GOTO]	= { .type = NLA_U32 }
 
 static inline void fib_rule_get(struct fib_rule *rule)
