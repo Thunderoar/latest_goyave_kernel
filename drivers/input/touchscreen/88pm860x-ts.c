@@ -299,6 +299,7 @@ static int pm860x_touch_remove(struct platform_device *pdev)
 
 	input_unregister_device(touch->idev);
 	free_irq(touch->irq, touch);
+	platform_set_drvdata(pdev, NULL);
 	kfree(touch);
 	return 0;
 }

@@ -35,13 +35,7 @@
 #include <asm/tls.h>
 #include <asm/system_misc.h>
 
-static const char *handler[]= {
-	"prefetch abort",
-	"data abort",
-	"address exception",
-	"interrupt",
-	"undefined instruction",
-};
+static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
 
 void *vectors_page;
 
@@ -372,17 +366,15 @@ void arm_notify_die(const char *str, struct pt_regs *regs,
 int is_valid_bugaddr(unsigned long pc)
 {
 #ifdef CONFIG_THUMB2_KERNEL
-	u16 bkpt;
-	u16 insn = __opcode_to_mem_thumb16(BUG_INSTR_VALUE);
+	unsigned short bkpt;
 #else
-	u32 bkpt;
-	u32 insn = __opcode_to_mem_arm(BUG_INSTR_VALUE);
+	unsigned long bkpt;
 #endif
 
 	if (probe_kernel_address((unsigned *)pc, bkpt))
 		return 0;
 
-	return bkpt == insn;
+	return bkpt == BUG_INSTR_VALUE;
 }
 
 #endif
@@ -861,7 +853,6 @@ static void __init kuser_init(void *vectors)
 
 void __init early_trap_init(void *vectors_base)
 {
-#ifndef CONFIG_CPU_V7M
 	unsigned long vectors = (unsigned long)vectors_base;
 	extern char __stubs_start[], __stubs_end[];
 	extern char __vectors_start[], __vectors_end[];
@@ -890,11 +881,4 @@ void __init early_trap_init(void *vectors_base)
 
 	flush_icache_range(vectors, vectors + PAGE_SIZE * 2);
 	modify_domain(DOMAIN_USER, DOMAIN_CLIENT);
-#else /* ifndef CONFIG_CPU_V7M */
-	/*
-	 * on V7-M there is no need to copy the vector table to a dedicated
-	 * memory area. The address is configurable and so a table in the kernel
-	 * image can be used.
-	 */
-#endif
 }

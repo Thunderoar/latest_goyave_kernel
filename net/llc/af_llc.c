@@ -716,10 +716,12 @@ static int llc_ui_recvmsg(struct kiocb *iocb, struct socket *sock,
 	unsigned long cpu_flags;
 	size_t copied = 0;
 	u32 peek_seq = 0;
-	u32 *seq, skb_len;
+	u32 *seq;
 	unsigned long used;
 	int target;	/* Read at least this many bytes */
 	long timeo;
+
+	msg->msg_namelen = 0;
 
 	lock_sock(sk);
 	copied = -ENOTCONN;
@@ -813,7 +815,6 @@ static int llc_ui_recvmsg(struct kiocb *iocb, struct socket *sock,
 		}
 		continue;
 	found_ok_skb:
-		skb_len = skb->len;
 		/* Ok so how much can we use? */
 		used = skb->len - offset;
 		if (len < used)
@@ -846,7 +847,7 @@ static int llc_ui_recvmsg(struct kiocb *iocb, struct socket *sock,
 		}
 
 		/* Partial read */
-		if (used + offset < skb_len)
+		if (used + offset < skb->len)
 			continue;
 	} while (len > 0);
 

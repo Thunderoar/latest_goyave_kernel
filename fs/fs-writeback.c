@@ -470,28 +470,12 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 	 * write_inode()
 	 */
 	spin_lock(&inode->i_lock);
-
+	/* Clear I_DIRTY_PAGES if we've written out all dirty pages */
+	if (!mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
+		inode->i_state &= ~I_DIRTY_PAGES;
 	dirty = inode->i_state & I_DIRTY;
-	inode->i_state &= ~I_DIRTY;
-
-	/*
-	 * Paired with smp_mb() in __mark_inode_dirty().  This allows
-	 * __mark_inode_dirty() to test i_state without grabbing i_lock -
-	 * either they see the I_DIRTY bits cleared or we see the dirtied
-	 * inode.
-	 *
-	 * I_DIRTY_PAGES is always cleared together above even if @mapping
-	 * still has dirty pages.  The flag is reinstated after smp_mb() if
-	 * necessary.  This guarantees that either __mark_inode_dirty()
-	 * sees clear I_DIRTY_PAGES or we see PAGECACHE_TAG_DIRTY.
-	 */
-	smp_mb();
-
-	if (mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
-		inode->i_state |= I_DIRTY_PAGES;
-
+	inode->i_state &= ~(I_DIRTY_SYNC | I_DIRTY_DATASYNC);
 	spin_unlock(&inode->i_lock);
-
 	/* Don't write the inode if only I_DIRTY_PAGES was set */
 	if (dirty & (I_DIRTY_SYNC | I_DIRTY_DATASYNC)) {
 		int err = write_inode(inode, wbc);
@@ -534,16 +518,13 @@ writeback_single_inode(struct inode *inode, struct bdi_writeback *wb,
 	}
 	WARN_ON(inode->i_state & I_SYNC);
 	/*
-	 * Skip inode if it is clean and we have no outstanding writeback in
-	 * WB_SYNC_ALL mode. We don't want to mess with writeback lists in this
-	 * function since flusher thread may be doing for example sync in
-	 * parallel and if we move the inode, it could get skipped. So here we
-	 * make sure inode is on some writeback list and leave it there unless
-	 * we have completely cleaned the inode.
+	 * Skip inode if it is clean. We don't want to mess with writeback
+	 * lists in this function since flusher thread may be doing for example
+	 * sync in parallel and if we move the inode, it could get skipped. So
+	 * here we make sure inode is on some writeback list and leave it there
+	 * unless we have completely cleaned the inode.
 	 */
-	if (!(inode->i_state & I_DIRTY) &&
-	    (wbc->sync_mode != WB_SYNC_ALL ||
-	     !mapping_tagged(inode->i_mapping, PAGECACHE_TAG_WRITEBACK)))
+	if (!(inode->i_state & I_DIRTY))
 		goto out;
 	inode->i_state |= I_SYNC;
 	spin_unlock(&inode->i_lock);
@@ -1162,11 +1143,12 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	}
 
 	/*
-	 * Paired with smp_mb() in __writeback_single_inode() for the
-	 * following lockless i_state test.  See there for details.
+	 * make sure that changes are seen by all cpus before we test i_state
+	 * -- mikulas
 	 */
 	smp_mb();
 
+	/* avoid the locking if we can */
 	if ((inode->i_state & flags) == flags)
 		return;
 

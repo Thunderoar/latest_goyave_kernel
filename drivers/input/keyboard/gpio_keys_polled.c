@@ -324,6 +324,7 @@ err_free_gpio:
 
 err_free_bdev:
 	kfree(bdev);
+	platform_set_drvdata(pdev, NULL);
 
 err_free_pdata:
 	/* If we have no platform_data, we allocated pdata dynamically.  */
@@ -354,6 +355,7 @@ static int gpio_keys_polled_remove(struct platform_device *pdev)
 		kfree(pdata);
 
 	kfree(bdev);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

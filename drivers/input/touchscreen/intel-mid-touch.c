@@ -651,6 +651,8 @@ static int mrstouch_remove(struct platform_device *pdev)
 	input_unregister_device(tsdev->input);
 	kfree(tsdev);
 
+	platform_set_drvdata(pdev, NULL);
+
 	return 0;
 }
 

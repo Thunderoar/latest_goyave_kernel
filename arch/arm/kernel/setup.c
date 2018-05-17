@@ -128,9 +128,7 @@ struct stack {
 	u32 und[3];
 } ____cacheline_aligned;
 
-#ifndef CONFIG_CPU_V7M
 static struct stack stacks[NR_CPUS];
-#endif
 
 char elf_platform[ELF_PLATFORM_SIZE];
 EXPORT_SYMBOL(elf_platform);
@@ -209,7 +207,7 @@ static const char *proc_arch[] = {
 	"5TEJ",
 	"6TEJ",
 	"7",
-	"7M",
+	"?(11)",
 	"?(12)",
 	"?(13)",
 	"?(14)",
@@ -218,12 +216,6 @@ static const char *proc_arch[] = {
 	"?(17)",
 };
 
-#ifdef CONFIG_CPU_V7M
-static int __get_cpu_architecture(void)
-{
-	return CPU_ARCH_ARMv7M;
-}
-#else
 static int __get_cpu_architecture(void)
 {
 	int cpu_arch;
@@ -256,7 +248,6 @@ static int __get_cpu_architecture(void)
 
 	return cpu_arch;
 }
-#endif
 
 int __pure cpu_architecture(void)
 {
@@ -302,9 +293,7 @@ static void __init cacheid_init(void)
 {
 	unsigned int arch = cpu_architecture();
 
-	if (arch == CPU_ARCH_ARMv7M) {
-		cacheid = 0;
-	} else if (arch >= CPU_ARCH_ARMv6) {
+	if (arch >= CPU_ARCH_ARMv6) {
 		unsigned int cachetype = read_cpuid_cachetype();
 		if ((cachetype & (7 << 29)) == 4 << 29) {
 			/* ARMv7 register format */
@@ -403,7 +392,6 @@ static void __init feat_v6_fixup(void)
  */
 void notrace cpu_init(void)
 {
-#ifndef CONFIG_CPU_V7M
 	unsigned int cpu = smp_processor_id();
 	struct stack *stk = &stacks[cpu];
 
@@ -454,7 +442,6 @@ void notrace cpu_init(void)
 	      "I" (offsetof(struct stack, und[0])),
 	      PLC (PSR_F_BIT | PSR_I_BIT | SVC_MODE)
 	    : "r14");
-#endif
 }
 
 u32 __cpu_logical_map[NR_CPUS] = { [0 ... NR_CPUS-1] = MPIDR_INVALID };
@@ -543,7 +530,6 @@ void __init dump_machine_table(void)
 int __init arm_add_memory(phys_addr_t start, phys_addr_t size)
 {
 	struct membank *bank = &meminfo.bank[meminfo.nr_banks];
-	u64 aligned_start;
 
 	if (meminfo.nr_banks >= NR_BANKS) {
 		printk(KERN_CRIT "NR_BANKS too low, "
@@ -556,16 +542,10 @@ int __init arm_add_memory(phys_addr_t start, phys_addr_t size)
 	 * Size is appropriately rounded down, start is rounded up.
 	 */
 	size -= start & ~PAGE_MASK;
-	aligned_start = PAGE_ALIGN(start);
+	bank->start = PAGE_ALIGN(start);
 
-#ifndef CONFIG_ARCH_PHYS_ADDR_T_64BIT
-	if (aligned_start > ULONG_MAX) {
-		printk(KERN_CRIT "Ignoring memory at 0x%08llx outside "
-		       "32-bit physical address space\n", (long long)start);
-		return -EINVAL;
-	}
-
-	if (aligned_start + size > ULONG_MAX) {
+#ifndef CONFIG_ARM_LPAE
+	if (bank->start + size < bank->start) {
 		printk(KERN_CRIT "Truncating memory at 0x%08llx to fit in "
 			"32-bit physical address space\n", (long long)start);
 		/*
@@ -573,25 +553,10 @@ int __init arm_add_memory(phys_addr_t start, phys_addr_t size)
 		 * 32 bits, we use ULONG_MAX as the upper limit rather than 4GB.
 		 * This means we lose a page after masking.
 		 */
-		size = ULONG_MAX - aligned_start;
+		size = ULONG_MAX - bank->start;
 	}
 #endif
 
-	if (aligned_start < PHYS_OFFSET) {
-		if (aligned_start + size <= PHYS_OFFSET) {
-			pr_info("Ignoring memory below PHYS_OFFSET: 0x%08llx-0x%08llx\n",
-				aligned_start, aligned_start + size);
-			return -EINVAL;
-		}
-
-		pr_info("Ignoring memory below PHYS_OFFSET: 0x%08llx-0x%08llx\n",
-			aligned_start, (u64)PHYS_OFFSET);
-
-		size -= PHYS_OFFSET - aligned_start;
-		aligned_start = PHYS_OFFSET;
-	}
-
-	bank->start = aligned_start;
 	bank->size = size & ~(phys_addr_t)(PAGE_SIZE - 1);
 
 	/*

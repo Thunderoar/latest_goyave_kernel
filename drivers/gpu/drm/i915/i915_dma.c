@@ -84,14 +84,6 @@ void i915_update_dri1_breadcrumb(struct drm_device *dev)
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct drm_i915_master_private *master_priv;
 
-	/*
-	 * The dri breadcrumb update races against the drm master disappearing.
-	 * Instead of trying to fix this (this is by far not the only ums issue)
-	 * just don't do the update in kms mode.
-	 */
-	if (drm_core_check_feature(dev, DRIVER_MODESET))
-		return;
-
 	if (dev->primary->master) {
 		master_priv = dev->primary->master->driver_priv;
 		if (master_priv->sarea_priv)
@@ -1453,19 +1445,15 @@ static void i915_dump_device_info(struct drm_i915_private *dev_priv)
 {
 	const struct intel_device_info *info = dev_priv->info;
 
-#define PRINT_S(name) "%s"
-#define SEP_EMPTY
-#define PRINT_FLAG(name) info->name ? #name "," : ""
-#define SEP_COMMA ,
+#define DEV_INFO_FLAG(name) info->name ? #name "," : ""
+#define DEV_INFO_SEP ,
 	DRM_DEBUG_DRIVER("i915 device info: gen=%i, pciid=0x%04x flags="
-			 DEV_INFO_FOR_EACH_FLAG(PRINT_S, SEP_EMPTY),
+			 "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
 			 info->gen,
 			 dev_priv->dev->pdev->device,
-			 DEV_INFO_FOR_EACH_FLAG(PRINT_FLAG, SEP_COMMA));
-#undef PRINT_S
-#undef SEP_EMPTY
-#undef PRINT_FLAG
-#undef SEP_COMMA
+			 DEV_INFO_FLAGS);
+#undef DEV_INFO_FLAG
+#undef DEV_INFO_SEP
 }
 
 /**
@@ -1480,7 +1468,7 @@ static void intel_early_sanitize_regs(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	if (HAS_FPGA_DBG_UNCLAIMED(dev))
+	if (IS_HASWELL(dev))
 		I915_WRITE_NOTRACE(FPGA_DBG, FPGA_DBG_RM_NOCLAIM);
 }
 
@@ -1648,15 +1636,6 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	if (!IS_I945G(dev) && !IS_I945GM(dev))
 		pci_enable_msi(dev->pdev);
 
-	spin_lock_init(&dev_priv->irq_lock);
-	spin_lock_init(&dev_priv->gpu_error.lock);
-	spin_lock_init(&dev_priv->rps.lock);
-	spin_lock_init(&dev_priv->backlight.lock);
-	mutex_init(&dev_priv->dpio_lock);
-
-	mutex_init(&dev_priv->rps.hw_lock);
-	mutex_init(&dev_priv->modeset_restore_lock);
-
 	dev_priv->num_plane = 1;
 	if (IS_VALLEYVIEW(dev))
 		dev_priv->num_plane = 2;
@@ -1700,7 +1679,6 @@ out_gem_unload:
 
 	intel_teardown_gmbus(dev);
 	intel_teardown_mchbar(dev);
-	pm_qos_remove_request(&dev_priv->pm_qos);
 	destroy_workqueue(dev_priv->wq);
 out_mtrrfree:
 	if (dev_priv->mm.gtt_mtrr >= 0) {
@@ -1761,10 +1739,10 @@ int i915_driver_unload(struct drm_device *dev)
 		 * free the memory space allocated for the child device
 		 * config parsed from VBT
 		 */
-		if (dev_priv->vbt.child_dev && dev_priv->vbt.child_dev_num) {
-			kfree(dev_priv->vbt.child_dev);
-			dev_priv->vbt.child_dev = NULL;
-			dev_priv->vbt.child_dev_num = 0;
+		if (dev_priv->child_dev && dev_priv->child_dev_num) {
+			kfree(dev_priv->child_dev);
+			dev_priv->child_dev = NULL;
+			dev_priv->child_dev_num = 0;
 		}
 
 		vga_switcheroo_unregister_client(dev->pdev);
@@ -1869,10 +1847,8 @@ void i915_driver_lastclose(struct drm_device * dev)
 
 void i915_driver_preclose(struct drm_device * dev, struct drm_file *file_priv)
 {
-	mutex_lock(&dev->struct_mutex);
 	i915_gem_context_close(dev, file_priv);
 	i915_gem_release(dev, file_priv);
-	mutex_unlock(&dev->struct_mutex);
 }
 
 void i915_driver_postclose(struct drm_device *dev, struct drm_file *file)

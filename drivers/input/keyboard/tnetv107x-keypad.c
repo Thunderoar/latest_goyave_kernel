@@ -296,6 +296,7 @@ error_clk:
 error_map:
 	release_mem_region(kp->res->start, resource_size(kp->res));
 error_res:
+	platform_set_drvdata(pdev, NULL);
 	kfree(kp);
 	return error;
 }
@@ -310,6 +311,7 @@ static int keypad_remove(struct platform_device *pdev)
 	clk_put(kp->clk);
 	iounmap(kp->regs);
 	release_mem_region(kp->res->start, resource_size(kp->res));
+	platform_set_drvdata(pdev, NULL);
 	kfree(kp);
 
 	return 0;

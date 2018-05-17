@@ -15,7 +15,6 @@
 #ifndef __APPARMOR_H
 #define __APPARMOR_H
 
-#include <linux/slab.h>
 #include <linux/fs.h>
 
 #include "match.h"
@@ -65,18 +64,9 @@ extern int apparmor_initialized __initdata;
 /* fn's in lib */
 char *aa_split_fqname(char *args, char **ns_name);
 void aa_info_message(const char *str);
-void *__aa_kvmalloc(size_t size, gfp_t flags);
+void *kvmalloc(size_t size);
 void kvfree(void *buffer);
 
-static inline void *kvmalloc(size_t size)
-{
-	return __aa_kvmalloc(size, 0);
-}
-
-static inline void *kvzalloc(size_t size)
-{
-	return __aa_kvmalloc(size, __GFP_ZERO);
-}
 
 /**
  * aa_strneq - compare null terminated @str to a non null terminated substring

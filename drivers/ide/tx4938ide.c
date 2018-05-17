@@ -203,7 +203,18 @@ static struct platform_driver tx4938ide_driver = {
 	.remove = __exit_p(tx4938ide_remove),
 };
 
-module_platform_driver_probe(tx4938ide_driver, tx4938ide_probe);
+static int __init tx4938ide_init(void)
+{
+	return platform_driver_probe(&tx4938ide_driver, tx4938ide_probe);
+}
+
+static void __exit tx4938ide_exit(void)
+{
+	platform_driver_unregister(&tx4938ide_driver);
+}
+
+module_init(tx4938ide_init);
+module_exit(tx4938ide_exit);
 
 MODULE_DESCRIPTION("TX4938 internal IDE driver");
 MODULE_LICENSE("GPL");

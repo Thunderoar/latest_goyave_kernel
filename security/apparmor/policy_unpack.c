@@ -27,6 +27,7 @@
 #include "include/match.h"
 #include "include/policy.h"
 #include "include/policy_unpack.h"
+#include "include/sid.h"
 
 /*
  * The AppArmor interface treats data as a type byte followed by the
@@ -288,9 +289,6 @@ static int unpack_strdup(struct aa_ext *e, char **string, const char *name)
 
 	return res;
 }
-
-#define DFA_VALID_PERM_MASK		0xffffffff
-#define DFA_VALID_PERM2_MASK		0xffffffff
 
 /**
  * verify_accept - verify the accept tables of a dfa
@@ -573,9 +571,6 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 			error = PTR_ERR(profile->policy.dfa);
 			profile->policy.dfa = NULL;
 			goto fail;
-		} else if (!profile->policy.dfa) {
-			error = -EPROTO;
-			goto fail;
 		}
 		if (!unpack_u32(e, &profile->policy.start[0], "start"))
 			/* default start state */
@@ -657,7 +652,7 @@ static bool verify_xindex(int xindex, int table_size)
 	int index, xtype;
 	xtype = xindex & AA_X_TYPE_MASK;
 	index = xindex & AA_X_INDEX_MASK;
-	if (xtype == AA_X_TABLE && index >= table_size)
+	if (xtype == AA_X_TABLE && index > table_size)
 		return 0;
 	return 1;
 }

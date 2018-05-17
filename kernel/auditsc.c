@@ -733,7 +733,7 @@ static enum audit_state audit_filter_task(struct task_struct *tsk, char **key)
 	return AUDIT_BUILD_CONTEXT;
 }
 
-static int audit_in_mask(const struct audit_krule *rule, unsigned long val)
+static bool audit_in_mask(const struct audit_krule *rule, unsigned long val)
 {
 	int word, bit;
 
@@ -1408,11 +1408,8 @@ static void audit_log_exit(struct audit_context *context, struct task_struct *ts
 	}
 
 	i = 0;
-	list_for_each_entry(n, &context->names_list, list) {
-		if (n->hidden)
-			continue;
+	list_for_each_entry(n, &context->names_list, list)
 		audit_log_name(context, n, NULL, i++, &call_panic);
-	}
 
 	/* Send end of event record to help user space know we are finished */
 	ab = audit_log_start(context, GFP_KERNEL, AUDIT_EOE);
@@ -1781,15 +1778,14 @@ void audit_putname(struct filename *name)
  * __audit_inode - store the inode and device from a lookup
  * @name: name being audited
  * @dentry: dentry being audited
- * @flags: attributes for this particular entry
+ * @parent: does this dentry represent the parent?
  */
 void __audit_inode(struct filename *name, const struct dentry *dentry,
-		   unsigned int flags)
+		   unsigned int parent)
 {
 	struct audit_context *context = current->audit_context;
 	const struct inode *inode = dentry->d_inode;
 	struct audit_names *n;
-	bool parent = flags & AUDIT_INODE_PARENT;
 
 	if (!context->in_syscall)
 		return;
@@ -1844,8 +1840,6 @@ out:
 	if (parent) {
 		n->name_len = n->name ? parent_len(n->name->name) : AUDIT_NAME_FULL;
 		n->type = AUDIT_TYPE_PARENT;
-		if (flags & AUDIT_INODE_HIDDEN)
-			n->hidden = true;
 	} else {
 		n->name_len = AUDIT_NAME_FULL;
 		n->type = AUDIT_TYPE_NORMAL;

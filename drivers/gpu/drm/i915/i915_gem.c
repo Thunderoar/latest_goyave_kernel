@@ -2053,11 +2053,6 @@ i915_add_request(struct intel_ring_buffer *ring,
 	request->seqno = intel_ring_get_seqno(ring);
 	request->ring = ring;
 	request->tail = request_ring_position;
-	request->ctx = ring->last_context;
-
-	if (request->ctx)
-		i915_gem_context_reference(request->ctx);
-
 	request->emitted_jiffies = jiffies;
 	was_empty = list_empty(&ring->request_list);
 	list_add_tail(&request->list, &ring->request_list);
@@ -2110,17 +2105,6 @@ i915_gem_request_remove_from_client(struct drm_i915_gem_request *request)
 	spin_unlock(&file_priv->mm.lock);
 }
 
-static void i915_gem_free_request(struct drm_i915_gem_request *request)
-{
-	list_del(&request->list);
-	i915_gem_request_remove_from_client(request);
-
-	if (request->ctx)
-		i915_gem_context_unreference(request->ctx);
-
-	kfree(request);
-}
-
 static void i915_gem_reset_ring_lists(struct drm_i915_private *dev_priv,
 				      struct intel_ring_buffer *ring)
 {
@@ -2131,7 +2115,9 @@ static void i915_gem_reset_ring_lists(struct drm_i915_private *dev_priv,
 					   struct drm_i915_gem_request,
 					   list);
 
-		i915_gem_free_request(request);
+		list_del(&request->list);
+		i915_gem_request_remove_from_client(request);
+		kfree(request);
 	}
 
 	while (!list_empty(&ring->active_list)) {
@@ -2222,7 +2208,9 @@ i915_gem_retire_requests_ring(struct intel_ring_buffer *ring)
 		 */
 		ring->last_retired_head = request->tail;
 
-		i915_gem_free_request(request);
+		list_del(&request->list);
+		i915_gem_request_remove_from_client(request);
+		kfree(request);
 	}
 
 	/* Move any buffers on the active list that are no longer referenced
@@ -4461,7 +4449,7 @@ static bool mutex_is_locked_by(struct mutex *mutex, struct task_struct *task)
 	if (!mutex_is_locked(mutex))
 		return false;
 
-#if defined(CONFIG_SMP) && !defined(CONFIG_DEBUG_MUTEXES)
+#if defined(CONFIG_SMP) || defined(CONFIG_DEBUG_MUTEXES)
 	return mutex->owner == task;
 #else
 	/* Since UP may be pre-empted, we cannot assume that we own the lock */

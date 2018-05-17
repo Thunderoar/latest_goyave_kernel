@@ -6,7 +6,11 @@ obj-$(CONFIG_MMC_ARMMMCI)	+= mmci.o
 obj-$(CONFIG_MMC_PXA)		+= pxamci.o
 obj-$(CONFIG_MMC_MXC)		+= mxcmmc.o
 obj-$(CONFIG_MMC_MXS)		+= mxs-mmc.o
-obj-$(CONFIG_MMC_SDHCI)		+= sdhci.o
+ifeq ($(CONFIG_OF),y)
+obj-$(CONFIG_MMC_SDHCI)		+= sprd-sdhci-common-of.o
+else
+obj-$(CONFIG_MMC_SDHCI)		+= sprd-sdhci-common.o
+endif
 obj-$(CONFIG_MMC_SDHCI_PCI)	+= sdhci-pci.o
 obj-$(subst m,y,$(CONFIG_MMC_SDHCI_PCI))	+= sdhci-pci-data.o
 obj-$(CONFIG_MMC_SDHCI_ACPI)	+= sdhci-acpi.o

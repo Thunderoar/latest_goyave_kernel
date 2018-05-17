@@ -95,6 +95,10 @@ ENTRY(cpu_do_switch_mm)
 	ret
 ENDPROC(cpu_do_switch_mm)
 
+cpu_name:
+	.ascii	"AArch64 Processor"
+	.align
+
 	.section ".text.init", #alloc, #execinstr
 
 /*

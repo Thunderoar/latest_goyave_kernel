@@ -250,6 +250,7 @@ static int mc13783_pwrbutton_remove(struct platform_device *pdev)
 
 	input_unregister_device(priv->pwr);
 	kfree(priv);
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }
