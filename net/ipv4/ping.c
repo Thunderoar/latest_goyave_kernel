@@ -154,7 +154,6 @@ void ping_unhash(struct sock *sk)
 	if (sk_hashed(sk)) {
 		write_lock_bh(&ping_table.lock);
 		hlist_nulls_del(&sk->sk_nulls_node);
-		sk_nulls_node_init(&sk->sk_nulls_node);
 		sock_put(sk);
 		isk->inet_num = 0;
 		isk->inet_sport = 0;
@@ -638,7 +637,7 @@ int ping_common_sendmsg(int family, struct msghdr *msg, size_t len,
 			void *user_icmph, size_t icmph_len) {
 	u8 type, code;
 
-	if (len > 0xFFFF || len < icmph_len)
+	if (len > 0xFFFF)
 		return -EMSGSIZE;
 
 	/*

@@ -762,17 +762,10 @@ int32_t sprdfb_dsi_ready(struct sprdfb_device *dev)
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_IF_CTRL, 0x1);
 #endif
 		mipi_dsih_video_mode(&(dsi_ctx.dsi_inst), 1);
-#ifndef FB_DSIH_VERSION_1P21A
-		/*
-		 * DSI_HOST_PWR reseting code is for cleaning up DSI FIFO.
-		 * But it results in black screen issue in T116 & T113 projects.
-		 * So this code excluded on dsi_1_21a.
-		 */
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PWR_UP, 0);
 		udelay(100);
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PWR_UP, 1);
 		usleep_range(3000, 3500);
-#endif
 #ifdef FB_DSIH_VERSION_1P21A
 		dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_ST0);
 		dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_ST1);

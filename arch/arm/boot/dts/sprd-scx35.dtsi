@@ -441,8 +441,8 @@
 		sdhci-cap2-hc-erase-sz;
 		sdhci-cap2-cache-ctrl;
 		host-caps-mask = <0x03000000>;
-		//vdd-vmmc = "vddemmccore";
-		//vdd-vqmmc = "vddgen1";
+		vdd-vmmc = "vddemmccore";
+		vdd-vqmmc = "vddgen1";
 		emmc-signal-supply = <&vddemmccore>;
 		vdd-level = <1200000 1300000 1500000 1800000>;
 		clock-names = "clk_emmc";
