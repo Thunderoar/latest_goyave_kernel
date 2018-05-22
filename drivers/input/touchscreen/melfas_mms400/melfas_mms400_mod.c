@@ -249,8 +249,10 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 					{
 						cpufreq_limit_put(info->min_handle);
 						info->min_handle = NULL;
+#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 						_store_cpu_num_min_limit(1);
 						dev_info(&client->dev, "cpu freq off\n");
+#endif
 					}
 #endif
 				}
@@ -282,8 +284,10 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 						info->touch_cpufreq_lock, PTR_ERR(info->min_handle));
 						info->min_handle = NULL;
 					}
+#ifdef CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 					_store_cpu_num_min_limit(2);
 					dev_info(&client->dev,"cpu freq on\n");
+#endif
 				}
 				info->finger_cnt++;
 #endif
