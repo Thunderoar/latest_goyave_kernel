@@ -51,7 +51,7 @@
 #define FREQ_TABLE_SIZE 	10
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
-#define TRANSITION_LATENCY	(100 * 1000) /* ns */
+#define TRANSITION_LATENCY	(50 * 1000) /* ns */
 
 static DEFINE_MUTEX(freq_lock);
 struct cpufreq_freqs global_freqs;
@@ -232,16 +232,22 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 #else
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 	.freq_tbl = {
-		{0, 1300000},
-		{1, 1200000},
-		{2, 1000000},
-		{3, SHARK_TDPLL_FREQUENCY},
-		{4, CPUFREQ_TABLE_END},
+		{0, 1500000},
+		{1, 1400000},
+		{2, 1300000},
+		{3, 1200000},
+		{4, 1000000},
+		{5, SHARK_TDPLL_FREQUENCY},
+		{6, 500000},
+		{7, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1200000,
-		1100000,
+		1185000,
+		1185000,
+		1175000,
+		1150000,
 		1000000,
+		900000,
 		900000,
 		900000,
 	},
