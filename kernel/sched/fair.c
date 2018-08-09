@@ -5660,7 +5660,7 @@ static inline int find_new_ilb(int call_cpu)
 	int ilb = cpumask_first(nohz.idle_cpus_mask);
 	if (ilb < nr_cpu_ids && idle_cpu(ilb))
 		return ilb;
-
+#endif
 	return nr_cpu_ids;
 }
 #endif /* CONFIG_SCHED_MC || CONFIG_SCHED_SMT */
