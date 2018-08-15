@@ -1,5 +1,3 @@
-source "arch/arm/mach-sc/Hotplug/Kconfig"
-
 if ARCH_SC
 
 menu "Spreadtrum SoC Type"
@@ -659,6 +657,8 @@ config MACH_GRANDNEOVE3G
 	  GrandNeoVE board based on SC7730g serial.
 		  
 endmenu
+
+source "arch/arm/mach-sc/Hotplug/Kconfig"
 
 config SPRD_ION_MM_SIZE
         int "size for ion"
