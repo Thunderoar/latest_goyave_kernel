@@ -1,3 +1,5 @@
+source "arch/arm/mach-sc/Hotplug/Kconfig"
+
 if ARCH_SC
 
 menu "Spreadtrum SoC Type"
