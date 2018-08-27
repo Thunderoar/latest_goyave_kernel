@@ -1,0 +1,25 @@
+From e8b33cbea86426c5c59f3d4ed8f602f00a96349f Mon Sep 17 00:00:00 2001
+From: Quyen <quyenach1234@gmail.com>
+Date: Mon, 15 Aug 2016 22:26:42 +0700
+Subject: [PATCH 7/9] zram: Use LZ4 compressor as default
+
+---
+ drivers/block/zram/zram_drv.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index 45fd79c38ce..05ae6ae6ad5 100755
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -38,7 +38,7 @@
+ /* Globals */
+ static int zram_major;
+ static struct zram *zram_devices;
+-static const char *default_compressor = "lzo";
++static const char *default_compressor = "lz4";
+ 
+ /* Module params (documentation at end) */
+ static unsigned int num_devices = 1;
+-- 
+2.18.0
+
