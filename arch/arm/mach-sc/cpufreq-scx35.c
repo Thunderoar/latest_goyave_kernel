@@ -514,14 +514,10 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 	return sprd_raw_get_cpufreq();
 }
 
-static void sprd_set_cpureq_limit(void)
+static void sprd_set_cpufreq_limit(void)
 {
-	int i;
-	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
-	for (i = 0; (tmp[i].frequency != CPUFREQ_TABLE_END); i++) {
-		cpufreq_min_limit = min(tmp[i].frequency, cpufreq_min_limit);
-		cpufreq_max_limit = max(tmp[i].frequency, cpufreq_max_limit);
-	}
+	cpufreq_min_limit = sprd_cpufreq_conf->freq_tbl[7].frequency;
+	cpufreq_max_limit = sprd_cpufreq_conf->freq_tbl[0].frequency;
 	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
 
@@ -553,7 +549,7 @@ static int sprd_freq_table_init(void)
 		pr_err("%s error chip id\n", __func__);
 		return -EINVAL;
 	}
-	sprd_set_cpureq_limit();
+	sprd_set_cpufreq_limit();
 	return 0;
 }
 
