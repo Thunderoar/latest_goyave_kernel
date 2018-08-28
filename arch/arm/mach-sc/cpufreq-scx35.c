@@ -516,7 +516,7 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 
 static void sprd_set_cpufreq_limit(void)
 {
-	cpufreq_min_limit = sprd_cpufreq_conf->freq_tbl[7].frequency;
+	cpufreq_min_limit = sprd_cpufreq_conf->freq_tbl[6].frequency;
 	cpufreq_max_limit = sprd_cpufreq_conf->freq_tbl[0].frequency;
 	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
