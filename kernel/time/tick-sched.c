@@ -575,7 +575,7 @@ static ktime_t tick_nohz_stop_sched_tick(struct tick_sched *ts,
 		goto out;
 
 	/* Schedule the tick, if we are at least one jiffie off */
-	if ((long)delta_jiffies >= 1) {
+	if ((long)delta_jiffies <= 1) {
 
 		/*
 		 * If this cpu is the one which updates jiffies, then
