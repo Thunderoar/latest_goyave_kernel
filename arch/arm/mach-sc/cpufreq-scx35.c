@@ -242,10 +242,10 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		{7, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1175000,
-		1175000,
-		1175000,
 		1150000,
+		1150000,
+		1100000,
+		1100000,
 		1000000,
 		900000,
 		900000,
@@ -348,7 +348,7 @@ static void sprd_raw_set_cpufreq(int cpu, struct cpufreq_freqs *freq, int index)
 		CPUFREQ_SET_VOLTAGE();
 	}
 
-	pr_info("%u --> %u, real=%u, index=%d\n",
+	pr_debug("%u --> %u, real=%u, index=%d\n",
 		freq->old, freq->new, sprd_raw_get_cpufreq(), index);
 
 #undef CPUFREQ_SET_VOLTAGE
@@ -370,7 +370,7 @@ static void sprd_real_set_cpufreq(struct cpufreq_policy *policy, unsigned int ne
 		mutex_unlock(&freq_lock);
 		return;
 	}
-	pr_info("--xing-- set %u khz for cpu%u\n",
+	pr_debug("--xing-- set %u khz for cpu%u\n",
 		new_speed, policy->cpu);
 	global_freqs.cpu = policy->cpu;
 	global_freqs.new = new_speed;
@@ -518,7 +518,7 @@ static void sprd_set_cpufreq_limit(void)
 {
 	cpufreq_min_limit = sprd_cpufreq_conf->freq_tbl[6].frequency;
 	cpufreq_max_limit = sprd_cpufreq_conf->freq_tbl[0].frequency;
-	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
+	pr_debug("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
 
 static int sprd_freq_table_init(void)
@@ -576,7 +576,7 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 		pr_err("%s Failed to config freq table: %d\n", __func__, ret);
 
 
-	pr_info("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
+	pr_debug("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
 		__func__, policy->cpu, policy->cur, ret);
 
        cpumask_setall(policy->cpus);
