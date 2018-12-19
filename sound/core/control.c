@@ -150,8 +150,6 @@ void snd_ctl_notify(struct snd_card *card, unsigned int mask,
 	
 	if (snd_BUG_ON(!card || !id))
 		return;
-	if (card->shutdown)
-		return;
 	read_lock(&card->ctl_files_rwlock);
 #if defined(CONFIG_SND_MIXER_OSS) || defined(CONFIG_SND_MIXER_OSS_MODULE)
 	card->mixer_oss_change_count++;
@@ -291,10 +289,6 @@ static bool snd_ctl_remove_numid_conflict(struct snd_card *card,
 {
 	struct snd_kcontrol *kctl;
 
-	/* Make sure that the ids assigned to the control do not wrap around */
-	if (card->last_numid >= UINT_MAX - count)
-		card->last_numid = 0;
-
 	list_for_each_entry(kctl, &card->controls, list) {
 		if (kctl->id.numid < card->last_numid + 1 + count &&
 		    kctl->id.numid + kctl->count > card->last_numid + 1) {
@@ -337,7 +331,6 @@ int snd_ctl_add(struct snd_card *card, struct snd_kcontrol *kcontrol)
 {
 	struct snd_ctl_elem_id id;
 	unsigned int idx;
-	unsigned int count;
 	int err = -EINVAL;
 
 	if (! kcontrol)
@@ -345,9 +338,6 @@ int snd_ctl_add(struct snd_card *card, struct snd_kcontrol *kcontrol)
 	if (snd_BUG_ON(!card || !kcontrol->info))
 		goto error;
 	id = kcontrol->id;
-	if (id.index > UINT_MAX - kcontrol->count)
-		goto error;
-
 	down_write(&card->controls_rwsem);
 	if (snd_ctl_find_id(card, &id)) {
 		up_write(&card->controls_rwsem);
@@ -369,9 +359,8 @@ int snd_ctl_add(struct snd_card *card, struct snd_kcontrol *kcontrol)
 	card->controls_count += kcontrol->count;
 	kcontrol->id.numid = card->last_numid + 1;
 	card->last_numid += kcontrol->count;
-	count = kcontrol->count;
 	up_write(&card->controls_rwsem);
-	for (idx = 0; idx < count; idx++, id.index++, id.numid++)
+	for (idx = 0; idx < kcontrol->count; idx++, id.index++, id.numid++)
 		snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_ADD, &id);
 	return 0;
 
@@ -400,7 +389,6 @@ int snd_ctl_replace(struct snd_card *card, struct snd_kcontrol *kcontrol,
 		    bool add_on_replace)
 {
 	struct snd_ctl_elem_id id;
-	unsigned int count;
 	unsigned int idx;
 	struct snd_kcontrol *old;
 	int ret;
@@ -436,9 +424,8 @@ add:
 	card->controls_count += kcontrol->count;
 	kcontrol->id.numid = card->last_numid + 1;
 	card->last_numid += kcontrol->count;
-	count = kcontrol->count;
 	up_write(&card->controls_rwsem);
-	for (idx = 0; idx < count; idx++, id.index++, id.numid++)
+	for (idx = 0; idx < kcontrol->count; idx++, id.index++, id.numid++)
 		snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_ADD, &id);
 	return 0;
 
@@ -911,9 +898,9 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 			result = kctl->put(kctl, control);
 		}
 		if (result > 0) {
-			struct snd_ctl_elem_id id = control->id;
 			up_read(&card->controls_rwsem);
-			snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_VALUE, &id);
+			snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_VALUE,
+				       &control->id);
 			return 0;
 		}
 	}
@@ -1088,7 +1075,7 @@ static int snd_ctl_elem_user_tlv(struct snd_kcontrol *kcontrol,
 		mutex_lock(&ue->card->user_ctl_lock);
 		change = ue->tlv_data_size != size;
 		if (!change)
-			change = memcmp(ue->tlv_data, new_data, size) != 0;
+			change = memcmp(ue->tlv_data, new_data, size);
 		kfree(ue->tlv_data);
 		ue->tlv_data = new_data;
 		ue->tlv_data_size = size;
@@ -1168,11 +1155,9 @@ static int snd_ctl_elem_add(struct snd_ctl_file *file,
 	struct user_element *ue;
 	int idx, err;
 
+	if (!replace && card->user_ctl_count >= MAX_USER_CONTROLS)
+		return -ENOMEM;
 	if (info->count < 1)
-		return -EINVAL;
-	if (!*info->id.name)
-		return -EINVAL;
-	if (strnlen(info->id.name, sizeof(info->id.name)) >= sizeof(info->id.name))
 		return -EINVAL;
 	access = info->access == 0 ? SNDRV_CTL_ELEM_ACCESS_READWRITE :
 		(info->access & (SNDRV_CTL_ELEM_ACCESS_READWRITE|
@@ -1180,16 +1165,21 @@ static int snd_ctl_elem_add(struct snd_ctl_file *file,
 				 SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE));
 	info->id.numid = 0;
 	memset(&kctl, 0, sizeof(kctl));
-
-	if (replace) {
-		err = snd_ctl_remove_user_ctl(file, &info->id);
-		if (err)
-			return err;
+	down_write(&card->controls_rwsem);
+	_kctl = snd_ctl_find_id(card, &info->id);
+	err = 0;
+	if (_kctl) {
+		if (replace)
+			err = snd_ctl_remove(card, _kctl);
+		else
+			err = -EBUSY;
+	} else {
+		if (replace)
+			err = -ENOENT;
 	}
-
-	if (card->user_ctl_count >= MAX_USER_CONTROLS)
-		return -ENOMEM;
-
+	up_write(&card->controls_rwsem);
+	if (err < 0)
+		return err;
 	memcpy(&kctl.id, &info->id, sizeof(info->id));
 	kctl.count = info->owner ? info->owner : 1;
 	access |= SNDRV_CTL_ELEM_ACCESS_USER;
@@ -1327,8 +1317,6 @@ static int snd_ctl_tlv_ioctl(struct snd_ctl_file *file,
 		return -EFAULT;
 	if (tlv.length < sizeof(unsigned int) * 2)
 		return -EINVAL;
-	if (!tlv.numid)
-		return -EINVAL;
 	down_read(&card->controls_rwsem);
 	kctl = snd_ctl_find_numid(card, tlv.numid);
 	if (kctl == NULL) {
@@ -1353,9 +1341,8 @@ static int snd_ctl_tlv_ioctl(struct snd_ctl_file *file,
 		}
 		err = kctl->tlv.c(kctl, op_flag, tlv.length, _tlv->tlv);
 		if (err > 0) {
-			struct snd_ctl_elem_id id = kctl->id;
 			up_read(&card->controls_rwsem);
-			snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_TLV, &id);
+			snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_TLV, &kctl->id);
 			return 0;
 		}
 	} else {

@@ -245,7 +245,7 @@ out:
 
 static int proc_pid_auxv(struct task_struct *task, char *buffer)
 {
-	struct mm_struct *mm = mm_access(task, PTRACE_MODE_READ_FSCREDS);
+	struct mm_struct *mm = mm_access(task, PTRACE_MODE_READ);
 	int res = PTR_ERR(mm);
 	if (mm && !IS_ERR(mm)) {
 		unsigned int nwords = 0;
@@ -275,7 +275,7 @@ static int proc_pid_wchan(struct task_struct *task, char *buffer)
 	wchan = get_wchan(task);
 
 	if (lookup_symbol_name(wchan, symname) < 0)
-		if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS))
+		if (!ptrace_may_access(task, PTRACE_MODE_READ))
 			return 0;
 		else
 			return sprintf(buffer, "%lu", wchan);
@@ -289,7 +289,7 @@ static int lock_trace(struct task_struct *task)
 	int err = mutex_lock_killable(&task->signal->cred_guard_mutex);
 	if (err)
 		return err;
-	if (!ptrace_may_access(task, PTRACE_MODE_ATTACH_FSCREDS)) {
+	if (!ptrace_may_access(task, PTRACE_MODE_ATTACH)) {
 		mutex_unlock(&task->signal->cred_guard_mutex);
 		return -EPERM;
 	}
@@ -563,7 +563,7 @@ static int proc_fd_access_allowed(struct inode *inode)
 	 */
 	task = get_proc_task(inode);
 	if (task) {
-		allowed = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
+		allowed = ptrace_may_access(task, PTRACE_MODE_READ);
 		put_task_struct(task);
 	}
 	return allowed;
@@ -598,7 +598,7 @@ static bool has_pid_permissions(struct pid_namespace *pid,
 		return true;
 	if (in_group_p(pid->pid_gid))
 		return true;
-	return ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
+	return ptrace_may_access(task, PTRACE_MODE_READ);
 }
 
 
@@ -713,7 +713,7 @@ static int __mem_open(struct inode *inode, struct file *file, unsigned int mode)
 	if (!task)
 		return -ESRCH;
 
-	mm = mm_access(task, mode | PTRACE_MODE_FSCREDS);
+	mm = mm_access(task, mode);
 	put_task_struct(task);
 
 	if (IS_ERR(mm))
@@ -850,8 +850,7 @@ static ssize_t environ_read(struct file *file, char __user *buf,
 	int ret = 0;
 	struct mm_struct *mm = file->private_data;
 
-	/* Ensure the process spawned far enough to have an environment. */
-	if (!mm || !mm->env_end)
+	if (!mm)
 		return 0;
 
 	page = (char *)__get_free_page(GFP_TEMPORARY);
@@ -1800,7 +1799,7 @@ static int map_files_d_revalidate(struct dentry *dentry, unsigned int flags)
 	if (!task)
 		goto out_notask;
 
-	mm = mm_access(task, PTRACE_MODE_READ_FSCREDS);
+	mm = mm_access(task, PTRACE_MODE_READ);
 	if (IS_ERR_OR_NULL(mm))
 		goto out;
 
@@ -1864,7 +1863,6 @@ static int proc_map_files_get_link(struct dentry *dentry, struct path *path)
 	if (rc)
 		goto out_mmput;
 
-	rc = -ENOENT;
 	down_read(&mm->mmap_sem);
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (vma && vma->vm_file) {
@@ -1935,7 +1933,7 @@ static struct dentry *proc_map_files_lookup(struct inode *dir,
 		goto out;
 
 	result = ERR_PTR(-EACCES);
-	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS))
+	if (!ptrace_may_access(task, PTRACE_MODE_READ))
 		goto out_put_task;
 
 	result = ERR_PTR(-ENOENT);
@@ -1991,7 +1989,7 @@ proc_map_files_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		goto out;
 
 	ret = -EACCES;
-	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS))
+	if (!ptrace_may_access(task, PTRACE_MODE_READ))
 		goto out_put_task;
 
 	ret = 0;
@@ -2527,7 +2525,7 @@ static int do_io_accounting(struct task_struct *task, char *buffer, int whole)
 	if (result)
 		return result;
 
-	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS)) {
+	if (!ptrace_may_access(task, PTRACE_MODE_READ)) {
 		result = -EACCES;
 		goto out_unlock;
 	}
@@ -2651,57 +2649,6 @@ static const struct file_operations proc_projid_map_operations = {
 	.llseek		= seq_lseek,
 	.release	= proc_id_map_release,
 };
-
-static int proc_setgroups_open(struct inode *inode, struct file *file)
-{
-	struct user_namespace *ns = NULL;
-	struct task_struct *task;
-	int ret;
-
-	ret = -ESRCH;
-	task = get_proc_task(inode);
-	if (task) {
-		rcu_read_lock();
-		ns = get_user_ns(task_cred_xxx(task, user_ns));
-		rcu_read_unlock();
-		put_task_struct(task);
-	}
-	if (!ns)
-		goto err;
-
-	if (file->f_mode & FMODE_WRITE) {
-		ret = -EACCES;
-		if (!ns_capable(ns, CAP_SYS_ADMIN))
-			goto err_put_ns;
-	}
-
-	ret = single_open(file, &proc_setgroups_show, ns);
-	if (ret)
-		goto err_put_ns;
-
-	return 0;
-err_put_ns:
-	put_user_ns(ns);
-err:
-	return ret;
-}
-
-static int proc_setgroups_release(struct inode *inode, struct file *file)
-{
-	struct seq_file *seq = file->private_data;
-	struct user_namespace *ns = seq->private;
-	int ret = single_release(inode, file);
-	put_user_ns(ns);
-	return ret;
-}
-
-static const struct file_operations proc_setgroups_operations = {
-	.open		= proc_setgroups_open,
-	.write		= proc_setgroups_write,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= proc_setgroups_release,
-};
 #endif /* CONFIG_USER_NS */
 
 static int proc_pid_personality(struct seq_file *m, struct pid_namespace *ns,
@@ -2761,9 +2708,6 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("mounts",     S_IRUGO, proc_mounts_operations),
 	REG("mountinfo",  S_IRUGO, proc_mountinfo_operations),
 	REG("mountstats", S_IRUSR, proc_mountstats_operations),
-#ifdef CONFIG_PROCESS_RECLAIM
-	REG("reclaim", S_IWUSR, proc_reclaim_operations),
-#endif
 #ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, proc_clear_refs_operations),
 	REG("smaps",      S_IRUGO, proc_pid_smaps_operations),
@@ -2813,7 +2757,6 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("uid_map",    S_IRUGO|S_IWUSR, proc_uid_map_operations),
 	REG("gid_map",    S_IRUGO|S_IWUSR, proc_gid_map_operations),
 	REG("projid_map", S_IRUGO|S_IWUSR, proc_projid_map_operations),
-	REG("setgroups",  S_IRUGO|S_IWUSR, proc_setgroups_operations),
 #endif
 #ifdef CONFIG_CHECKPOINT_RESTORE
 	REG("timers",	  S_IRUGO, proc_timers_operations),
@@ -3167,7 +3110,6 @@ static const struct pid_entry tid_base_stuff[] = {
 	REG("uid_map",    S_IRUGO|S_IWUSR, proc_uid_map_operations),
 	REG("gid_map",    S_IRUGO|S_IWUSR, proc_gid_map_operations),
 	REG("projid_map", S_IRUGO|S_IWUSR, proc_projid_map_operations),
-	REG("setgroups",  S_IRUGO|S_IWUSR, proc_setgroups_operations),
 #endif
 };
 

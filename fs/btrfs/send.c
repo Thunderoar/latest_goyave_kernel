@@ -1338,21 +1338,7 @@ static int read_symlink(struct send_ctx *sctx,
 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
 	if (ret < 0)
 		goto out;
-	if (ret) {
-		/*
-		 * An empty symlink inode. Can happen in rare error paths when
-		 * creating a symlink (transaction committed before the inode
-		 * eviction handler removed the symlink inode items and a crash
-		 * happened in between or the subvol was snapshoted in between).
-		 * Print an informative message to dmesg/syslog so that the user
-		 * can delete the symlink.
-		 */
-		btrfs_err(root->fs_info,
-			  "Found empty symlink inode %llu at root %llu",
-			  ino, root->root_key.objectid);
-		ret = -EIO;
-		goto out;
-	}
+	BUG_ON(ret);
 
 	ei = btrfs_item_ptr(path->nodes[0], path->slots[0],
 			struct btrfs_file_extent_item);
@@ -1564,10 +1550,6 @@ static int lookup_dir_item_inode(struct btrfs_root *root,
 		goto out;
 	}
 	btrfs_dir_item_key_to_cpu(path->nodes[0], di, &key);
-	if (key.type == BTRFS_ROOT_ITEM_KEY) {
-		ret = -ENOENT;
-		goto out;
-	}
 	*found_inode = key.objectid;
 	*found_type = btrfs_dir_type(path->nodes[0], di);
 
@@ -4641,8 +4623,8 @@ long btrfs_ioctl_send(struct file *mnt_file, void __user *arg_)
 	}
 
 	if (!access_ok(VERIFY_READ, arg->clone_sources,
-			sizeof(*arg->clone_sources) *
-			arg->clone_sources_count)) {
+			sizeof(*arg->clone_sources *
+			arg->clone_sources_count))) {
 		ret = -EFAULT;
 		goto out;
 	}

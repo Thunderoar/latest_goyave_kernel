@@ -261,10 +261,9 @@ static int input_handle_abs_event(struct input_dev *dev,
 }
 
 static int input_get_disposition(struct input_dev *dev,
-			  unsigned int type, unsigned int code, int *pval)
+			  unsigned int type, unsigned int code, int value)
 {
 	int disposition = INPUT_IGNORE_EVENT;
-	int value = *pval;
 
 	switch (type) {
 
@@ -376,7 +375,6 @@ static int input_get_disposition(struct input_dev *dev,
 		break;
 	}
 
-	*pval = value;
 	return disposition;
 }
 
@@ -389,7 +387,7 @@ static void input_handle_event(struct input_dev *dev,
 {
 	int disposition;
 
-	disposition = input_get_disposition(dev, type, code, &value);
+	disposition = input_get_disposition(dev, type, code, value);
 
 	if ((disposition & INPUT_PASS_TO_DEVICE) && dev->event)
 		dev->event(dev, type, code, value);
@@ -1677,7 +1675,7 @@ static void input_dev_toggle(struct input_dev *dev, bool activate)
  *
  * This function tries to reset the state of an opened input device and
  * bring internal state and state if the hardware in sync with each other.
- * We restore LED state, repeat rate, etc.
+ * We mark all keys as released, restore LED state, repeat rate, etc.
  */
 void input_reset_device(struct input_dev *dev)
 {
@@ -1685,6 +1683,16 @@ void input_reset_device(struct input_dev *dev)
 
 	if (dev->users) {
 		input_dev_toggle(dev, true);
+
+		/*
+		 * Keys that have been pressed at suspend time are unlikely
+		 * to be still pressed when we resume.
+		 */
+	#if 0  // SAMSUNG_DO_NOT_USE this functionality
+		spin_lock_irq(&dev->event_lock);
+		input_dev_release_keys(dev);
+		spin_unlock_irq(&dev->event_lock);
+	#endif
 	}
 
 	mutex_unlock(&dev->mutex);
@@ -1891,10 +1899,6 @@ void input_set_capability(struct input_dev *dev, unsigned int type, unsigned int
 		break;
 
 	case EV_ABS:
-		input_alloc_absinfo(dev);
-		if (!dev->absinfo)
-			return;
-
 		__set_bit(code, dev->absbit);
 		break;
 

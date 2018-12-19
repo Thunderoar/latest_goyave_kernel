@@ -26,7 +26,7 @@
 #endif
 
 ENTRY(cpu_v7_proc_init)
-	ret	lr
+	mov	pc, lr
 ENDPROC(cpu_v7_proc_init)
 
 ENTRY(cpu_v7_proc_fin)
@@ -34,7 +34,7 @@ ENTRY(cpu_v7_proc_fin)
 	bic	r0, r0, #0x1000			@ ...i............
 	bic	r0, r0, #0x0006			@ .............ca.
 	mcr	p15, 0, r0, c1, c0, 0		@ disable caches
-	ret	lr
+	mov	pc, lr
 ENDPROC(cpu_v7_proc_fin)
 
 /*
@@ -71,20 +71,20 @@ ENDPROC(cpu_v7_reset)
 ENTRY(cpu_v7_do_idle)
 	dsb					@ WFI may enter a low-power mode
 	wfi
-	ret	lr
+	mov	pc, lr
 ENDPROC(cpu_v7_do_idle)
 
 ENTRY(cpu_v7_dcache_clean_area)
 	ALT_SMP(W(nop))			@ MP extensions imply L1 PTW
 	ALT_UP_B(1f)
-	ret	lr
+	mov	pc, lr
 1:	dcache_line_size r2, r3
 2:	mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
 	add	r0, r0, r2
 	subs	r1, r1, r2
 	bhi	2b
 	dsb
-	ret	lr
+	mov	pc, lr
 ENDPROC(cpu_v7_dcache_clean_area)
 
 	string	cpu_v7_name, "ARMv7 Processor"
@@ -152,7 +152,7 @@ ENTRY(cpu_pj4b_do_idle)
 	dsb					@ WFI may enter a low-power mode
 	wfi
 	dsb					@barrier
-	ret	lr
+	mov	pc, lr
 ENDPROC(cpu_pj4b_do_idle)
 #else
 	globl_equ	cpu_pj4b_do_idle,  	cpu_v7_do_idle
@@ -201,6 +201,7 @@ __v7_pj4b_setup:
 /* Auxiliary Debug Modes Control 1 Register */
 #define PJ4B_STATIC_BP (1 << 2) /* Enable Static BP */
 #define PJ4B_INTER_PARITY (1 << 8) /* Disable Internal Parity Handling */
+#define PJ4B_BCK_OFF_STREX (1 << 5) /* Enable the back off of STREX instr */
 #define PJ4B_CLEAN_LINE (1 << 16) /* Disable data transfer for clean line */
 
 /* Auxiliary Debug Modes Control 2 Register */
@@ -223,6 +224,7 @@ __v7_pj4b_setup:
 	/* Auxiliary Debug Modes Control 1 Register */
 	mrc	p15, 1,	r0, c15, c1, 1
 	orr     r0, r0, #PJ4B_CLEAN_LINE
+	orr     r0, r0, #PJ4B_BCK_OFF_STREX
 	orr     r0, r0, #PJ4B_INTER_PARITY
 	bic	r0, r0, #PJ4B_STATIC_BP
 	mcr	p15, 1,	r0, c15, c1, 1
@@ -327,6 +329,7 @@ __v7_setup:
 
 3:	mov	r10, #0
 	mcr	p15, 0, r10, c7, c5, 0		@ I+BTB cache invalidate
+	dsb
 #ifdef CONFIG_MMU
 	mcr	p15, 0, r10, c8, c7, 0		@ invalidate I + D TLBs
 	v7_ttb_setup r10, r4, r8, r5		@ TTBCR, TTBRx setup
@@ -335,7 +338,6 @@ __v7_setup:
 	mcr	p15, 0, r5, c10, c2, 0		@ write PRRR
 	mcr	p15, 0, r6, c10, c2, 1		@ write NMRR
 #endif
-	dsb					@ Complete invalidations
 #ifndef CONFIG_ARM_THUMBEE
 	mrc	p15, 0, r0, c0, c1, 0		@ read ID_PFR0 for ThumbEE
 	and	r0, r0, #(0xf << 12)		@ ThumbEE enabled field
@@ -361,7 +363,7 @@ __v7_setup:
 	bic	r0, r0, r5			@ clear bits them
 	orr	r0, r0, r6			@ set them
  THUMB(	orr	r0, r0, #1 << 30	)	@ Thumb exceptions
-	ret	lr				@ return to head.S:__ret
+	mov	pc, lr				@ return to head.S:__ret
 ENDPROC(__v7_setup)
 
 	.align	2

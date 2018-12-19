@@ -7,7 +7,6 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/export.h>
-#include <linux/module.h>
 #include <linux/namei.h>
 #include <linux/sched.h>
 #include <linux/writeback.h>
@@ -17,9 +16,6 @@
 #include <linux/quotaops.h>
 #include <linux/backing-dev.h>
 #include "internal.h"
-
-bool fsync_enabled = true;
-module_param(fsync_enabled, bool, 0755);
 
 #define VALID_FLAGS (SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE| \
 			SYNC_FILE_RANGE_WAIT_AFTER)
@@ -103,7 +99,7 @@ static void fdatawait_one_bdev(struct block_device *bdev, void *arg)
  * just write metadata (such as inodes or bitmaps) to block device page cache
  * and do not sync it on their own in ->sync_fs().
  */
-static void do_sync(void)
+SYSCALL_DEFINE0(sync)
 {
 	int nowait = 0, wait = 1;
 
@@ -115,53 +111,6 @@ static void do_sync(void)
 	iterate_bdevs(fdatawait_one_bdev, NULL);
 	if (unlikely(laptop_mode))
 		laptop_sync_completion();
-	return;
-}
-static DEFINE_MUTEX(sync_mutex);	/* One do_sync() at a time. */
-static unsigned long sync_seq;		/* Many sync()s from one do_sync(). */
-					/*  Overflow harmless, extra wait. */
-/*
- * Only allow one task to do sync() at a time, and further allow
- * concurrent sync() calls to be satisfied by a single do_sync()
- * invocation.
- */
-SYSCALL_DEFINE0(sync)
-{
-	unsigned long snap;
-	unsigned long snap_done;
-	snap = ACCESS_ONCE(sync_seq);
-	smp_mb();  /* Prevent above from bleeding into critical section. */
-	mutex_lock(&sync_mutex);
-	snap_done = sync_seq;
-	/*
-	 * If the value in snap is odd, we need to wait for the current
-	 * do_sync() to complete, then wait for the next one, in other
-	 * words, we need the value of snap_done to be three larger than
-	 * the value of snap.  On the other hand, if the value in snap is
-	 * even, we only have to wait for the next request to complete,
-	 * in other words, we need the value of snap_done to be only two
-	 * greater than the value of snap.  The "(snap + 3) & 0x1" computes
-	 * this for us (thank you, Linus!).
-	 */
-	if (ULONG_CMP_GE(snap_done, (snap + 3) & ~0x1)) {
-		/*
-		 * A full do_sync() executed between our two fetches from
-		 * sync_seq, so our work is done!
-		 */
-		smp_mb(); /* Order test with caller's subsequent code. */
-		mutex_unlock(&sync_mutex);
-		return 0;
-	}
-	/* Record the start of do_sync(). */
-	ACCESS_ONCE(sync_seq)++;
-	WARN_ON_ONCE((sync_seq & 0x1) != 1);
-	smp_mb(); /* Keep prior increment out of do_sync(). */
-	do_sync();
-	/* Record the end of do_sync(). */
-	smp_mb(); /* Keep subsequent increment out of do_sync(). */
-	ACCESS_ONCE(sync_seq)++;
-	WARN_ON_ONCE((sync_seq & 0x1) != 0);
-	mutex_unlock(&sync_mutex);
 	return 0;
 }
 
@@ -203,9 +152,6 @@ SYSCALL_DEFINE1(syncfs, int, fd)
 	struct super_block *sb;
 	int ret;
 
-	if (!fsync_enabled)
-		return 0;
-
 	if (!f.file)
 		return -EBADF;
 	sb = f.file->f_dentry->d_sb;
@@ -231,9 +177,6 @@ SYSCALL_DEFINE1(syncfs, int, fd)
  */
 int vfs_fsync_range(struct file *file, loff_t start, loff_t end, int datasync)
 {
-	if (!fsync_enabled)
-		return 0;
-
 	if (!file->f_op || !file->f_op->fsync)
 		return -EINVAL;
 	return file->f_op->fsync(file, start, end, datasync);
@@ -250,9 +193,6 @@ EXPORT_SYMBOL(vfs_fsync_range);
  */
 int vfs_fsync(struct file *file, int datasync)
 {
-	if (!fsync_enabled)
-		return 0;
-
 	return vfs_fsync_range(file, 0, LLONG_MAX, datasync);
 }
 EXPORT_SYMBOL(vfs_fsync);
@@ -261,9 +201,6 @@ static int do_fsync(unsigned int fd, int datasync)
 {
 	struct fd f = fdget(fd);
 	int ret = -EBADF;
-
-	if (!fsync_enabled)
-		return 0;
 
 	if (f.file) {
 		ret = vfs_fsync(f.file, datasync);
@@ -274,17 +211,11 @@ static int do_fsync(unsigned int fd, int datasync)
 
 SYSCALL_DEFINE1(fsync, unsigned int, fd)
 {
-	if (!fsync_enabled)
-		return 0;
-
 	return do_fsync(fd, 0);
 }
 
 SYSCALL_DEFINE1(fdatasync, unsigned int, fd)
 {
-	if (!fsync_enabled)
-		return 0;
-
 	return do_fsync(fd, 1);
 }
 
@@ -360,9 +291,6 @@ SYSCALL_DEFINE4(sync_file_range, int, fd, loff_t, offset, loff_t, nbytes,
 	struct address_space *mapping;
 	loff_t endbyte;			/* inclusive */
 	umode_t i_mode;
-
-	if (!fsync_enabled)
-		return 0;
 
 	ret = -EINVAL;
 	if (flags & ~VALID_FLAGS)

@@ -711,7 +711,6 @@ static void walk_zones_in_node(struct seq_file *m, pg_data_t *pgdat,
 const char * const vmstat_text[] = {
 	/* Zoned VM counters */
 	"nr_free_pages",
-	"nr_alloc_batch",
 	"nr_inactive_anon",
 	"nr_active_anon",
 	"nr_inactive_file",
@@ -748,9 +747,6 @@ const char * const vmstat_text[] = {
 #endif
 	"nr_anon_transparent_hugepages",
 	"nr_free_cma",
-#ifdef CONFIG_UKSM
-	"nr_uksm_zero_pages",
-#endif
 	"nr_dirty_threshold",
 	"nr_dirty_background_threshold",
 
@@ -791,7 +787,6 @@ const char * const vmstat_text[] = {
 
 #ifdef CONFIG_NUMA_BALANCING
 	"numa_pte_updates",
-	"numa_huge_pte_updates",
 	"numa_hint_faults",
 	"numa_hint_faults_local",
 	"numa_pages_migrated",
@@ -1321,12 +1316,10 @@ static int __init setup_vmstat(void)
 #ifdef CONFIG_SMP
 	int cpu;
 
-	cpu_notifier_register_begin();
-	__register_cpu_notifier(&vmstat_notifier);
+	register_cpu_notifier(&vmstat_notifier);
 
 	for_each_online_cpu(cpu)
 		start_cpu_timer(cpu);
-	cpu_notifier_register_done();
 #endif
 #ifdef CONFIG_PROC_FS
 	proc_create("buddyinfo", S_IRUGO, NULL, &fragmentation_file_operations);

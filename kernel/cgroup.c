@@ -92,14 +92,6 @@ static DEFINE_MUTEX(cgroup_mutex);
 static DEFINE_MUTEX(cgroup_root_mutex);
 
 /*
- * cgroup destruction makes heavy use of work items and there can be a lot
- * of concurrent destructions.  Use a separate workqueue so that cgroup
- * destruction work items don't end up filling up max_active of system_wq
- * which may lead to deadlock.
- */
-static struct workqueue_struct *cgroup_destroy_wq;
-
-/*
  * Generate an array of cgroup subsystem pointers. At boot time, this is
  * populated with the built in subsystems, and modular subsystems are
  * registered after that. The mutable section of this array is protected by
@@ -881,7 +873,7 @@ static void cgroup_free_rcu(struct rcu_head *head)
 {
 	struct cgroup *cgrp = container_of(head, struct cgroup, rcu_head);
 
-	queue_work(cgroup_destroy_wq, &cgrp->free_work);
+	schedule_work(&cgrp->free_work);
 }
 
 static void cgroup_diput(struct dentry *dentry, struct inode *inode)
@@ -984,7 +976,7 @@ static void cgroup_d_remove_dir(struct dentry *dentry)
 	parent = dentry->d_parent;
 	spin_lock(&parent->d_lock);
 	spin_lock_nested(&dentry->d_lock, DENTRY_D_LOCK_NESTED);
-	list_del_init(&dentry->d_child);
+	list_del_init(&dentry->d_u.d_child);
 	spin_unlock(&dentry->d_lock);
 	spin_unlock(&parent->d_lock);
 	remove_dir(dentry);
@@ -1694,11 +1686,14 @@ static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 		 */
 		cgroup_drop_root(opts.new_root);
 
-		if (((root->flags | opts.flags) & CGRP_ROOT_SANE_BEHAVIOR) &&
-		    root->flags != opts.flags) {
-			pr_err("cgroup: sane_behavior: new mount options should match the existing superblock\n");
-			ret = -EINVAL;
-			goto drop_new_super;
+		if (root->flags != opts.flags) {
+			if ((root->flags | opts.flags) & CGRP_ROOT_SANE_BEHAVIOR) {
+				pr_err("cgroup: sane_behavior: new mount options should match the existing superblock\n");
+				ret = -EINVAL;
+				goto drop_new_super;
+			} else {
+				pr_warning("cgroup: new mount options do not match the existing superblock, will be ignored\n");
+			}
 		}
 
 		/* no subsys rebinding, so refcounts don't change */
@@ -2016,6 +2011,7 @@ static int cgroup_attach_task(struct cgroup *cgrp, struct task_struct *tsk,
 		retval = flex_array_put(group, i, &ent, GFP_ATOMIC);
 		BUG_ON(retval != 0);
 		i++;
+
 	next:
 		if (!threadgroup)
 			break;
@@ -4718,22 +4714,6 @@ out:
 	return err;
 }
 
-static int __init cgroup_wq_init(void)
-{
-	/*
-	 * There isn't much point in executing destruction path in
-	 * parallel.  Good chunk is serialized with cgroup_mutex anyway.
-	 * Use 1 for @max_active.
-	 *
-	 * We would prefer to do this in cgroup_init() above, but that
-	 * is called before init_workqueues(): so leave this until after.
-	 */
-	cgroup_destroy_wq = alloc_workqueue("cgroup_destroy", 0, 1);
-	BUG_ON(!cgroup_destroy_wq);
-	return 0;
-}
-core_initcall(cgroup_wq_init);
-
 /*
  * proc_cgroup_show()
  *  - Print task's cgroup paths into seq_file, one line for each hierarchy
@@ -5044,7 +5024,7 @@ void __css_put(struct cgroup_subsys_state *css)
 
 	v = css_unbias_refcnt(atomic_dec_return(&css->refcnt));
 	if (v == 0)
-		queue_work(cgroup_destroy_wq, &css->dput_work);
+		schedule_work(&css->dput_work);
 }
 EXPORT_SYMBOL_GPL(__css_put);
 

@@ -559,8 +559,7 @@ static void edac_mc_workq_function(struct work_struct *work_req)
  *
  *		called with the mem_ctls_mutex held
  */
-static void edac_mc_workq_setup(struct mem_ctl_info *mci, unsigned msec,
-				bool init)
+static void edac_mc_workq_setup(struct mem_ctl_info *mci, unsigned msec)
 {
 	edac_dbg(0, "\n");
 
@@ -568,9 +567,7 @@ static void edac_mc_workq_setup(struct mem_ctl_info *mci, unsigned msec,
 	if (mci->op_state != OP_RUNNING_POLL)
 		return;
 
-	if (init)
-		INIT_DELAYED_WORK(&mci->work, edac_mc_workq_function);
-
+	INIT_DELAYED_WORK(&mci->work, edac_mc_workq_function);
 	mod_delayed_work(edac_workqueue, &mci->work, msecs_to_jiffies(msec));
 }
 
@@ -604,7 +601,7 @@ static void edac_mc_workq_teardown(struct mem_ctl_info *mci)
  *	user space has updated our poll period value, need to
  *	reset our workq delays
  */
-void edac_mc_reset_delay_period(unsigned long value)
+void edac_mc_reset_delay_period(int value)
 {
 	struct mem_ctl_info *mci;
 	struct list_head *item;
@@ -614,7 +611,7 @@ void edac_mc_reset_delay_period(unsigned long value)
 	list_for_each(item, &mc_devices) {
 		mci = list_entry(item, struct mem_ctl_info, link);
 
-		edac_mc_workq_setup(mci, value, false);
+		edac_mc_workq_setup(mci, (unsigned long) value);
 	}
 
 	mutex_unlock(&mem_ctls_mutex);
@@ -785,7 +782,7 @@ int edac_mc_add_mc(struct mem_ctl_info *mci)
 		/* This instance is NOW RUNNING */
 		mci->op_state = OP_RUNNING_POLL;
 
-		edac_mc_workq_setup(mci, edac_mc_get_poll_msec(), true);
+		edac_mc_workq_setup(mci, edac_mc_get_poll_msec());
 	} else {
 		mci->op_state = OP_RUNNING_INTERRUPT;
 	}
@@ -968,7 +965,7 @@ static void edac_inc_ue_error(struct mem_ctl_info *mci,
 	mci->ue_mc += count;
 
 	if (!enable_per_layer_report) {
-		mci->ue_noinfo_count += count;
+		mci->ce_noinfo_count += count;
 		return;
 	}
 

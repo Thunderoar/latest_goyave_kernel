@@ -276,57 +276,6 @@ static int ceph_x_proc_ticket_reply(struct ceph_auth_client *ac,
 		if (ret)
 			return ret;
 	}
-	tpend = tp + dlen;
-	dout(" ticket blob is %d bytes\n", dlen);
-	ceph_decode_need(&tp, tpend, 1 + sizeof(u64), bad);
-	blob_struct_v = ceph_decode_8(&tp);
-	new_secret_id = ceph_decode_64(&tp);
-	ret = ceph_decode_buffer(&new_ticket_blob, &tp, tpend);
-	if (ret)
-		goto out;
-
-	/* all is well, update our ticket */
-	ceph_crypto_key_destroy(&th->session_key);
-	if (th->ticket_blob)
-		ceph_buffer_put(th->ticket_blob);
-	th->session_key = new_session_key;
-	th->ticket_blob = new_ticket_blob;
-	th->validity = new_validity;
-	th->secret_id = new_secret_id;
-	th->expires = new_expires;
-	th->renew_after = new_renew_after;
-	dout(" got ticket service %d (%s) secret_id %lld len %d\n",
-	     type, ceph_entity_type_name(type), th->secret_id,
-	     (int)th->ticket_blob->vec.iov_len);
-	xi->have_keys |= th->service;
-
-	return 0;
-
-bad:
-	return -EINVAL;
-}
-
-static int ceph_x_proc_ticket_reply(struct ceph_auth_client *ac,
-				    struct ceph_crypto_key *secret,
-				    void *buf, void *end)
-{
-	void *p = buf;
-	u8 reply_struct_v;
-	u32 num;
-	int ret;
-
-	ceph_decode_8_safe(&p, end, reply_struct_v, bad);
-	if (reply_struct_v != 1)
-		return -EINVAL;
-
-	ceph_decode_32_safe(&p, end, num, bad);
-	dout("%d tickets\n", num);
-
-	while (num--) {
-		ret = process_one_ticket(ac, secret, &p, end);
-		if (ret)
-			return ret;
-	}
 
 	return 0;
 

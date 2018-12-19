@@ -468,20 +468,6 @@ static void invalidate_nid_path(struct hda_codec *codec, int idx)
 	memset(path, 0, sizeof(*path));
 }
 
-/* return a DAC if paired to the given pin by codec driver */
-static hda_nid_t get_preferred_dac(struct hda_codec *codec, hda_nid_t pin)
-{
-	struct hda_gen_spec *spec = codec->spec;
-	const hda_nid_t *list = spec->preferred_dacs;
-
-	if (!list)
-		return 0;
-	for (; *list; list += 2)
-		if (*list == pin)
-			return list[1];
-	return 0;
-}
-
 /* look for an empty DAC slot */
 static hda_nid_t look_for_dac(struct hda_codec *codec, hda_nid_t pin,
 			      bool is_digital)
@@ -642,45 +628,12 @@ static int get_amp_val_to_activate(struct hda_codec *codec, hda_nid_t nid,
 	return val;
 }
 
-/* is this a stereo widget or a stereo-to-mono mix? */
-static bool is_stereo_amps(struct hda_codec *codec, hda_nid_t nid, int dir)
-{
-	unsigned int wcaps = get_wcaps(codec, nid);
-	hda_nid_t conn;
-
-	if (wcaps & AC_WCAP_STEREO)
-		return true;
-	if (dir != HDA_INPUT || get_wcaps_type(wcaps) != AC_WID_AUD_MIX)
-		return false;
-	if (snd_hda_get_num_conns(codec, nid) != 1)
-		return false;
-	if (snd_hda_get_connections(codec, nid, &conn, 1) < 0)
-		return false;
-	return !!(get_wcaps(codec, conn) & AC_WCAP_STEREO);
-}
-
 /* initialize the amp value (only at the first time) */
 static void init_amp(struct hda_codec *codec, hda_nid_t nid, int dir, int idx)
 {
 	unsigned int caps = query_amp_caps(codec, nid, dir);
 	int val = get_amp_val_to_activate(codec, nid, dir, caps, false);
-
-	if (is_stereo_amps(codec, nid, dir))
-		snd_hda_codec_amp_init_stereo(codec, nid, dir, idx, 0xff, val);
-	else
-		snd_hda_codec_amp_init(codec, nid, 0, dir, idx, 0xff, val);
-}
-
-/* update the amp, doing in stereo or mono depending on NID */
-static int update_amp(struct hda_codec *codec, hda_nid_t nid, int dir, int idx,
-		      unsigned int mask, unsigned int val)
-{
-	if (is_stereo_amps(codec, nid, dir))
-		return snd_hda_codec_amp_stereo(codec, nid, dir, idx,
-						mask, val);
-	else
-		return snd_hda_codec_amp_update(codec, nid, 0, dir, idx,
-						mask, val);
+	snd_hda_codec_amp_init_stereo(codec, nid, dir, idx, 0xff, val);
 }
 
 /* calculate amp value mask we can modify;
@@ -720,7 +673,7 @@ static void activate_amp(struct hda_codec *codec, hda_nid_t nid, int dir,
 		return;
 
 	val &= mask;
-	update_amp(codec, nid, dir, idx, mask, val);
+	snd_hda_codec_amp_stereo(codec, nid, dir, idx, mask, val);
 }
 
 static void activate_amp_out(struct hda_codec *codec, struct nid_path *path,
@@ -833,10 +786,10 @@ static void set_pin_eapd(struct hda_codec *codec, hda_nid_t pin, bool enable)
 	if (spec->own_eapd_ctl ||
 	    !(snd_hda_query_pin_caps(codec, pin) & AC_PINCAP_EAPD))
 		return;
-	if (spec->keep_eapd_on && !enable)
-		return;
 	if (codec->inv_eapd)
 		enable = !enable;
+	if (spec->keep_eapd_on && !enable)
+		return;
 	snd_hda_codec_update_cache(codec, pin, 0,
 				   AC_VERB_SET_EAPD_BTLENABLE,
 				   enable ? 0x02 : 0x00);
@@ -1181,14 +1134,7 @@ static int try_assign_dacs(struct hda_codec *codec, int num_outs,
 			continue;
 		}
 
-		dacs[i] = get_preferred_dac(codec, pin);
-		if (dacs[i]) {
-			if (is_dac_already_used(codec, dacs[i]))
-				badness += bad->shared_primary;
-		}
-
-		if (!dacs[i])
-			dacs[i] = look_for_dac(codec, pin, false);
+		dacs[i] = look_for_dac(codec, pin, false);
 		if (!dacs[i] && !i) {
 			/* try to steal the DAC of surrounds for the front */
 			for (j = 1; j < num_outs; j++) {
@@ -2808,44 +2754,6 @@ static int add_loopback_list(struct hda_gen_spec *spec, hda_nid_t mix, int idx)
 	return 0;
 }
 
-/* return true if either a volume or a mute amp is found for the given
- * aamix path; the amp has to be either in the mixer node or its direct leaf
- */
-static bool look_for_mix_leaf_ctls(struct hda_codec *codec, hda_nid_t mix_nid,
-				   hda_nid_t pin, unsigned int *mix_val,
-				   unsigned int *mute_val)
-{
-	int idx, num_conns;
-	const hda_nid_t *list;
-	hda_nid_t nid;
-
-	idx = snd_hda_get_conn_index(codec, mix_nid, pin, true);
-	if (idx < 0)
-		return false;
-
-	*mix_val = *mute_val = 0;
-	if (nid_has_volume(codec, mix_nid, HDA_INPUT))
-		*mix_val = HDA_COMPOSE_AMP_VAL(mix_nid, 3, idx, HDA_INPUT);
-	if (nid_has_mute(codec, mix_nid, HDA_INPUT))
-		*mute_val = HDA_COMPOSE_AMP_VAL(mix_nid, 3, idx, HDA_INPUT);
-	if (*mix_val && *mute_val)
-		return true;
-
-	/* check leaf node */
-	num_conns = snd_hda_get_conn_list(codec, mix_nid, &list);
-	if (num_conns < idx)
-		return false;
-	nid = list[idx];
-	if (!*mix_val && nid_has_volume(codec, nid, HDA_OUTPUT) &&
-	    !is_ctl_associated(codec, nid, HDA_OUTPUT, 0, NID_PATH_VOL_CTL))
-		*mix_val = HDA_COMPOSE_AMP_VAL(nid, 3, 0, HDA_OUTPUT);
-	if (!*mute_val && nid_has_mute(codec, nid, HDA_OUTPUT) &&
-	    !is_ctl_associated(codec, nid, HDA_OUTPUT, 0, NID_PATH_MUTE_CTL))
-		*mute_val = HDA_COMPOSE_AMP_VAL(nid, 3, 0, HDA_OUTPUT);
-
-	return *mix_val || *mute_val;
-}
-
 /* create input playback/capture controls for the given pin */
 static int new_analog_input(struct hda_codec *codec, int input_idx,
 			    hda_nid_t pin, const char *ctlname, int ctlidx,
@@ -3566,7 +3474,7 @@ static int create_capture_mixers(struct hda_codec *codec)
 		if (!multi)
 			err = create_single_cap_vol_ctl(codec, n, vol, sw,
 							inv_dmic);
-		else if (!multi_cap_vol && !inv_dmic)
+		else if (!multi_cap_vol)
 			err = create_bind_cap_vol_ctl(codec, n, vol, sw);
 		else
 			err = create_multi_cap_vol_ctl(codec);
@@ -4267,24 +4175,6 @@ static unsigned int snd_hda_gen_path_power_filter(struct hda_codec *codec,
 	return AC_PWRST_D3;
 }
 
-/* mute all aamix inputs initially; parse up to the first leaves */
-static void mute_all_mixer_nid(struct hda_codec *codec, hda_nid_t mix)
-{
-	int i, nums;
-	const hda_nid_t *conn;
-	bool has_amp;
-
-	nums = snd_hda_get_conn_list(codec, mix, &conn);
-	has_amp = nid_has_mute(codec, mix, HDA_INPUT);
-	for (i = 0; i < nums; i++) {
-		if (has_amp)
-			update_amp(codec, mix, HDA_INPUT, i,
-				   0xff, HDA_AMP_MUTE);
-		else if (nid_has_volume(codec, conn[i], HDA_OUTPUT))
-			update_amp(codec, conn[i], HDA_OUTPUT, 0,
-				   0xff, HDA_AMP_MUTE);
-	}
-}
 
 /*
  * Parse the given BIOS configuration and set up the hda_gen_spec
@@ -4412,10 +4302,6 @@ int snd_hda_gen_parse_auto_config(struct hda_codec *codec,
 		}
 	}
 
-	/* mute all aamix input initially */
-	if (spec->mixer_nid)
-		mute_all_mixer_nid(codec, spec->mixer_nid);
-
  dig_only:
 	parse_digital(codec);
 
@@ -4497,11 +4383,9 @@ int snd_hda_gen_build_controls(struct hda_codec *codec)
 					    true, &spec->vmaster_mute.sw_kctl);
 		if (err < 0)
 			return err;
-		if (spec->vmaster_mute.hook) {
+		if (spec->vmaster_mute.hook)
 			snd_hda_add_vmaster_hook(codec, &spec->vmaster_mute,
 						 spec->vmaster_mute_enum);
-			snd_hda_sync_vmaster_hook(&spec->vmaster_mute);
-		}
 	}
 
 	free_kctls(spec); /* no longer needed */

@@ -543,7 +543,6 @@ void __weak arch_enable_nonboot_cpus_end(void)
 void __ref enable_nonboot_cpus(void)
 {
 	int cpu, error;
-	struct device *cpu_device;
 
 	/* Allow everyone to use the CPU hotplug again */
 	cpu_maps_update_begin();
@@ -559,12 +558,6 @@ void __ref enable_nonboot_cpus(void)
 		error = _cpu_up(cpu, 1);
 		if (!error) {
 			printk(KERN_INFO "CPU%d is up\n", cpu);
-			cpu_device = get_cpu_device(cpu);
-			if (!cpu_device)
-				pr_err("%s: failed to get cpu%d device\n",
-				       __func__, cpu);
-			else
-				kobject_uevent(&cpu_device->kobj, KOBJ_ONLINE);
 			continue;
 		}
 		printk(KERN_WARNING "Error taking CPU%d up: %d\n", cpu, error);
@@ -724,12 +717,10 @@ void set_cpu_present(unsigned int cpu, bool present)
 
 void set_cpu_online(unsigned int cpu, bool online)
 {
-	if (online) {
+	if (online)
 		cpumask_set_cpu(cpu, to_cpumask(cpu_online_bits));
-		cpumask_set_cpu(cpu, to_cpumask(cpu_active_bits));
-	} else {
+	else
 		cpumask_clear_cpu(cpu, to_cpumask(cpu_online_bits));
-	}
 }
 
 void set_cpu_active(unsigned int cpu, bool active)

@@ -84,10 +84,10 @@ extern void get_avenrun(unsigned long *loads, unsigned long offset, int shift);
 
 #define FSHIFT		11		/* nr of bits of precision */
 #define FIXED_1		(1<<FSHIFT)	/* 1.0 as fixed-point */
-#define LOAD_FREQ	(4*HZ+61)	/* 5 sec intervals */
-#define EXP_1		1896		/* 1/exp(5sec/1min) as fixed-point */
-#define EXP_5		2017		/* 1/exp(5sec/5min) */
-#define EXP_15		2038		/* 1/exp(5sec/15min) */
+#define LOAD_FREQ	(5*HZ+1)	/* 5 sec intervals */
+#define EXP_1		1884		/* 1/exp(5sec/1min) as fixed-point */
+#define EXP_5		2014		/* 1/exp(5sec/5min) */
+#define EXP_15		2037		/* 1/exp(5sec/15min) */
 
 #define CALC_LOAD(load,exp,n) \
 	load *= exp; \
@@ -334,10 +334,6 @@ static inline void arch_pick_mmap_layout(struct mm_struct *mm) {}
 extern void set_dumpable(struct mm_struct *mm, int value);
 extern int get_dumpable(struct mm_struct *mm);
 
-#define SUID_DUMP_DISABLE	0	/* No setuid dumping */
-#define SUID_DUMP_USER		1	/* Dump as user of process */
-#define SUID_DUMP_ROOT		2	/* Dump as root */
-
 /* mm flags */
 /* dumpable bits */
 #define MMF_DUMPABLE      0  /* core dump is permitted */
@@ -482,7 +478,6 @@ struct signal_struct {
 	atomic_t		sigcnt;
 	atomic_t		live;
 	int			nr_threads;
-	struct list_head	thread_head;
 
 	wait_queue_head_t	wait_chldexit;	/* for wait4() */
 
@@ -672,8 +667,6 @@ struct user_struct {
 	unsigned long mq_bytes;	/* How many bytes can be allocated to mqueue? */
 #endif
 	unsigned long locked_shm; /* How many pages of mlocked shm ? */
-	unsigned long unix_inflight;	/* How many files in flight in unix sockets */
-	atomic_long_t pipe_bufs;  /* how many pages are allocated in pipe buffers */
 
 #ifdef CONFIG_KEYS
 	struct key *uid_keyring;	/* UID specific keyring */
@@ -781,62 +774,14 @@ enum cpu_idle_type {
 #define SD_BALANCE_FORK		0x0008	/* Balance on fork, clone */
 #define SD_BALANCE_WAKE		0x0010  /* Balance on wakeup */
 #define SD_WAKE_AFFINE		0x0020	/* Wake task to waking CPU */
-#define SD_PREFER_LOCAL		0x0040  /* Prefer to keep tasks local to this domain */
 #define SD_SHARE_CPUPOWER	0x0080	/* Domain members share cpu power */
-#define SD_POWERSAVINGS_BALANCE	0x0100	/* Balance for power savings */
 #define SD_SHARE_PKG_RESOURCES	0x0200	/* Domain members share cpu pkg resources */
 #define SD_SERIALIZE		0x0400	/* Only a single load balancing instance */
 #define SD_ASYM_PACKING		0x0800  /* Place busy groups earlier in the domain */
 #define SD_PREFER_SIBLING	0x1000	/* Prefer to place tasks in a sibling domain */
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 
-enum powersavings_balance_level {
-	POWERSAVINGS_BALANCE_NONE = 0,  /* No power saving load balance */
-	POWERSAVINGS_BALANCE_BASIC,	/* Fill one thread/core/package
-					 * first for long running threads
-					 */
-	POWERSAVINGS_BALANCE_WAKEUP,	/* Also bias task wakeups to semi-idle
-					 * cpu package for power savings
-					 */
-	MAX_POWERSAVINGS_BALANCE_LEVELS
-};
-
-extern int sched_mc_power_savings, sched_smt_power_savings;
-
-static inline int sd_balance_for_mc_power(void)
-{
-	if (sched_smt_power_savings)
-		return SD_POWERSAVINGS_BALANCE;
-
-	if (!sched_mc_power_savings)
-		return SD_PREFER_SIBLING;
-
-	return 0;
-}
-
-static inline int sd_balance_for_package_power(void)
-{
-	if (sched_mc_power_savings | sched_smt_power_savings)
-		return SD_POWERSAVINGS_BALANCE;
-
-	return SD_PREFER_SIBLING;
-}
-
 extern int __weak arch_sd_sibiling_asym_packing(void);
-
-/*
- * Optimise SD flags for power savings:
- * SD_BALANCE_NEWIDLE helps aggressive task consolidation and power savings.
- * Keep default SD flags if sched_{smt,mc}_power_saving=0
- */
-
-static inline int sd_power_saving_flags(void)
-{
-	if (sched_mc_power_savings | sched_smt_power_savings)
-		return SD_BALANCE_NEWIDLE;
-
-	return 0;
-}
 
 struct sched_domain_attr {
 	int relax_domain_level;
@@ -1098,9 +1043,6 @@ struct task_struct {
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
-	struct task_struct *last_wakee;
-	unsigned long wakee_flips;
-	unsigned long wakee_flip_decay_ts;
 #endif
 	int on_rq;
 
@@ -1152,9 +1094,6 @@ struct task_struct {
 #endif
 
 	struct list_head tasks;
-#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
-	struct rb_node adj_node;
-#endif
 #ifdef CONFIG_SMP
 	struct plist_node pushable_tasks;
 #endif
@@ -1219,7 +1158,6 @@ struct task_struct {
 	/* PID/PID hash table linkage. */
 	struct pid_link pids[PIDTYPE_MAX];
 	struct list_head thread_group;
-	struct list_head thread_node;
 
 	struct completion *vfork_done;		/* for vfork() */
 	int __user *set_child_tid;		/* CLONE_CHILD_SETTID */
@@ -1469,12 +1407,6 @@ struct task_struct {
 		unsigned long memsw_nr_pages; /* uncharged mem+swap usage */
 	} memcg_batch;
 	unsigned int memcg_kmem_skip_account;
-	struct memcg_oom_info {
-		struct mem_cgroup *memcg;
-		gfp_t gfp_mask;
-		int order;
-		unsigned int may_oom:1;
-	} memcg_oom;
 #endif
 #ifdef CONFIG_HAVE_HW_BREAKPOINT
 	atomic_t ptrace_bp_refcnt;
@@ -1512,14 +1444,6 @@ static inline struct pid *task_tgid(struct task_struct *task)
 {
 	return task->group_leader->pids[PIDTYPE_PID].pid;
 }
-
-#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
-extern void add_2_adj_tree(struct task_struct *task);
-extern void delete_from_adj_tree(struct task_struct *task);
-#else
-static inline void add_2_adj_tree(struct task_struct *task) { }
-static inline void delete_from_adj_tree(struct task_struct *task) { }
-#endif
 
 /*
  * Without tasklist or rcu lock it is not safe to dereference
@@ -1745,13 +1669,11 @@ extern int task_free_unregister(struct notifier_block *n);
 #define tsk_used_math(p) ((p)->flags & PF_USED_MATH)
 #define used_math() tsk_used_math(current)
 
-/* __GFP_IO isn't allowed if PF_MEMALLOC_NOIO is set in current->flags
- * __GFP_FS is also cleared as it implies __GFP_IO.
- */
+/* __GFP_IO isn't allowed if PF_MEMALLOC_NOIO is set in current->flags */
 static inline gfp_t memalloc_noio_flags(gfp_t flags)
 {
 	if (unlikely(current->flags & PF_MEMALLOC_NOIO))
-		flags &= ~(__GFP_IO | __GFP_FS);
+		flags &= ~__GFP_IO;
 	return flags;
 }
 
@@ -2246,16 +2168,6 @@ extern bool current_is_single_threaded(void);
 #define while_each_thread(g, t) \
 	while ((t = next_thread(t)) != g)
 
-#define __for_each_thread(signal, t)	\
-	list_for_each_entry_rcu(t, &(signal)->thread_head, thread_node)
-
-#define for_each_thread(p, t)		\
-	__for_each_thread((p)->signal, t)
-
-/* Careful: this is a double loop, 'break' won't work as expected. */
-#define for_each_process_thread(p, t)	\
-	for_each_process(p) for_each_thread(p, t)
-
 static inline int get_nr_threads(struct task_struct *tsk)
 {
 	return tsk->signal->nr_threads;
@@ -2272,15 +2184,15 @@ static inline bool thread_group_leader(struct task_struct *p)
  * all we care about is that we have a task with the appropriate
  * pid, we don't actually care if we have the right task.
  */
-static inline bool has_group_leader_pid(struct task_struct *p)
+static inline int has_group_leader_pid(struct task_struct *p)
 {
-	return task_pid(p) == p->signal->leader_pid;
+	return p->pid == p->tgid;
 }
 
 static inline
-bool same_thread_group(struct task_struct *p1, struct task_struct *p2)
+int same_thread_group(struct task_struct *p1, struct task_struct *p2)
 {
-	return p1->signal == p2->signal;
+	return p1->tgid == p2->tgid;
 }
 
 static inline struct task_struct *next_thread(const struct task_struct *p)
@@ -2562,98 +2474,34 @@ static inline int tsk_is_polling(struct task_struct *p)
 {
 	return task_thread_info(p)->status & TS_POLLING;
 }
-static inline void __current_set_polling(void)
+static inline void current_set_polling(void)
 {
 	current_thread_info()->status |= TS_POLLING;
 }
 
-static inline bool __must_check current_set_polling_and_test(void)
-{
-	__current_set_polling();
-
-	/*
-	 * Polling state must be visible before we test NEED_RESCHED,
-	 * paired by resched_task()
-	 */
-	smp_mb();
-
-	return unlikely(tif_need_resched());
-}
-
-static inline void __current_clr_polling(void)
+static inline void current_clr_polling(void)
 {
 	current_thread_info()->status &= ~TS_POLLING;
-}
-
-static inline bool __must_check current_clr_polling_and_test(void)
-{
-	__current_clr_polling();
-
-	/*
-	 * Polling state must be visible before we test NEED_RESCHED,
-	 * paired by resched_task()
-	 */
-	smp_mb();
-
-	return unlikely(tif_need_resched());
+	smp_mb__after_clear_bit();
 }
 #elif defined(TIF_POLLING_NRFLAG)
 static inline int tsk_is_polling(struct task_struct *p)
 {
 	return test_tsk_thread_flag(p, TIF_POLLING_NRFLAG);
 }
-
-static inline void __current_set_polling(void)
+static inline void current_set_polling(void)
 {
 	set_thread_flag(TIF_POLLING_NRFLAG);
 }
 
-static inline bool __must_check current_set_polling_and_test(void)
-{
-	__current_set_polling();
-
-	/*
-	 * Polling state must be visible before we test NEED_RESCHED,
-	 * paired by resched_task()
-	 *
-	 * XXX: assumes set/clear bit are identical barrier wise.
-	 */
-	smp_mb__after_clear_bit();
-
-	return unlikely(tif_need_resched());
-}
-
-static inline void __current_clr_polling(void)
+static inline void current_clr_polling(void)
 {
 	clear_thread_flag(TIF_POLLING_NRFLAG);
 }
-
-static inline bool __must_check current_clr_polling_and_test(void)
-{
-	__current_clr_polling();
-
-	/*
-	 * Polling state must be visible before we test NEED_RESCHED,
-	 * paired by resched_task()
-	 */
-	smp_mb__after_clear_bit();
-
-	return unlikely(tif_need_resched());
-}
-
 #else
 static inline int tsk_is_polling(struct task_struct *p) { return 0; }
-static inline void __current_set_polling(void) { }
-static inline void __current_clr_polling(void) { }
-
-static inline bool __must_check current_set_polling_and_test(void)
-{
-	return unlikely(tif_need_resched());
-}
-static inline bool __must_check current_clr_polling_and_test(void)
-{
-	return unlikely(tif_need_resched());
-}
+static inline void current_set_polling(void) { }
+static inline void current_clr_polling(void) { }
 #endif
 
 /*
@@ -2711,8 +2559,6 @@ static inline void set_task_cpu(struct task_struct *p, unsigned int cpu)
 }
 
 #endif /* CONFIG_SMP */
-
-extern struct atomic_notifier_head migration_notifier_head;
 
 extern long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
 extern long sched_getaffinity(pid_t pid, struct cpumask *mask);

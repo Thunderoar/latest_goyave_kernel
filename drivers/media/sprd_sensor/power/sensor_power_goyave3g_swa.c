@@ -34,15 +34,15 @@ static int sensor_s5k4ecgx_poweron(struct sensor_power *main_cfg, struct sensor_
 	mdelay(1);//delay
 	sensor_k_set_voltage_avdd(SENSOR_VDD_2800MV);//anolog vdd
 	udelay(500);//delay >2ms
-	sensor_k_set_voltage_dvdd(SENSOR_VDD_1200MV);//core vdd
-	udelay(300);//delay >2ms
 	sensor_k_set_voltage_iovdd(SENSOR_VDD_1800MV);//IO vdd
 	udelay(300);//delay >2ms
 	sensor_k_set_mclk(24);
+	mdelay(4);//delay > 0us
+	sensor_k_set_voltage_dvdd(SENSOR_VDD_1200MV);//core vdd
 	udelay(1000);//delay >= 10us
-	sensor_k_set_pd_level(1);
-	mdelay(10);
-	sensor_k_set_rst_level(1);
+	sensor_k_set_pd_level(1);//power down
+	udelay(30);//delay >= 15us
+	sensor_k_set_rst_level(1);//reset
 	udelay(100);//delay > 60us
 	printk("sensor_s5k4ecgx_poweron OK \n");
 	return ret;
@@ -61,9 +61,9 @@ static int sensor_s5k4ecgx_poweroff(struct sensor_power *main_cfg, struct sensor
 	sensor_k_set_pd_level(0);
 	udelay(100);
 	sensor_k_set_voltage_iovdd(SENSOR_VDD_CLOSED);
-	mdelay(5);//delay < 10ms
+	udelay(10);//delay < 10ms
 	sensor_k_set_voltage_avdd(SENSOR_VDD_CLOSED);//close anolog vdd
-	mdelay(6);//delay >= 0us
+	mdelay(5);//delay >= 0us
 	sensor_k_set_voltage_dvdd(SENSOR_VDD_CLOSED);//close core vdd
 	mdelay(1);//delay
 	sensor_k_set_voltage_cammot(SENSOR_VDD_CLOSED);//AF monitor

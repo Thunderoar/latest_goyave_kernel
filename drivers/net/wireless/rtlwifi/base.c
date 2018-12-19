@@ -1403,9 +1403,9 @@ void rtl_watchdog_wq_callback(void *data)
 		if (((rtlpriv->link_info.num_rx_inperiod +
 		      rtlpriv->link_info.num_tx_inperiod) > 8) ||
 		    (rtlpriv->link_info.num_rx_inperiod > 2))
-			rtlpriv->enter_ps = false;
-		else
 			rtlpriv->enter_ps = true;
+		else
+			rtlpriv->enter_ps = false;
 
 		/* LeisurePS only work in infra mode. */
 		schedule_work(&rtlpriv->works.lps_change_work);
@@ -1438,8 +1438,7 @@ void rtl_watchdog_wq_callback(void *data)
 			/* if we can't recv beacon for 6s, we should
 			 * reconnect this AP
 			 */
-			if ((rtlpriv->link_info.roam_times >= 3) &&
-			    !is_zero_ether_addr(rtlpriv->mac80211.bssid)) {
+			if (rtlpriv->link_info.roam_times >= 3) {
 				RT_TRACE(rtlpriv, COMP_ERR, DBG_EMERG,
 					 "AP off, try to reconnect now\n");
 				rtlpriv->link_info.roam_times = 0;

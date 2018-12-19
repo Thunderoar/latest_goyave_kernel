@@ -1,7 +1,6 @@
 obj-y += irq.o arch_init.o arch_lock.o \
          reserve.o efuse.o common.o glb.o
 
-obj-$(CONFIG_FORCE_FAST_CHARGE) += fastchg.o
 obj-$(CONFIG_SC_INTERNAL_ADI) += adi.o adie_irq.o
 obj-$(CONFIG_SC_INTERNAL_ADC) += adc.o
 obj-$(CONFIG_SC_INTERNAL_WATCHDOG) += watchdog.o
@@ -47,7 +46,6 @@ ifeq ($(CONFIG_BCM4343),y)
 obj-y += board-tshark-wifi.o
 endif
 
-obj-y			+= Hotplug/
 obj-$(CONFIG_SEC_DEBUG) += sec_common.o sec_debug.o sec_gaf.o sec_getlog.o sec-reboot.o
 obj-$(CONFIG_SEC_LOG) += sec_log.o
 obj-$(CONFIG_SEC_BSP) += sec_bsp.o

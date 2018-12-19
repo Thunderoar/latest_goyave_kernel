@@ -127,7 +127,7 @@ static int af9035_wr_regs(struct dvb_usb_device *d, u32 reg, u8 *val, int len)
 {
 	u8 wbuf[6 + len];
 	u8 mbox = (reg >> 16) & 0xff;
-	struct usb_req req = { CMD_MEM_WR, mbox, 6 + len, wbuf, 0, NULL };
+	struct usb_req req = { CMD_MEM_WR, mbox, sizeof(wbuf), wbuf, 0, NULL };
 
 	wbuf[0] = len;
 	wbuf[1] = 2;

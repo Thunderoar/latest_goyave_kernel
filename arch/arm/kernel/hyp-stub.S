@@ -99,7 +99,7 @@ ENTRY(__hyp_stub_install_secondary)
 	 * immediately.
 	 */
 	compare_cpu_mode_with_primary	r4, r5, r6, r7
-	retne	lr
+	movne	pc, lr
 
 	/*
 	 * Once we have given up on one CPU, we do not try to install the
@@ -111,7 +111,7 @@ ENTRY(__hyp_stub_install_secondary)
 	 */
 
 	cmp	r4, #HYP_MODE
-	retne	lr			@ give up if the CPU is not in HYP mode
+	movne	pc, lr			@ give up if the CPU is not in HYP mode
 
 /*
  * Configure HSCTLR to set correct exception endianness/instruction set
@@ -153,8 +153,6 @@ THUMB(	orr	r7, #(1 << 30)	)	@ HSCTLR.TE
 	mrc	p15, 4, r7, c14, c1, 0	@ CNTHCTL
 	orr	r7, r7, #3		@ PL1PCEN | PL1PCTEN
 	mcr	p15, 4, r7, c14, c1, 0	@ CNTHCTL
-	mov	r7, #0
-	mcrr	p15, 4, r7, r7, c14	@ CNTVOFF
 1:
 #endif
 
@@ -196,7 +194,7 @@ ENDPROC(__hyp_get_vectors)
 	@ fall through
 ENTRY(__hyp_set_vectors)
 	__HVC(0)
-	ret	lr
+	mov	pc, lr
 ENDPROC(__hyp_set_vectors)
 
 #ifndef ZIMAGE

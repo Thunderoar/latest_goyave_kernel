@@ -208,18 +208,15 @@ static void shm_open(struct vm_area_struct *vma)
  */
 static void shm_destroy(struct ipc_namespace *ns, struct shmid_kernel *shp)
 {
-	struct file *shm_file;
-
-	shm_file = shp->shm_file;
-	shp->shm_file = NULL;
 	ns->shm_tot -= (shp->shm_segsz + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	shm_rmid(ns, shp);
 	shm_unlock(shp);
-	if (!is_file_hugepages(shm_file))
-		shmem_lock(shm_file, 0, shp->mlock_user);
+	if (!is_file_hugepages(shp->shm_file))
+		shmem_lock(shp->shm_file, 0, shp->mlock_user);
 	else if (shp->mlock_user)
-		user_shm_unlock(file_inode(shm_file)->i_size, shp->mlock_user);
-	fput(shm_file);
+		user_shm_unlock(file_inode(shp->shm_file)->i_size,
+						shp->mlock_user);
+	fput (shp->shm_file);
 	ipc_rcu_putref(shp, shm_rcu_free);
 }
 
@@ -544,6 +541,12 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	if (IS_ERR(file))
 		goto no_file;
 
+	id = ipc_addid(&shm_ids(ns), &shp->shm_perm, ns->shm_ctlmni);
+	if (id < 0) {
+		error = id;
+		goto no_id;
+	}
+
 	shp->shm_cprid = task_tgid_vnr(current);
 	shp->shm_lprid = 0;
 	shp->shm_atim = shp->shm_dtim = 0;
@@ -552,12 +555,6 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	shp->shm_nattch = 0;
 	shp->shm_file = file;
 	shp->shm_creator = current;
-
-	id = ipc_addid(&shm_ids(ns), &shp->shm_perm, ns->shm_ctlmni);
-	if (id < 0) {
-		error = id;
-		goto no_id;
-	}
 
 	/*
 	 * shmid gets reported as "inode#" in /proc/pid/maps.
@@ -977,25 +974,15 @@ SYSCALL_DEFINE3(shmctl, int, shmid, int, cmd, struct shmid_ds __user *, buf)
 		ipc_lock_object(&shp->shm_perm);
 		if (!ns_capable(ns->user_ns, CAP_IPC_LOCK)) {
 			kuid_t euid = current_euid();
+			err = -EPERM;
 			if (!uid_eq(euid, shp->shm_perm.uid) &&
-			    !uid_eq(euid, shp->shm_perm.cuid)) {
-				err = -EPERM;
+			    !uid_eq(euid, shp->shm_perm.cuid))
 				goto out_unlock0;
-			}
-			if (cmd == SHM_LOCK && !rlimit(RLIMIT_MEMLOCK)) {
-				err = -EPERM;
+			if (cmd == SHM_LOCK && !rlimit(RLIMIT_MEMLOCK))
 				goto out_unlock0;
-			}
 		}
 
 		shm_file = shp->shm_file;
-
-		/* check if shm_destroy() is tearing down shp */
-		if (shm_file == NULL) {
-			err = -EIDRM;
-			goto out_unlock0;
-		}
-
 		if (is_file_hugepages(shm_file))
 			goto out_unlock0;
 
@@ -1041,8 +1028,8 @@ out_unlock1:
  * "raddr" thing points to kernel space, and there has to be a wrapper around
  * this.
  */
-long do_shmat(int shmid, char __user *shmaddr, int shmflg,
-	      ulong *raddr, unsigned long shmlba)
+long do_shmat(int shmid, char __user *shmaddr, int shmflg, ulong *raddr,
+	      unsigned long shmlba)
 {
 	struct shmid_kernel *shp;
 	unsigned long addr;
@@ -1063,13 +1050,8 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg,
 		goto out;
 	else if ((addr = (ulong)shmaddr)) {
 		if (addr & (shmlba - 1)) {
-			/*
-			 * Round down to the nearest multiple of shmlba.
-			 * For sane do_mmap_pgoff() parameters, avoid
-			 * round downs that trigger nil-page and MAP_FIXED.
-			 */
-			if ((shmflg & SHM_RND) && addr >= shmlba)
-				addr &= ~(shmlba - 1);
+			if (shmflg & SHM_RND)
+				addr &= ~(shmlba - 1);	   /* round down */
 			else
 #ifndef __ARCH_FORCE_SHMLBA
 				if (addr & ~PAGE_MASK)
@@ -1119,14 +1101,6 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg,
 		goto out_unlock;
 
 	ipc_lock_object(&shp->shm_perm);
-
-	/* check if shm_destroy() is tearing down shp */
-	if (shp->shm_file == NULL) {
-		ipc_unlock_object(&shp->shm_perm);
-		err = -EIDRM;
-		goto out_unlock;
-	}
-
 	path = shp->shm_file->f_path;
 	path_get(&path);
 	shp->shm_nattch++;

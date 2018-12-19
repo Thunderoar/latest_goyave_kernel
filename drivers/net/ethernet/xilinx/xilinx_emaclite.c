@@ -398,7 +398,7 @@ static int xemaclite_send_data(struct net_local *drvdata, u8 *data,
  *
  * Return:	Total number of bytes received
  */
-static u16 xemaclite_recv_data(struct net_local *drvdata, u8 *data, int maxlen)
+static u16 xemaclite_recv_data(struct net_local *drvdata, u8 *data)
 {
 	void __iomem *addr;
 	u16 length, proto_type;
@@ -438,7 +438,7 @@ static u16 xemaclite_recv_data(struct net_local *drvdata, u8 *data, int maxlen)
 
 	/* Check if received ethernet frame is a raw ethernet frame
 	 * or an IP packet or an ARP packet */
-	if (proto_type > ETH_DATA_LEN) {
+	if (proto_type > (ETH_FRAME_LEN + ETH_FCS_LEN)) {
 
 		if (proto_type == ETH_P_IP) {
 			length = ((ntohl(in_be32(addr +
@@ -446,7 +446,6 @@ static u16 xemaclite_recv_data(struct net_local *drvdata, u8 *data, int maxlen)
 					XEL_RXBUFF_OFFSET)) >>
 					XEL_HEADER_SHIFT) &
 					XEL_RPLR_LENGTH_MASK);
-			length = min_t(u16, length, ETH_DATA_LEN);
 			length += ETH_HLEN + ETH_FCS_LEN;
 
 		} else if (proto_type == ETH_P_ARP)
@@ -458,9 +457,6 @@ static u16 xemaclite_recv_data(struct net_local *drvdata, u8 *data, int maxlen)
 	} else
 		/* Use the length in the frame, plus the header and trailer */
 		length = proto_type + ETH_HLEN + ETH_FCS_LEN;
-
-	if (WARN_ON(length > maxlen))
-		length = maxlen;
 
 	/* Read from the EmacLite device */
 	xemaclite_aligned_read((u32 __force *) (addr + XEL_RXBUFF_OFFSET),
@@ -636,7 +632,7 @@ static void xemaclite_rx_handler(struct net_device *dev)
 
 	skb_reserve(skb, 2);
 
-	len = xemaclite_recv_data(lp, (u8 *) skb->data, len);
+	len = xemaclite_recv_data(lp, (u8 *) skb->data);
 
 	if (!len) {
 		dev->stats.rx_errors++;
