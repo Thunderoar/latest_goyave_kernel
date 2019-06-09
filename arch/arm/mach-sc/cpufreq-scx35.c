@@ -232,7 +232,7 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 #else
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 	.freq_tbl = {
-		{0, 1516800},
+		{0, 1560000},
 		{1, 1401600},
 		{2, 1363200},
 		{3, 1300000},
@@ -451,7 +451,7 @@ static int sprd_cpufreq_verify_speed(struct cpufreq_policy *policy)
 }
 
 unsigned int cpufreq_min_limit = 400000;
-unsigned int cpufreq_max_limit = 1516800;
+unsigned int cpufreq_max_limit = 1560800;
 unsigned int dvfs_score_select = 5;
 unsigned int dvfs_unplug_select = 2;
 unsigned int dvfs_plug_select = 0;
