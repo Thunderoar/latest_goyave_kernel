@@ -51,7 +51,7 @@
 #define FREQ_TABLE_SIZE 	13
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
-#define TRANSITION_LATENCY	(100 * 1000) /* ns */
+#define TRANSITION_LATENCY	(50 * 1000) /* ns */
 
 static DEFINE_MUTEX(freq_lock);
 struct cpufreq_freqs global_freqs;
@@ -236,7 +236,7 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 		{1, 1401600},
 		{2, 1363200},
 		{3, 1300000},
-		{4, 1209600},
+		{4, 1200000},
 		{5, 1152000},
 		{6, 1094400},
 		{7, 998400},
@@ -524,7 +524,7 @@ static unsigned int sprd_cpufreq_getspeed(unsigned int cpu)
 	return sprd_raw_get_cpufreq();
 }
 
-static void sprd_set_cpureq_limit(void)
+static void sprd_set_cpufreq_limit(void)
 {
 	int i;
 	struct cpufreq_frequency_table *tmp = sprd_cpufreq_conf->freq_tbl;
@@ -563,7 +563,7 @@ static int sprd_freq_table_init(void)
 		pr_err("%s error chip id\n", __func__);
 		return -EINVAL;
 	}
-	sprd_set_cpureq_limit();
+	sprd_set_cpufreq_limit();
 	return 0;
 }
 
