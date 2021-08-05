@@ -887,7 +887,7 @@ static int mmc_blk_reset(struct mmc_blk_data *md, struct mmc_host *host,
 {
 	int err;
 
-	if (md->reset_done & type)) {
+	if (md->reset_done & type) {
 		printk("%s: mmc_blk_reset return EEXIST\n", mmc_hostname(host));
 		return -EEXIST;
 	}
