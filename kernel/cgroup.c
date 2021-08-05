@@ -2019,10 +2019,6 @@ static int cgroup_attach_task(struct cgroup *cgrp, struct task_struct *tsk,
 		retval = flex_array_put(group, i, &ent, GFP_ATOMIC);
 		BUG_ON(retval != 0);
 		i++;
-<<<<<<< HEAD
-
-=======
->>>>>>> 5be794dc4bb6... cgroup: fix to break the while loop in cgroup_attach_task() correctly
 	next:
 		if (!threadgroup)
 			break;
