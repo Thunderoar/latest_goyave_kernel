@@ -9,6 +9,7 @@ obj-$(CONFIG_ARCH_SCX35) += clock-sc8830_dt.o
 else
 obj-$(CONFIG_ARCH_SCX35) += clock-sc8830.o
 endif
+obj-$(CONFIG_HAS_PSFREQ) += psfreq.o
 obj-$(CONFIG_ARCH_SCX35) += devices-sc8830.o io-sc8830.o arch_misc.o pin_switch.o
 obj-$(CONFIG_ARCH_SCX35) += timer_sc8830.o dma_r4p0.o
 obj-$(CONFIG_MACH_SCX35_DT) += mach-scx35-dt.o

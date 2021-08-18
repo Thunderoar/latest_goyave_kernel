@@ -658,6 +658,12 @@ config MACH_GRANDNEOVE3G
 		  
 endmenu
 
+config HAS_PSFREQ
+	default n
+	bool "PSFREQ"
+	help
+		This option select ps freq change.
+
 config SPRD_ION_MM_SIZE
         int "size for ion"
         range 1 64
@@ -874,3 +880,4 @@ config SAMSUNG_PRODUCT_SHIP
 	default n
 
 endif
+

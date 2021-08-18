@@ -415,11 +415,11 @@ static int sprd_rtc_set_alarm(struct device *dev,
 			i++;
 		}while(read_secs != secs && i < SPRD_RTC_SET_MAX);
 		/*unlock the rtc alrm int*/
-		sci_adi_raw_write(ANA_RTC_SPG_UPD, SPRD_RTC_UNLOCK);
+		//sci_adi_raw_write(ANA_RTC_SPG_UPD, SPRD_RTC_UNLOCK);
 		wake_unlock(&rtc_wake_lock);
 	}else{
 		sci_adi_clr(ANA_RTC_INT_EN, RTC_ALARM_BIT);
-		sci_adi_raw_write(ANA_RTC_SPG_UPD, SPRD_RTC_LOCK);
+		//sci_adi_raw_write(ANA_RTC_SPG_UPD, SPRD_RTC_LOCK);
 		msleep(150);
 	}
 
@@ -555,6 +555,9 @@ static int sprd_rtc_open(struct device *dev)
 	temp |= RTC_ALARM_BIT;
 	sci_adi_raw_write(ANA_RTC_INT_EN, temp);
 
+	//add by wbl
+	sci_adi_raw_write(ANA_RTC_SPG_UPD, SPRD_RTC_UNLOCK);
+	printk(KERN_EMERG "sprd_rtc_open is calling!\n");
 	return 0;
 }
 
@@ -629,6 +632,8 @@ static int sprd_rtc_probe(struct platform_device *plat_dev)
 	sprd_creat_caliberate_attr(rtc_data->rtc->dev);
 
 	sprd_rtc_check_power_down(&plat_dev->dev);
+
+	sprd_rtc_open(&plat_dev->dev);//test
 	return 0;
 
 unregister_rtc:

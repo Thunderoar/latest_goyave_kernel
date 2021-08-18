@@ -48,10 +48,10 @@
 #define GR_GEN1			(REG_GLB_GEN1)
 #endif
 
-#define FREQ_TABLE_SIZE 	10
+#define FREQ_TABLE_SIZE 	14
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
-#define TRANSITION_LATENCY	(100 * 1000) /* ns */
+#define TRANSITION_LATENCY	(20 * 1000) /* ns */
 
 static DEFINE_MUTEX(freq_lock);
 struct cpufreq_freqs global_freqs;
@@ -232,18 +232,32 @@ static struct cpufreq_table_data sc8830t_cpufreq_table_data_es = {
 #else
 static struct cpufreq_table_data sc8830t_cpufreq_table_data_es_1300 = {
 	.freq_tbl = {
-		{0, 1300000},
-		{1, 1200000},
-		{2, 1000000},
-		{3, SHARK_TDPLL_FREQUENCY},
-		{4, CPUFREQ_TABLE_END},
+		{0, 1560000},
+		{1, 1500000},
+		{2, 1400000},
+		{3, 1300000},
+		{4, 1200000},
+		{5, 1000000},
+		{6, SHARK_TDPLL_FREQUENCY},
+		{7, 500000},
+		{8, 400000},
+		{9, 300000},
+		{10, 200000},
+		{1, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
+		1125000,
+		1075000,
+		1075000,
 		1050000,
 		1000000,
 		900000,
 		900000,
-		900000,
+		800000,
+		800000,
+		750000,
+		750000,
+		750000,
 	},
 };
 #endif
@@ -670,6 +684,7 @@ static ssize_t cpufreq_max_limit_store(struct device *dev, struct device_attribu
 	   for debug use
 	   echo 0xabcde4b0 > /sys/power/cpufreq_max_limit means set the maximum limit to 1200Mhz
 	 */
+
 	if((value & 0xfffff000) == 0xabcde000)
 	{
 		cpufreq_max_limit = value & 0x00000fff;
