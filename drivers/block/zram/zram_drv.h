@@ -76,7 +76,7 @@ enum zram_pageflags {
 /*-- Data structures */
 
 /* Allocated for each disk page */
-struct table {
+struct zram_table_entry {
 	unsigned long handle;
 	unsigned long value;
 };
