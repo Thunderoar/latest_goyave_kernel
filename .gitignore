@@ -140,3 +140,5 @@ security/selinux/av_permissions.h
 security/selinux/flask.h
 usr/gen_init_cpio
 usr/initramfs_data.cpio
+drivers/block/zram/zram_drv_ref.h
+drivers/block/zram/zram_drv_ref.c
